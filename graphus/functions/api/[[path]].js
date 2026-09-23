@@ -6,7 +6,7 @@ const INITIAL_ASSETS = [
   {network:'ethereum-mainnet',asset:'ETH',status:'adapter-prototype'},
   {network:'ethereum-mainnet',asset:'USDT',standard:'ERC-20',status:'adapter-prototype'},
   {network:'ethereum-mainnet',asset:'USDC',standard:'ERC-20',status:'adapter-prototype'},
-  {network:'bloch-mainnet',asset:'BLCH',status:'bounded-source-probe'},
+  {network:'bloch-mainnet',asset:'BLCH',status:'bounded-private-research-sample'},
 ];
 
 function json(data, status=200, headers={}) {
