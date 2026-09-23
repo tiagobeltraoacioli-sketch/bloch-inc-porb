@@ -1,0 +1,13 @@
+# Data protection and AML evidence design
+
+This document is an engineering design, not a certification of legal compliance. Applicable obligations depend on jurisdiction, customers, vendors, purposes, and data flows. Production release requires legal and privacy review.
+
+1. **Purpose and legal basis.** Record a specific AML/fraud-monitoring purpose and a vetted legal basis for each processing activity. Public blockchain availability alone does not remove purpose limits. Map controller/processor roles for Bloch Inc, customers, and providers.
+2. **Minimization.** Do not ingest raw transaction memos, payment card data, identity documents, biometrics, or special-category data into the scoring pipeline. Store only fields needed for a documented signal. Keep any identity resolution in a separate, access-restricted system.
+3. **Provenance.** Every finding must include source ID, source record reference, observed and ingested timestamps, license/right to use, confidence, attribution level, expiration, and review/dispute state. Distinguish direct exact matches from graph proximity and model inference.
+4. **Access.** Restrict wallet-level endpoints to authenticated, tenant-scoped, least-privilege roles. Log access to sensitive findings. Public pages show aggregate or synthetic data only; never provide a public wallet blacklist.
+5. **Quality and redress.** Stale or disputed signals cannot silently remain active. Provide correction, deletion where applicable, a documented challenge route, and human review before a significant customer action. Do not infer criminal status from wallet proximity.
+6. **Retention and transfers.** Set per-source retention and deletion schedules; document legal holds. Assess cross-border transfer mechanisms before sending personal data to another region. Encrypt sensitive records and keys separately, with rotation and incident response.
+7. **Impact assessment.** Complete GDPR DPIA and/or Brazilian RIPD when the actual processing risk warrants it, and record controls, residual risk, and approvals before live data ingestion.
+
+Primary references: [Brazil LGPD](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709compilado.htm), [EU GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng), [EDPB blockchain guidance](https://www.edpb.europa.eu/documents/guideline/guidelines-022025-on-processing-of-personal-data-through-blockchain_bg), [ANPD impact assessment](https://www.gov.br/anpd/pt-br/canais_atendimento/agente-de-tratamento/relatorio-de-impacto-a-protecao-de-dados-pessoais-ripd), [ANPD international transfers](https://www.gov.br/anpd/pt-br/assuntos/assuntos-internacionais/transferencia-internacional-de-dados).
