@@ -1,19 +1,21 @@
 # Initial asset data evidence ledger
 
-`service.data_quality` creates a private, aggregate ledger for BTC, ETH, USDT and USDC on Ethereum, and BLCH. It records what was actually observed by each source. Ethereum and Bitcoin height checks are **source probes only**. A successful Ethereum probe does not imply that native ETH or ERC-20 logs were ingested. USDT and USDC inherit only the Ethereum source reachability observation, not token-specific coverage. The bounded Bloch indexer sample is private research data, not a live feed or a representative chain history.
+`service.data_quality` creates a private, aggregate ledger for BTC, ETH, USDT and USDC on Ethereum, and BLCH. It records what was actually observed by each source. Bitcoin has a bounded private [block pilot](bitcoin-private-pilot.md), and Ethereum has a bounded private [transaction and receipt pilot](ethereum-private-pilot.md). Height probes alone imply no transaction coverage. The bounded Bloch indexer samples are private research data, not a live feed or a representative chain history.
 
 Generate a ledger on the data host after source jobs finish:
 
 ```sh
 python3 -m service.data_quality \
   --bloch-sample-dir /var/lib/bi-porb/private/bloch \
+  --bitcoin-pilot /var/lib/bi-porb/private/bitcoin/bitcoin-block-pilot.json \
+  --ethereum-pilot-dir /var/lib/bi-porb/private/ethereum-pilot \
   --chain-health /var/lib/bi-porb/status/chain-health-status.json \
   --output /var/lib/bi-porb/private/data-evidence-ledger.json
 ```
 
-The command requires each specified input to exist. It checks the Bloch sample digest, record counts, source consistency, observed transaction count, finalized input heights, exact nonnegative integer base units, outpoint/script identifiers, and sender-attribution flag. It reconciles consumed outpoints against created outputs **within the sample only**, counting mismatched values/scripts and duplicate spends for review. It emits no transaction IDs, scripts, addresses, or raw records. A mismatch in the digest or record structure fails closed; an outpoint conflict sets `quality_gate: review_required`.
+The command requires each specified input to exist. It checks the Bloch sample digest, record counts, source consistency, observed transaction count, finalized input heights, exact nonnegative integer base units, outpoint/script identifiers, and sender-attribution flag. It reconciles consumed outpoints against created outputs **within the sample only**, counting mismatched values/scripts and duplicate spends for review. It also checks the Bitcoin pilot's block, sampled transaction and output structure, and the Ethereum pilot's digest, block, receipt, and event counts. It emits no transaction IDs, scripts, addresses, or raw records. A mismatch in the digest or record structure fails closed; an outpoint conflict sets `quality_gate: review_required`.
 
-For every asset, the ledger includes base-unit semantics, source timestamp and measured age, source-reported finality evidence, lineage, known sample counts, unknown chain totals, and explicit gap/reorg/reconciliation states. Exact integer amounts are verified only for the bounded Bloch sample; assets with height probes alone show `null` for that verification. An unknown coverage fraction stays `null`; a height probe never becomes an event count. The timestamp age is a measurement, not a freshness service-level guarantee. Token decimals and contract metadata need an independently versioned registry before display or valuation.
+For every asset, the ledger includes base-unit semantics, source timestamp and measured age, source-reported finality evidence, lineage, known sample counts, unknown chain totals, and explicit gap/reorg/reconciliation states. Exact integer amounts are verified for the bounded Bitcoin, Bloch, and Ethereum samples; assets with height probes alone show `null` for that verification. An unknown coverage fraction stays `null`; a height probe never becomes an event count. The timestamp age is a measurement, not a freshness service-level guarantee. Token decimals and contract metadata need an independently versioned registry before display or valuation.
 
 `pagination_exhausted` means only that this bounded indexer query reached its cursor end. `chain_history_complete`, `production_coverage_asserted`, and `production_ready` remain false. The sampled input height range is not a block coverage range; transactions without inputs may be absent from it.
 

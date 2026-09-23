@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+from bisect import bisect_right
 from datetime import datetime
 
 
@@ -104,3 +105,52 @@ def wilson_interval(successes, total, *, z=1.959963984540054):
     center = (fraction + adjustment / 2) / (1 + adjustment)
     margin = z * math.sqrt(fraction * (1 - fraction) / total + adjustment / (4 * total)) / (1 + adjustment)
     return [max(0.0, center - margin), min(1.0, center + margin)]
+
+
+def distribution_shift(train_values, test_values, *, quantiles=4):
+    """Compare aggregate distributions using bins fixed from training values.
+
+    Jensen-Shannon divergence is bounded to [0, 1] bit. Its magnitude is only
+    descriptive; the function does not set a production drift threshold.
+    """
+    if not train_values or not test_values or type(quantiles) is not int or not 2 <= quantiles <= 10:
+        raise ValueError("nonempty train/test values and 2-10 quantiles required")
+    if any(type(value) not in (int, float) or not math.isfinite(value)
+           for value in list(train_values) + list(test_values)):
+        raise ValueError("finite numeric values required")
+    ordered = sorted(train_values)
+    # Include the training extrema so that future values outside the observed
+    # range have distinct underflow and overflow bins.
+    edges = sorted({ordered[(index * (len(ordered) - 1)) // quantiles]
+                    for index in range(quantiles + 1)})
+    interior = edges[1:-1]
+    train_counts = [0] * (len(interior) + 3)
+    test_counts = [0] * (len(interior) + 3)
+    def bin_index(value):
+        if value < ordered[0]:
+            return 0
+        if value > ordered[-1]:
+            return len(train_counts) - 1
+        return 1 + bisect_right(interior, value)
+    for value in train_values:
+        train_counts[bin_index(value)] += 1
+    for value in test_values:
+        test_counts[bin_index(value)] += 1
+    train_fraction = [count / len(train_values) for count in train_counts]
+    test_fraction = [count / len(test_values) for count in test_counts]
+    midpoint = [(left + right) / 2 for left, right in zip(train_fraction, test_fraction)]
+
+    def divergence(fraction):
+        return sum(value * math.log2(value / center)
+                   for value, center in zip(fraction, midpoint) if value)
+
+    return {
+        "train_count": len(train_values),
+        "test_count": len(test_values),
+        "train_bin_counts": train_counts,
+        "test_bin_counts": test_counts,
+        "jensen_shannon_divergence_bits": (divergence(train_fraction) + divergence(test_fraction)) / 2,
+        "out_of_train_range_test_count": sum(value < ordered[0] or value > ordered[-1]
+                                               for value in test_values),
+        "warning": "descriptive_shift_only_no_operating_threshold",
+    }

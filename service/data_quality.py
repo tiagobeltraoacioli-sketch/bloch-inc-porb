@@ -13,6 +13,9 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .ethereum import ADDRESS, TOKEN_CONTRACTS
+from .normalization import Movement
+
 
 ASSETS = (
     ("bitcoin", "BTC"),
@@ -30,6 +33,7 @@ UNITS = {
 }
 HEX64 = re.compile(r"[0-9a-fA-F]{64}")
 BASE_UNITS = re.compile(r"[0-9]{1,39}")
+ETH_HEX64 = re.compile(r"0x[0-9a-fA-F]{64}")
 
 
 def freshness(observed_at, as_of):
@@ -150,7 +154,159 @@ def inspect_bloch_sample(sample_dir):
     }
 
 
-def build_ledger(*, bloch_sample_dir=None, chain_health_path=None, as_of=None):
+def inspect_ethereum_pilot(sample_dir):
+    """Verify a private finalized-block pilot and return aggregate evidence only."""
+    sample_dir = Path(sample_dir)
+    manifest = json.loads((sample_dir / "ethereum-pilot-manifest.json").read_text())
+    raw = (sample_dir / "ethereum-pilot.jsonl").read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != manifest.get("records_sha256"):
+        raise ValueError("Ethereum pilot digest mismatch")
+    if (manifest.get("status") != "bounded_private_ethereum_research_sample"
+            or manifest.get("source_id") != "ethereum-mainnet-rpc" or manifest.get("chain_id") != 1
+            or not ETH_HEX64.fullmatch(manifest.get("source_reported_finalized_block_hash", ""))
+            or type(manifest.get("source_reported_finalized_block_number")) is not int):
+        raise ValueError("invalid Ethereum pilot provenance")
+    records = [json.loads(line) for line in raw.splitlines()]
+    if len(records) != manifest.get("record_count"):
+        raise ValueError("Ethereum pilot record count mismatch")
+    transactions, events = {}, set()
+    movement_counts = {"eth": 0, "usdt": 0, "usdc": 0}
+    for row in records:
+        if row.get("source_id") != manifest["source_id"]:
+            raise ValueError("Ethereum pilot source mismatch")
+        if row.get("record_type") == "sampled_transaction":
+            txid = row.get("tx_id", "")
+            if (not ETH_HEX64.fullmatch(txid) or txid in transactions
+                    or row.get("block_hash") != manifest["source_reported_finalized_block_hash"]
+                    or row.get("block_number") != manifest["source_reported_finalized_block_number"]
+                    or type(row.get("transaction_index")) is not int or row["transaction_index"] < 0
+                    or row.get("receipt_status") not in ("0x0", "0x1")):
+                raise ValueError("invalid Ethereum sampled transaction")
+            transactions[txid] = row["receipt_status"]
+        elif row.get("record_type") == "normalized_movement":
+            fields = {name: row.get(name) for name in Movement.__dataclass_fields__}
+            movement = Movement(**fields)
+            token = movement.asset_id[6:] if movement.asset_id.startswith("erc20:") else None
+            if (movement.chain != "ethereum" or movement.network != "mainnet"
+                    or movement.finality != "finalized" or movement.sender_attribution != "direct"
+                    or movement.block_ref != manifest["source_reported_finalized_block_hash"]
+                    or movement.height_or_slot != manifest["source_reported_finalized_block_number"]
+                    or row.get("event_key") != movement.key or movement.key in events
+                    or not ADDRESS.fullmatch(movement.destination)
+                    or not ADDRESS.fullmatch(movement.sender or "")
+                    or (movement.asset_id != "eth" and token not in TOKEN_CONTRACTS)):
+                raise ValueError("invalid Ethereum normalized movement")
+            events.add(movement.key)
+            movement_counts["eth" if movement.asset_id == "eth" else TOKEN_CONTRACTS[token]] += 1
+        else:
+            raise ValueError("unsupported Ethereum pilot record")
+    if (len(transactions) != manifest.get("sampled_transactions")
+            or len(events) != manifest.get("normalized_movements")
+            or movement_counts != manifest.get("movement_counts")
+            or type(manifest.get("block_transaction_count")) is not int
+            or not 0 <= len(transactions) <= manifest["block_transaction_count"]):
+        raise ValueError("Ethereum pilot count mismatch")
+    if any(row["tx_id"] not in transactions or transactions[row["tx_id"]] != "0x1"
+           for row in records if row["record_type"] == "normalized_movement"):
+        raise ValueError("Ethereum movement lacks successful sampled receipt")
+    return {
+        "kind": "bounded_private_ethereum_research_sample",
+        "retrieved_at": manifest["retrieved_at"],
+        "source_id": manifest["source_id"],
+        "source_host": manifest.get("source_host"),
+        "sample_digest": digest,
+        "source_reported_finalized_block_number": manifest["source_reported_finalized_block_number"],
+        "block_transaction_count": manifest["block_transaction_count"],
+        "sampled_transactions": len(transactions),
+        "normalized_movements": len(events),
+        "movement_counts": movement_counts,
+        "sample_selection": manifest.get("sample_selection"),
+        "chain_history_complete": False,
+        "independent_finality_reconciled": False,
+        "quality_gate": "pass",
+        "caveat": "first transactions in one source-reported finalized block; not chain or asset coverage",
+    }
+
+
+def inspect_bitcoin_pilot(pilot_path):
+    """Verify a bounded Bitcoin block artifact and return no transaction IDs."""
+    raw = Path(pilot_path).read_bytes()
+    sample = json.loads(raw)
+    if (sample.get("kind") != "bounded_private_bitcoin_block_pilot"
+            or sample.get("chain") != "bitcoin" or sample.get("network") != "mainnet"
+            or sample.get("source_id") != "blockstream-esplora-bitcoin-mainnet"
+            or not HEX64.fullmatch(sample.get("block_hash", ""))
+            or type(sample.get("block_height")) is not int or sample["block_height"] < 0
+            or type(sample.get("confirmations_source_reported")) is not int
+            or sample["confirmations_source_reported"] < 1
+            or sample.get("source_reported_best_chain_checked_twice") is not True
+            or sample.get("merkle_inclusion_independently_verified") is not False
+            or sample.get("independent_node_reconciliation") is not False
+            or sample.get("full_history_coverage") is not False
+            or sample.get("sender_ownership_inferred") is not False
+            or sample.get("aml_scores_computed") != 0):
+        raise ValueError("invalid Bitcoin pilot provenance")
+    transactions = sample.get("transactions")
+    if (not isinstance(transactions, list) or not 1 <= len(transactions) <= 5
+            or len(transactions) != sample.get("sampled_transactions")
+            or type(sample.get("block_tx_count_source_reported")) is not int
+            or len(transactions) > sample["block_tx_count_source_reported"]):
+        raise ValueError("invalid Bitcoin pilot transaction count")
+    seen = set()
+    outputs = references = 0
+    for index, tx in enumerate(transactions):
+        txid = tx.get("txid", "")
+        if (not HEX64.fullmatch(txid) or txid in seen
+                or tx.get("input_ownership_inferred") is not False
+                or tx.get("single_sender_inferred") is not False
+                or not isinstance(tx.get("inputs"), list)
+                or not isinstance(tx.get("outputs"), list)):
+            raise ValueError("invalid Bitcoin pilot transaction")
+        seen.add(txid)
+        coinbase = 0
+        for entry in tx["inputs"]:
+            if entry.get("kind") == "coinbase_input" and entry.get("spent_outpoint") is None:
+                coinbase += 1
+            elif entry.get("kind") == "spent_outpoint_reference":
+                prior = entry.get("spent_outpoint")
+                if (not isinstance(prior, dict) or not HEX64.fullmatch(prior.get("txid", ""))
+                        or type(prior.get("vout")) is not int or prior["vout"] < 0):
+                    raise ValueError("invalid Bitcoin spent outpoint")
+                references += 1
+            else:
+                raise ValueError("invalid Bitcoin input observation")
+        if (index == 0 and (coinbase != 1 or len(tx["inputs"]) != 1)) or (index > 0 and coinbase):
+            raise ValueError("invalid Bitcoin coinbase position")
+        for vout, output in enumerate(tx["outputs"]):
+            sat = output.get("value_sat", "")
+            script = output.get("scriptpubkey_hex", "")
+            if (output.get("txid") != txid or output.get("vout") != vout
+                    or not BASE_UNITS.fullmatch(sat) or int(sat) > 2_100_000_000_000_000
+                    or not isinstance(script, str) or len(script) % 2
+                    or len(script) > 10_000 or re.fullmatch(r"[0-9a-fA-F]*", script) is None
+                    or output.get("unspent_status") != "unknown_not_queried"):
+                raise ValueError("invalid Bitcoin output observation")
+            outputs += 1
+        if tx.get("output_count") != len(tx["outputs"]):
+            raise ValueError("Bitcoin output count mismatch")
+    if outputs != sample.get("sampled_outputs") or references != sample.get("sampled_spent_outpoint_references"):
+        raise ValueError("Bitcoin pilot observation count mismatch")
+    return {
+        "kind": sample["kind"], "retrieved_at": sample["retrieved_at"],
+        "source_id": sample["source_id"], "sample_digest": hashlib.sha256(raw).hexdigest(),
+        "block_height": sample["block_height"],
+        "confirmations_source_reported": sample["confirmations_source_reported"],
+        "sampled_transactions": len(transactions), "sampled_outputs": outputs,
+        "sampled_spent_outpoint_references": references,
+        "chain_history_complete": False, "independent_node_reconciliation": False,
+        "quality_gate": "pass",
+        "caveat": "one source-reported best-chain block; probabilistic confirmations, no history or ownership claim",
+    }
+
+
+def build_ledger(*, bloch_sample_dir=None, ethereum_pilot_dir=None, bitcoin_pilot_path=None,
+                 chain_health_path=None, as_of=None):
     as_of = as_of or datetime.now(timezone.utc)
     if as_of.tzinfo is None:
         raise ValueError("ledger time must have a timezone")
@@ -163,11 +319,19 @@ def build_ledger(*, bloch_sample_dir=None, chain_health_path=None, as_of=None):
         health = health_document.get("sources", {})
         health_retrieved_at = health_document.get("retrieved_at")
     bloch = inspect_bloch_sample(bloch_sample_dir) if bloch_sample_dir is not None else None
+    ethereum_sample = inspect_ethereum_pilot(ethereum_pilot_dir) if ethereum_pilot_dir is not None else None
+    bitcoin_sample = inspect_bitcoin_pilot(bitcoin_pilot_path) if bitcoin_pilot_path is not None else None
     entries = []
     for chain, asset in ASSETS:
         if chain == "bloch":
             source = bloch
             status = "bounded_private_sample" if bloch else "unavailable"
+        elif chain == "bitcoin" and bitcoin_sample:
+            source = bitcoin_sample
+            status = "bounded_private_sample"
+        elif chain == "ethereum" and ethereum_sample:
+            source = ethereum_sample
+            status = "bounded_private_sample"
         else:
             source = health.get(chain)
             status = "height_probe_only" if isinstance(source, dict) and source.get("status") == "reachable" else "unavailable"
@@ -176,11 +340,11 @@ def build_ledger(*, bloch_sample_dir=None, chain_health_path=None, as_of=None):
             "asset": asset,
             "status": status,
             "unit": UNITS[asset],
-            "amounts_are_exact_integers": True if chain == "bloch" and source else None,
+            "amounts_are_exact_integers": True if status == "bounded_private_sample" else None,
             "live_transactions_ingested": 0,
             "production_coverage_asserted": False,
             "aml_scores_computed": 0,
-            "freshness": freshness(source.get("retrieved_at") if chain == "bloch" and source else health_retrieved_at if source else None, as_of),
+            "freshness": freshness(source.get("retrieved_at") if status == "bounded_private_sample" else health_retrieved_at if source else None, as_of),
             "gap_detection": "not_implemented",
             "reorg_replay": "not_implemented",
             "independent_source_reconciliation": "not_implemented",
@@ -192,6 +356,38 @@ def build_ledger(*, bloch_sample_dir=None, chain_health_path=None, as_of=None):
             entry["completeness"] = {
                 "bounded_sample_records_verified": True,
                 "sampled_transactions": source["finalized_transactions"],
+                "chain_transaction_total": None,
+                "chain_transaction_coverage_fraction": None,
+                "token_or_asset_specific_event_coverage": None,
+            }
+        elif chain == "ethereum" and status == "bounded_private_sample":
+            symbol = {"ETH": "eth", "USDT-ERC20": "usdt", "USDC-ERC20": "usdc"}[asset]
+            entry["private_sample"] = {
+                "kind": source["kind"], "sample_digest": source["sample_digest"],
+                "sampled_transactions": source["sampled_transactions"],
+                "sampled_asset_movements": source["movement_counts"][symbol],
+                "sample_selection": source["sample_selection"],
+                "quality_gate": source["quality_gate"], "caveat": source["caveat"],
+            }
+            entry["finality_evidence"] = "rpc_reported_finalized_block_not_independently_verified"
+            entry["lineage"] = {"source_id": source["source_id"], "source_host": source["source_host"],
+                                "sample_sha256": source["sample_digest"]}
+            entry["completeness"] = {
+                "bounded_sample_records_verified": True,
+                "sampled_transactions": source["sampled_transactions"],
+                "sampled_asset_movements": source["movement_counts"][symbol],
+                "chain_transaction_total": None,
+                "chain_transaction_coverage_fraction": None,
+                "token_or_asset_specific_event_coverage": None,
+            }
+        elif chain == "bitcoin" and status == "bounded_private_sample":
+            entry["private_sample"] = source
+            entry["finality_evidence"] = "source_reported_probabilistic_confirmations_not_independently_verified"
+            entry["lineage"] = {"source_id": source["source_id"], "sample_sha256": source["sample_digest"]}
+            entry["completeness"] = {
+                "bounded_sample_records_verified": True,
+                "sampled_transactions": source["sampled_transactions"],
+                "sampled_outputs": source["sampled_outputs"],
                 "chain_transaction_total": None,
                 "chain_transaction_coverage_fraction": None,
                 "token_or_asset_specific_event_coverage": None,
@@ -221,7 +417,7 @@ def build_ledger(*, bloch_sample_dir=None, chain_health_path=None, as_of=None):
                 "token_or_asset_specific_event_coverage": None,
             }
         if asset in ("USDT-ERC20", "USDC-ERC20"):
-            entry["token_log_ingestion"] = "none"
+            entry["token_log_ingestion"] = "bounded_private_sample_only" if status == "bounded_private_sample" and chain == "ethereum" else "none"
             entry["contract_metadata_verified"] = False
         entries.append(entry)
     return {
@@ -251,10 +447,14 @@ def write_private(ledger, destination):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bloch-sample-dir", type=Path)
+    parser.add_argument("--ethereum-pilot-dir", type=Path)
+    parser.add_argument("--bitcoin-pilot", type=Path)
     parser.add_argument("--chain-health", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    ledger = build_ledger(bloch_sample_dir=args.bloch_sample_dir, chain_health_path=args.chain_health)
+    ledger = build_ledger(bloch_sample_dir=args.bloch_sample_dir, ethereum_pilot_dir=args.ethereum_pilot_dir,
+                          bitcoin_pilot_path=args.bitcoin_pilot,
+                          chain_health_path=args.chain_health)
     write_private(ledger, args.output)
     print(json.dumps({"kind": ledger["kind"], "assets": {row["asset"]: row["status"] for row in ledger["assets"]}, "production_ready": False}))
 

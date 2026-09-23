@@ -1,6 +1,6 @@
 # Initial asset adapter architecture
 
-The first wave covers BTC, ETH, ERC-20 USDT/USDC on Ethereum, and BLCH. The current code defines a normalized movement contract and offline ETH/ERC-20/BTC parsers; it does **not** connect live chain nodes for transaction ingestion. Separate, private Bloch indexer experiments collected bounded snapshots of 400 and 495 finalized transactions; neither establishes historical or live coverage. Solana's offline balance parser is retained for future research only. Every production adapter must emit source and finality evidence, retain a reversible cursor for reorg handling, and key event records by chain, network, asset, transaction, and event index. Score scales may be shared, but features and thresholds are calibrated per chain and asset.
+The first wave covers BTC, ETH, ERC-20 USDT/USDC on Ethereum, and BLCH. The code defines a normalized movement contract, offline ETH/ERC-20/BTC parsers, a [bounded private Ethereum finalized-block pilot](ethereum-private-pilot.md), and a [bounded private Bitcoin block pilot](bitcoin-private-pilot.md); it does **not** provide continuous chain ingestion. Separate, private Bloch indexer experiments collected bounded snapshots of 400 and 495 finalized transactions; neither establishes historical or live coverage. Solana's offline balance parser is retained for future research only. Every production adapter must emit source and finality evidence, retain a reversible cursor for reorg handling, and key event records by chain, network, asset, transaction, and event index. Score scales may be shared, but features and thresholds are calibrated per chain and asset.
 
 | Chain | Primary observation | Key technical work | Attribution boundary |
 | --- | --- | --- | --- |
@@ -24,7 +24,7 @@ The offline parsers deliberately separate facts from interpretations: `service/e
 
 The private Bloch sample stores created outputs and spent-outpoint observations separately. An input identifies a consumed output, not a natural-person sender. Only 340 of 24,169 observed spent outpoints resolve within this small sample; the resulting 1.4068% is a within-sample linkage rate, not a chain-coverage estimate. The exported structural histogram contains no wallet or transaction identifiers and suppresses cells smaller than five, but it is not asserted to be anonymous. Its unsupervised groups describe transaction shapes, not AML risk.
 
-The private [data evidence ledger](data-quality.md) reconciles that sample's digest, counts, source lineage, duplicate spends, and within-sample outpoint values/scripts. It reports BTC and Ethereum reachability separately from transaction ingestion, and explicitly gives USDT and USDC no token-log coverage on the strength of an Ethereum height probe.
+The private [data evidence ledger](data-quality.md) reconciles the Bloch sample's digest, counts, source lineage, duplicate spends, and within-sample outpoint values/scripts. It also checks bounded Bitcoin block and Ethereum finalized-block pilots. Height probes remain separate from transaction ingestion; neither pilot establishes chain-wide coverage.
 
 ## Implementation sequence
 

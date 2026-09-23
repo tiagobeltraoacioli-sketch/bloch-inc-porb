@@ -1,6 +1,7 @@
 import unittest
 
-from service.ml_validation import calibration_summary, confusion_metrics, validate_holdout, wilson_interval
+from service.ml_validation import (calibration_summary, confusion_metrics,
+                                   distribution_shift, validate_holdout, wilson_interval)
 
 
 class ModelValidationTest(unittest.TestCase):
@@ -42,6 +43,27 @@ class ModelValidationTest(unittest.TestCase):
         self.assertGreater(high, 0.9)
         with self.assertRaises(ValueError):
             wilson_interval(0, 0)
+
+    def test_distribution_shift_uses_training_edges_and_detects_out_of_range_values(self):
+        stable = distribution_shift([0, 1, 2, 3, 4], [0, 1, 2, 3, 4])
+        shifted = distribution_shift([0, 1, 2, 3, 4], [-100, 100])
+        self.assertAlmostEqual(stable["jensen_shannon_divergence_bits"], 0)
+        self.assertEqual(shifted["out_of_train_range_test_count"], 2)
+        self.assertEqual(shifted["train_bin_counts"], stable["train_bin_counts"])
+        self.assertEqual(stable["train_bin_counts"][0], 0)
+        self.assertEqual(stable["train_bin_counts"][-1], 0)
+        self.assertEqual(shifted["test_bin_counts"][0], 1)
+        self.assertEqual(shifted["test_bin_counts"][-1], 1)
+        self.assertGreater(shifted["jensen_shannon_divergence_bits"], 0)
+        self.assertNotIn("bin_edges", shifted)
+
+    def test_distribution_shift_rejects_invalid_values(self):
+        with self.assertRaises(ValueError):
+            distribution_shift([0, float("nan")], [1])
+        with self.assertRaises(ValueError):
+            distribution_shift([0], [float("inf")])
+        with self.assertRaises(ValueError):
+            distribution_shift([0], [])
 
 
 if __name__ == "__main__":

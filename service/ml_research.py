@@ -8,10 +8,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from service.ml_validation import calibration_summary, confusion_metrics, validate_holdout, wilson_interval
+from service.ml_validation import (calibration_summary, confusion_metrics,
+                                   distribution_shift, validate_holdout, wilson_interval)
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,49 @@ class ResearchExample:
     features: dict[str, float]
     feature_as_of: str | None = None
     reviewed_at: str | None = None
+    feature_snapshot_sha256: str | None = None
+    source_watermark: str | None = None
+
+
+def _aware_time(value, field):
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a timezone-aware ISO timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"{field} must be a timezone-aware ISO timestamp") from error
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field} must be timezone-aware")
+    return parsed
+
+
+def research_lineage_summary(examples):
+    """Validate declared source lineage; never treat a declaration as proof."""
+    examples = tuple(examples)
+    declared = 0
+    for item in examples:
+        digest = item.feature_snapshot_sha256
+        watermark = item.source_watermark
+        if (digest is None) != (watermark is None):
+            raise ValueError("snapshot digest and source watermark must be supplied together")
+        if digest is None:
+            continue
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("feature snapshot must be a lowercase SHA-256 digest")
+        observed = _aware_time(item.observed_at, "observed_at")
+        available = _aware_time(item.feature_as_of, "feature_as_of")
+        source_time = _aware_time(watermark, "source_watermark")
+        if source_time > available or available > observed:
+            raise ValueError("source watermark and features must predate observation")
+        declared += 1
+    return {
+        "examples": len(examples),
+        "declared_snapshot_count": declared,
+        "missing_snapshot_count": len(examples) - declared,
+        "status": ("declared_not_independently_verified" if declared == len(examples)
+                   else "incomplete_unverifiable"),
+        "historical_availability_proven": False,
+    }
 
 
 def sigmoid(value):
@@ -63,6 +108,7 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
             raise ValueError("missing or unexpected feature")
         if any(not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) for value in item.features.values()):
             raise ValueError("features must be finite numbers")
+    lineage = research_lineage_summary(examples)
     manifest = validate_holdout([
         {"case_id": item.case_id, "entity_id": item.entity_id, "observed_at": item.observed_at,
          "label": item.label, "reviewed": item.reviewed} for item in examples
@@ -99,6 +145,14 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
     predictions = [int(value >= 0.5) for value in probabilities]
     metrics = confusion_metrics(labels, predictions)
     metrics["brier_score"] = sum((probability - label) ** 2 for probability, label in zip(probabilities, labels)) / len(labels)
+    train_prevalence = sum(item.label for item in train) / len(train)
+    prevalence_brier = sum((train_prevalence - label) ** 2 for label in labels) / len(labels)
+    metrics["train_prevalence_reference"] = {
+        "train_prevalence": train_prevalence,
+        "holdout_brier_score": prevalence_brier,
+        "brier_skill_vs_reference": 1 - metrics["brier_score"] / prevalence_brier,
+        "warning": "descriptive_reference_not_evidence_of_operational_uplift",
+    }
     metrics["precision_at_review_capacity"] = precision_at_k(labels, probabilities, review_capacity)
     metrics["review_capacity"] = review_capacity
     metrics["precision_at_review_capacity_wilson95"] = wilson_interval(
@@ -110,16 +164,34 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
         name: sum(values[index] for values in test_vectors) / len(test_vectors)
         for index, name in enumerate(feature_names)
     }
-    canonical = json.dumps({"features": feature_names, "train_ids": sorted(item.case_id for item in train),
-                            "test_ids": sorted(item.case_id for item in test), "cutoff": cutoff}, sort_keys=True)
+    metrics["feature_distribution_shift"] = {
+        name: distribution_shift([item.features[name] for item in train],
+                                 [item.features[name] for item in test])
+        for name in feature_names
+    }
+    canonical = json.dumps({
+        "feature_names": feature_names, "cutoff": cutoff, "review_capacity": review_capacity,
+        "epochs": epochs, "learning_rate": learning_rate, "l2": l2,
+        "examples": [{"case_id": item.case_id, "entity_id": item.entity_id,
+                      "observed_at": item.observed_at, "chain": item.chain,
+                      "asset_id": item.asset_id, "label": item.label,
+                      "reviewed": item.reviewed,
+                      "features": item.features, "feature_as_of": item.feature_as_of,
+                      "reviewed_at": item.reviewed_at,
+                      "feature_snapshot_sha256": item.feature_snapshot_sha256,
+                      "source_watermark": item.source_watermark}
+                     for item in sorted(examples, key=lambda row: row.case_id)],
+    }, sort_keys=True, separators=(",", ":"))
     model_manifest = hashlib.sha256(canonical.encode()).hexdigest()
     return {
         "status": "research_only_not_aml_validated",
         "chain": examples[0].chain, "asset_id": examples[0].asset_id,
         "feature_names": list(feature_names),
         "holdout": manifest,
+        "source_lineage": lineage,
         "model_manifest_sha256": model_manifest,
         "metrics": metrics,
         "limitations": ["no_production_promotion", "requires_real_independent_labels",
-                        "descriptive_calibration_is_not_probability_calibration", "requires_external_validation"],
+                        "descriptive_calibration_is_not_probability_calibration", "requires_external_validation",
+                        "declared_source_lineage_requires_independent_audit"],
     }

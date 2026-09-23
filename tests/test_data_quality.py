@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from service.bloch_backfill import write_private
+from service.bitcoin_pilot import collect as collect_bitcoin, write_private as write_bitcoin
 from service.data_quality import build_ledger, inspect_bloch_sample, write_private as write_ledger
+from service.ethereum_pilot import collect as collect_ethereum, write_private as write_ethereum
+from tests.test_ethereum_pilot import fixture as ethereum_fixture
+from tests.test_bitcoin_pilot import source as bitcoin_source
 
 
 def fixture(folder, *, duplicate=False, wrong_value=False):
@@ -103,6 +107,52 @@ class DataQualityTest(unittest.TestCase):
         ledger = build_ledger()
         self.assertTrue(all(entry["status"] == "unavailable" for entry in ledger["assets"]))
         self.assertTrue(all(entry["amounts_are_exact_integers"] is None for entry in ledger["assets"]))
+
+    def test_ethereum_pilot_is_verified_per_asset_without_chain_coverage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "ethereum"
+            manifest, records = collect_ethereum(limit=2, fetch=ethereum_fixture, rpc_url="https://rpc.example.invalid")
+            write_ethereum(manifest, records, folder)
+            ledger = build_ledger(ethereum_pilot_dir=folder,
+                                  as_of=datetime(2026, 9, 23, tzinfo=timezone.utc))
+            eth, usdt, usdc = ledger["assets"][1:4]
+            self.assertEqual([row["status"] for row in (eth, usdt, usdc)], ["bounded_private_sample"] * 3)
+            self.assertEqual([row["completeness"]["sampled_asset_movements"] for row in (eth, usdt, usdc)], [1, 1, 0])
+            self.assertEqual(usdt["token_log_ingestion"], "bounded_private_sample_only")
+            self.assertIsNone(usdt["completeness"]["chain_transaction_coverage_fraction"])
+            self.assertNotIn(records[0]["tx_id"], json.dumps(ledger))
+            (folder / "ethereum-pilot.jsonl").write_text("tampered\n")
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                build_ledger(ethereum_pilot_dir=folder)
+
+    def test_ethereum_pilot_rejects_rehashed_cross_block_movement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "ethereum"
+            manifest, records = collect_ethereum(limit=2, fetch=ethereum_fixture)
+            movement = next(row for row in records if row["record_type"] == "normalized_movement")
+            movement["block_ref"] = "0x" + "f" * 64
+            write_ethereum(manifest, records, folder)
+            with self.assertRaisesRegex(ValueError, "invalid Ethereum normalized movement"):
+                build_ledger(ethereum_pilot_dir=folder)
+
+    def test_bitcoin_pilot_ledger_keeps_outputs_without_sender_or_coverage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bitcoin-pilot.json"
+            get, _ = bitcoin_source()
+            sample = collect_bitcoin(min_confirmations=6, tx_limit=2, get=get)
+            write_bitcoin(sample, path)
+            ledger = build_ledger(bitcoin_pilot_path=path,
+                                  as_of=datetime(2026, 9, 23, tzinfo=timezone.utc))
+            btc = ledger["assets"][0]
+            self.assertEqual(btc["status"], "bounded_private_sample")
+            self.assertEqual(btc["completeness"]["sampled_outputs"], 3)
+            self.assertEqual(btc["private_sample"]["sampled_spent_outpoint_references"], 1)
+            self.assertFalse(ledger["production_ready"])
+            self.assertNotIn(sample["transactions"][0]["txid"], json.dumps(ledger))
+            sample["transactions"][1]["single_sender_inferred"] = True
+            path.write_text(json.dumps(sample))
+            with self.assertRaisesRegex(ValueError, "invalid Bitcoin pilot transaction"):
+                build_ledger(bitcoin_pilot_path=path)
 
 
 if __name__ == "__main__":

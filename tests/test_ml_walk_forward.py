@@ -66,6 +66,33 @@ class WalkForwardTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "entity-disjoint"):
             run(rows)
 
+    def test_snapshot_gate_distinguishes_declaration_from_proof(self):
+        rows = sample()
+        report = run(rows)
+        self.assertEqual(report["source_lineage"]["status"], "incomplete_unverifiable")
+        with self.assertRaisesRegex(ValueError, "snapshot required"):
+            evaluate_walk_forward(rows, windows=WINDOWS, evaluation_at=stamp(32),
+                                  feature_names=["activity", "pattern"],
+                                  require_declared_lineage=True)
+        declared = [replace(item, feature_snapshot_sha256="a" * 64,
+                            source_watermark=item.feature_as_of) for item in rows]
+        report = evaluate_walk_forward(declared, windows=WINDOWS, evaluation_at=stamp(32),
+                                       feature_names=["activity", "pattern"],
+                                       require_declared_lineage=True)
+        self.assertEqual(report["source_lineage"]["declared_snapshot_count"], 30)
+        self.assertFalse(report["source_lineage"]["historical_availability_proven"])
+
+    def test_partial_or_future_source_lineage_fails_closed(self):
+        rows = sample()
+        with self.assertRaisesRegex(ValueError, "supplied together"):
+            run([replace(rows[0], feature_snapshot_sha256="a" * 64)] + rows[1:])
+        with self.assertRaisesRegex(ValueError, "predate observation"):
+            run([replace(rows[0], feature_snapshot_sha256="a" * 64,
+                         source_watermark=stamp(1))] + rows[1:])
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            run([replace(rows[0], feature_snapshot_sha256="unversioned",
+                         source_watermark=stamp(0))] + rows[1:])
+
 
 if __name__ == "__main__":
     unittest.main()

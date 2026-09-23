@@ -1,9 +1,26 @@
 const canvas = document.getElementById('evidence-constellation');
 const context = canvas.getContext('2d');
+const sourceStatus = document.createElement('details');
+sourceStatus.className = 'source-status';
+sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>5 assets · public map synthetic</span></summary>
+  <div class="source-status-body">
+    <p>Search on this page uses generated wallet examples only. No live wallet lookup, transaction feed, model prediction or AML score is available.</p>
+    <div class="source-status-scroll"><table><caption>Internal research inputs by initial asset; none are served as public wallet data</caption><thead><tr><th scope="col">Asset</th><th scope="col">Current internal input</th><th scope="col">Public map</th></tr></thead><tbody>
+      <tr><th scope="row">BTC</th><td>Bounded private block sample; offline parser</td><td>Synthetic</td></tr>
+      <tr><th scope="row">ETH</th><td>Bounded private finalized-block sample; offline parser</td><td>Synthetic</td></tr>
+      <tr><th scope="row">USDT · ERC-20</th><td>Events in bounded private Ethereum sample</td><td>Synthetic</td></tr>
+      <tr><th scope="row">USDC · ERC-20</th><td>Events in bounded private Ethereum sample</td><td>Synthetic</td></tr>
+      <tr><th scope="row">BLCH</th><td>Bounded private finalized sample; local query index</td><td>Synthetic</td></tr>
+    </tbody></table></div>
+    <p>Sampled records do not establish network history coverage or AML effectiveness. <a href="daas.html">Read the data product status ↗</a></p>
+  </div>`;
+document.getElementById('wallet-search-status').after(sourceStatus);
 const assetKeys = ['btc', 'eth', 'usdt', 'usdc', 'blch'];
 const colors = {btc:'#f2b96c',eth:'#9cc7ff',usdt:'#77d8c2',usdc:'#75bdf0',blch:'#ef8b80'};
 const units = {btc:'sat',eth:'wei',usdt:'token units',usdc:'token units',blch:'sat'};
 const sourceNames = {btc:'Synthetic Bitcoin fixture',eth:'Synthetic Ethereum fixture',usdt:'Synthetic ERC-20 USDT fixture',usdc:'Synthetic ERC-20 USDC fixture',blch:'Synthetic Bloch fixture'};
+const networks = {btc:'Bitcoin / synthetic network',eth:'Ethereum / synthetic network',usdt:'Ethereum ERC-20 / synthetic network',usdc:'Ethereum ERC-20 / synthetic network',blch:'Bloch / synthetic network'};
+const semantics = {btc:'Bitcoin uses UTXOs. An input outpoint alone does not identify a sender or owner.',blch:'Bloch uses eUTXOs. An input outpoint alone does not identify a sender or owner.',eth:'Account transfers in this fixture simplify gas, internal calls and trace boundaries.',usdt:'ERC-20 transfer events do not by themselves describe all contract effects.',usdc:'ERC-20 transfer events do not by themselves describe all contract effects.'};
 const centers = {btc:[.20,.28],eth:[.53,.20],usdt:[.79,.34],usdc:[.67,.72],blch:[.26,.75]};
 const fraction = value => value - Math.floor(value);
 const random = seed => fraction(Math.sin(seed * 12.9898 + 78.233) * 43758.5453);
@@ -59,6 +76,8 @@ let selectedTransaction = null;
 let width = 0, height = 0, dpr = 1, tick = 0;
 let paused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let transactionDots = [];
+let keyboardWalletIndex = 0;
+document.getElementById('record-id').setAttribute('aria-live','polite');
 
 function visible(wallet) { return activeAsset === 'all' || wallet.asset === activeAsset; }
 function matchesSearch(wallet) { return !search || wallet.id.toLowerCase().includes(search) || wallet.address.toLowerCase().includes(search); }
@@ -138,6 +157,7 @@ function draw() {
       arrow(point(from),point(to),tx.direction==='OUT'?'#f3a295':'#91d9d4');
     }
   }
+  const keyboardChoice=document.activeElement===canvas?wallets.filter(displayed)[keyboardWalletIndex]:null;
   for (const wallet of wallets) {
     if (!displayed(wallet)) continue;
     const p=point(wallet);
@@ -148,6 +168,9 @@ function draw() {
     if (selected) {
       context.strokeStyle='#f5b1a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,13,0,Math.PI*2);context.stroke();
       context.fillStyle='#f2f7fb';context.font='700 12px ui-monospace, monospace';context.fillText(wallet.id,p.x+17,p.y-13);
+    }
+    if (wallet===keyboardChoice) {
+      context.strokeStyle='#ffffff';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?18:13,0,Math.PI*2);context.stroke();
     }
   }
   transactionDots=[];
@@ -165,6 +188,13 @@ function draw() {
 }
 function frame() {if(!paused){tick++;draw();}requestAnimationFrame(frame);}
 function setText(id,value) {document.getElementById(id).textContent=value;}
+function renderEvidence(wallet,tx=null) {
+  setText('evidence-network',networks[wallet.asset]);
+  setText('evidence-type',tx?'Synthetic transfer event':'Synthetic wallet point');
+  setText('evidence-reference',tx?.id||wallet.id);
+  setText('evidence-finality','Not applicable; no chain transaction or block exists');
+  setText('evidence-limit',semantics[wallet.asset]+' No identity, geographic location or AML conclusion follows from this fixture.');
+}
 for(const [label,id,caption] of [['DAILY VOLUME SLOPE','analysis-slope','synthetic units per day'],['LINEAR FIT R²','analysis-fit','descriptive, not a risk signal']]){
   const card=document.createElement('article');
   const heading=document.createElement('span');heading.textContent=label;
@@ -258,6 +288,8 @@ function clearWallet() {
   setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
   for(const id of ['record-asset','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
   setText('record-source','Synthetic fixture');setText('record-meaning','No trained or validated model.');
+  for(const id of ['evidence-network','evidence-type','evidence-reference'])setText(id,'—');
+  setText('evidence-finality','Not applicable to synthetic data');setText('evidence-limit','Select a wallet to inspect the fixture.');
   document.getElementById('transaction-list').textContent='Select a wallet.';
   flowList.textContent='Select a wallet.';
   document.getElementById('activity-chart').replaceChildren();
@@ -275,6 +307,7 @@ function selectWallet(wallet,updateQuery=false) {
   setText('record-source',sourceNames[wallet.asset]);
   setText('record-related',`${wallet.transactions.length} synthetic transactions · ${wallet.volume.toLocaleString('en-US')} ${units[wallet.asset]}`);
   setText('record-meaning','Feature windows and temporal ML are research; no trained model or score.');
+  renderEvidence(wallet);
   renderAnalytics(wallet);
   renderFlows(wallet);
   const list=document.getElementById('transaction-list');list.replaceChildren();
@@ -294,6 +327,7 @@ function selectTransaction(wallet,tx) {
   setText('record-asset',wallet.asset.toUpperCase());setText('record-time',tx.observed);
   setText('record-source',sourceNames[wallet.asset]);setText('record-related',`${wallet.id} ↔ ${tx.counterparty}`);
   setText('record-meaning','No AML finding or model output; source and finality would be required for a real event.');
+  renderEvidence(wallet,tx);
   renderAnalytics(wallet);
   draw();
 }
@@ -314,8 +348,30 @@ canvas.addEventListener('click',event=>{
   for(const wallet of wallets.filter(displayed)){const p=point(wallet),d=Math.hypot(x-p.x,y-p.y);if(d<distance){nearest=wallet;distance=d;}}
   if(nearest)selectWallet(nearest,Boolean(search));
 });
+canvas.addEventListener('keydown',event=>{
+  const options=wallets.filter(displayed);
+  if(!options.length)return;
+  if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)){
+    event.preventDefault();
+    keyboardWalletIndex=(keyboardWalletIndex+(event.key==='ArrowRight'||event.key==='ArrowDown'?1:-1)+options.length)%options.length;
+    canvas.setAttribute('aria-label',`${options[keyboardWalletIndex].id}, wallet ${keyboardWalletIndex+1} of ${options.length}. Press Enter to inspect.`);
+    draw();
+  } else if(event.key==='Enter'||event.key===' '){
+    event.preventDefault();
+    selectWallet(options[keyboardWalletIndex],Boolean(search));
+  }
+});
+canvas.addEventListener('focus',()=>{
+  const options=wallets.filter(displayed);
+  const index=options.findIndex(wallet=>wallet===selectedWallet);
+  keyboardWalletIndex=index>=0?index:0;
+  if(options.length)canvas.setAttribute('aria-label',`${options[keyboardWalletIndex].id}, wallet ${keyboardWalletIndex+1} of ${options.length}. Press Enter to inspect.`);
+  draw();
+});
+canvas.addEventListener('blur',draw);
 document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.addEventListener('click',()=>{
   activeAsset=button.dataset.constellationAsset;
+  keyboardWalletIndex=0;
   document.querySelectorAll('[data-constellation-asset]').forEach(item=>{item.classList.toggle('active',item===button);item.setAttribute('aria-pressed',String(item===button));});
   if(selectedWallet&&!visible(selectedWallet))clearWallet();
   if(search){const match=wallets.find(wallet=>visible(wallet)&&matchesSearch(wallet));if(match&&!selectedWallet)selectWallet(match);}
@@ -323,12 +379,14 @@ document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.a
 }));
 document.getElementById('record-search').addEventListener('input',event=>{
   search=event.target.value.trim().toLowerCase();
+  keyboardWalletIndex=0;
+  document.getElementById('wallet-browser').open=Boolean(search);
   const match=wallets.find(wallet=>visible(wallet)&&matchesSearch(wallet));
   if(search&&match)selectWallet(match);
   else {clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();}
 });
 document.getElementById('clear-wallet-search').addEventListener('click',()=>{
-  const input=document.getElementById('record-search');input.value='';search='';clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();input.focus();
+  const input=document.getElementById('record-search');input.value='';search='';document.getElementById('wallet-browser').open=false;clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();input.focus();
 });
 const pauseButton=document.getElementById('pause-constellation');
 pauseButton.addEventListener('click',()=>{paused=!paused;pauseButton.setAttribute('aria-pressed',String(paused));pauseButton.textContent=paused?'Resume motion':'Pause motion';draw();});

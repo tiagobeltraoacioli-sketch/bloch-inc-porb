@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from service.ml_research import ResearchExample, train_reviewed_baseline
+from service.ml_research import ResearchExample, research_lineage_summary, train_reviewed_baseline
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ def evaluate_walk_forward(
     windows: list[WalkForwardWindow],
     evaluation_at: str,
     feature_names: list[str] | tuple[str, ...],
+    require_declared_lineage: bool = False,
 ) -> dict:
     """Train only on outcomes available before each window; test later cases.
 
@@ -48,6 +49,9 @@ def evaluate_walk_forward(
         raise ValueError("duplicate case ID")
     if len({(item.chain, item.asset_id) for item in examples}) != 1:
         raise ValueError("one chain and asset required")
+    lineage = research_lineage_summary(examples)
+    if require_declared_lineage and lineage["missing_snapshot_count"]:
+        raise ValueError("declared source snapshot required for every example")
     dated = []
     for item in examples:
         observed = _instant(item.observed_at, "observed_at")
@@ -84,9 +88,10 @@ def evaluate_walk_forward(
         "chain": examples[0].chain,
         "asset_id": examples[0].asset_id,
         "evaluation_at": evaluation_at,
+        "source_lineage": lineage,
         "windows": reports,
         "limitations": [
-            "timestamps_are_declared_and_source_provenance_requires_independent_audit",
+            "timestamps_and_snapshot_identifiers_are_declared_and_require_independent_audit",
             "reviewed_cases_may_not_represent_all_activity",
             "no_production_promotion_or_wallet_score",
         ],
