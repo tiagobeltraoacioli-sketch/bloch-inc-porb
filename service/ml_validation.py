@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+import random
 from bisect import bisect_right
 from datetime import datetime
 
@@ -105,6 +106,61 @@ def wilson_interval(successes, total, *, z=1.959963984540054):
     center = (fraction + adjustment / 2) / (1 + adjustment)
     margin = z * math.sqrt(fraction * (1 - fraction) / total + adjustment / (4 * total)) / (1 + adjustment)
     return [max(0.0, center - margin), min(1.0, center + margin)]
+
+
+def paired_brier_entity_bootstrap(labels, probabilities, reference_probability, entity_ids,
+                                  *, seed, replicates=400):
+    """Describe held-out Brier difference with paired entity resampling.
+
+    A negative difference favors the model. The interval is conditional on the
+    reviewed holdout and does not address selection bias or temporal dependence.
+    """
+    if not labels or not (len(labels) == len(probabilities) == len(entity_ids)):
+        raise ValueError("nonempty equal-length labels, probabilities, and entities required")
+    if any(type(value) is not int or value not in (0, 1) for value in labels):
+        raise ValueError("binary labels required")
+    if (type(reference_probability) not in (int, float) or
+            not math.isfinite(reference_probability) or not 0 <= reference_probability <= 1):
+        raise ValueError("finite reference probability in [0, 1] required")
+    if any(type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1
+           for value in probabilities):
+        raise ValueError("finite probabilities in [0, 1] required")
+    if any(not isinstance(entity, str) or not entity for entity in entity_ids):
+        raise ValueError("nonempty entity IDs required")
+    if not isinstance(seed, str) or not seed or type(replicates) is not int or not 100 <= replicates <= 2000:
+        raise ValueError("nonempty seed and 100-2000 replicates required")
+
+    groups = {}
+    for label, probability, entity in zip(labels, probabilities, entity_ids):
+        delta = (probability - label) ** 2 - (reference_probability - label) ** 2
+        total, count = groups.get(entity, (0.0, 0))
+        groups[entity] = (total + delta, count + 1)
+    point = sum(total for total, _ in groups.values()) / len(labels)
+    keys = sorted(groups)
+    result = {
+        "model_minus_reference_brier": point,
+        "entity_count": len(keys),
+        "interval95": None,
+        "replicates": replicates,
+        "warning": "descriptive_reviewed_holdout_only_selection_and_temporal_bias_unaddressed",
+    }
+    if len(keys) < 2:
+        result["interval_unavailable_reason"] = "fewer_than_two_holdout_entities"
+        return result
+    rng = random.Random(int.from_bytes(hashlib.sha256(seed.encode()).digest(), "big"))
+    draws = []
+    for _ in range(replicates):
+        sampled = [groups[keys[rng.randrange(len(keys))]] for _ in keys]
+        draws.append(sum(total for total, _ in sampled) / sum(count for _, count in sampled))
+    draws.sort()
+
+    def percentile(fraction):
+        index = fraction * (replicates - 1)
+        lower = math.floor(index)
+        return draws[lower] + (draws[math.ceil(index)] - draws[lower]) * (index - lower)
+
+    result["interval95"] = [percentile(0.025), percentile(0.975)]
+    return result
 
 
 def distribution_shift(train_values, test_values, *, quantiles=4):

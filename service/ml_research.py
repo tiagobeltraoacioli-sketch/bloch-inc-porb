@@ -14,6 +14,7 @@ from datetime import datetime
 
 from service.ml_validation import (calibration_summary, confusion_metrics,
                                    distribution_shift, validate_holdout, wilson_interval)
+from service.ml_validation import paired_brier_entity_bootstrap
 
 
 @dataclass(frozen=True)
@@ -153,6 +154,10 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
         "brier_skill_vs_reference": 1 - metrics["brier_score"] / prevalence_brier,
         "warning": "descriptive_reference_not_evidence_of_operational_uplift",
     }
+    metrics["paired_brier_delta_entity_bootstrap"] = paired_brier_entity_bootstrap(
+        labels, probabilities, train_prevalence, [item.entity_id for item in test],
+        seed=manifest["label_manifest_sha256"],
+    )
     metrics["precision_at_review_capacity"] = precision_at_k(labels, probabilities, review_capacity)
     metrics["review_capacity"] = review_capacity
     metrics["precision_at_review_capacity_wilson95"] = wilson_interval(

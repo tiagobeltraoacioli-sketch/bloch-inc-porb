@@ -147,12 +147,41 @@ class DataQualityTest(unittest.TestCase):
             self.assertEqual(btc["status"], "bounded_private_sample")
             self.assertEqual(btc["completeness"]["sampled_outputs"], 3)
             self.assertEqual(btc["private_sample"]["sampled_spent_outpoint_references"], 1)
+            self.assertTrue(btc["private_sample"]["header_hash_locally_verified"])
+            self.assertTrue(btc["private_sample"]["merkle_inclusion_locally_verified"])
             self.assertFalse(ledger["production_ready"])
             self.assertNotIn(sample["transactions"][0]["txid"], json.dumps(ledger))
             sample["transactions"][1]["single_sender_inferred"] = True
             path.write_text(json.dumps(sample))
             with self.assertRaisesRegex(ValueError, "invalid Bitcoin pilot transaction"):
                 build_ledger(bitcoin_pilot_path=path)
+
+    def test_bitcoin_pilot_rechecks_stored_merkle_branch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bitcoin-pilot.json"
+            get, _ = bitcoin_source()
+            sample = collect_bitcoin(min_confirmations=6, tx_limit=2, get=get)
+            sample["transactions"][0]["merkle_branch"][0] = "e" * 64
+            path.write_text(json.dumps(sample))
+            with self.assertRaisesRegex(ValueError, "Merkle inclusion mismatch"):
+                build_ledger(bitcoin_pilot_path=path)
+
+    def test_legacy_bitcoin_pilot_does_not_claim_merkle_verification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bitcoin-pilot.json"
+            get, _ = bitcoin_source()
+            sample = collect_bitcoin(min_confirmations=6, tx_limit=2, get=get)
+            sample["schema_version"] = 1
+            for key in ("block_header_hex", "header_hash_locally_verified",
+                        "merkle_inclusion_locally_verified"):
+                sample.pop(key)
+            for tx in sample["transactions"]:
+                tx.pop("merkle_branch")
+                tx.pop("merkle_position")
+            path.write_text(json.dumps(sample))
+            btc = build_ledger(bitcoin_pilot_path=path)["assets"][0]["private_sample"]
+            self.assertFalse(btc["header_hash_locally_verified"])
+            self.assertFalse(btc["merkle_inclusion_locally_verified"])
 
 
 if __name__ == "__main__":

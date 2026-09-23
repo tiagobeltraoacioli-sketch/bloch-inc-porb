@@ -49,7 +49,8 @@ def fetch(path):
         content_type = response.headers.get("Content-Type", "")
     if len(raw) > MAX_RESPONSE_BYTES:
         raise ValueError("Esplora response exceeds bound")
-    if path == "/blocks/tip/height" or path.startswith("/block-height/") or "/txid/" in path:
+    if (path == "/blocks/tip/height" or path.startswith("/block-height/")
+            or "/txid/" in path or path.endswith("/header")):
         if "text/plain" not in content_type:
             raise ValueError("unexpected Esplora text content type")
         return raw.decode("ascii").strip()
@@ -87,6 +88,39 @@ def _input(item):
     }}
 
 
+def _double_sha256(payload):
+    return hashlib.sha256(hashlib.sha256(payload).digest()).digest()
+
+
+def verify_header(header_hex, block_hash, merkle_root):
+    """Verify the 80-byte header hash and its Merkle root against block metadata."""
+    if not isinstance(header_hex, str) or len(header_hex) != 160 or re.fullmatch(r"[0-9a-fA-F]{160}", header_hex) is None:
+        raise ValueError("invalid Bitcoin block header")
+    header = bytes.fromhex(header_hex)
+    if _double_sha256(header)[::-1].hex() != block_hash:
+        raise ValueError("Bitcoin block header hash mismatch")
+    if header[36:68][::-1].hex() != merkle_root:
+        raise ValueError("Bitcoin block header Merkle root mismatch")
+
+
+def verify_merkle_proof(txid, position, height, proof, merkle_root):
+    """Compute an Electrum-format transaction branch against the selected header."""
+    if (not isinstance(proof, dict) or type(proof.get("block_height")) is not int
+            or proof["block_height"] != height or type(proof.get("pos")) is not int
+            or proof["pos"] != position or not isinstance(proof.get("merkle"), list)
+            or len(proof["merkle"]) > 32):
+        raise ValueError("invalid Bitcoin Merkle proof position")
+    node = bytes.fromhex(_hex64(txid, "proof transaction ID"))[::-1]
+    index = position
+    for sibling_hex in proof["merkle"]:
+        sibling = bytes.fromhex(_hex64(sibling_hex, "Merkle sibling"))[::-1]
+        node = _double_sha256((sibling + node) if index & 1 else (node + sibling))
+        index >>= 1
+    if index or node[::-1].hex() != merkle_root:
+        raise ValueError("Bitcoin Merkle inclusion mismatch")
+    return [_hex64(sibling, "Merkle sibling") for sibling in proof["merkle"]]
+
+
 def _transaction(tx, expected_txid, block_hash, height):
     if not isinstance(tx, dict) or _hex64(tx.get("txid"), "transaction ID") != expected_txid:
         raise ValueError("transaction ID differs from block index")
@@ -122,7 +156,9 @@ def collect(*, min_confirmations=6, tx_limit=5, get=fetch):
             type(block.get("height")) is not int or block["height"] != height or
             type(block.get("tx_count")) is not int or block["tx_count"] < 1):
         raise ValueError("block metadata differs from selected height")
-    _hex64(block.get("merkle_root"), "block Merkle root")
+    merkle_root = _hex64(block.get("merkle_root"), "block Merkle root")
+    header_hex = get(f"/block/{block_hash}/header")
+    verify_header(header_hex, block_hash, merkle_root)
     first_status = get(f"/block/{block_hash}/status")
     if not isinstance(first_status, dict) or first_status.get("in_best_chain") is not True:
         raise ValueError("selected block is not in source-reported best chain")
@@ -131,6 +167,9 @@ def collect(*, min_confirmations=6, tx_limit=5, get=fetch):
         txid = _hex64(get(f"/block/{block_hash}/txid/{index}"), "block transaction ID")
         tx = get(f"/tx/{txid}")
         observed = _transaction(tx, txid, block_hash, height)
+        observed["merkle_branch"] = verify_merkle_proof(
+            txid, index, height, get(f"/tx/{txid}/merkle-proof"), merkle_root)
+        observed["merkle_position"] = index
         coinbase_inputs = sum(item["kind"] == "coinbase_input" for item in observed["inputs"])
         if (index == 0 and (coinbase_inputs != 1 or len(observed["inputs"]) != 1)) or (index > 0 and coinbase_inputs):
             raise ValueError("coinbase input conflicts with block transaction position")
@@ -146,11 +185,12 @@ def collect(*, min_confirmations=6, tx_limit=5, get=fetch):
     if confirmations < min_confirmations:
         raise ValueError("source-reported confirmations below requested depth")
     observations = {
-        "schema_version": 1, "kind": "bounded_private_bitcoin_block_pilot",
+        "schema_version": 2, "kind": "bounded_private_bitcoin_block_pilot",
         "chain": "bitcoin", "network": "mainnet", "source_id": SOURCE_ID,
         "source_url": API, "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "block_hash": block_hash, "block_height": height,
         "block_merkle_root_source_reported": block["merkle_root"].lower(),
+        "block_header_hex": header_hex.lower(),
         "block_tx_count_source_reported": block["tx_count"],
         "first_tip_height": first_tip, "final_tip_height": final_tip,
         "confirmations_source_reported": confirmations,
@@ -162,6 +202,8 @@ def collect(*, min_confirmations=6, tx_limit=5, get=fetch):
         ),
         "transactions": transactions,
         "source_reported_best_chain_checked_twice": True,
+        "header_hash_locally_verified": True,
+        "merkle_inclusion_locally_verified": True,
         "merkle_inclusion_independently_verified": False,
         "independent_node_reconciliation": False, "full_history_coverage": False,
         "sender_ownership_inferred": False, "aml_scores_computed": 0,

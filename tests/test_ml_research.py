@@ -53,6 +53,11 @@ class ResearchModelTest(unittest.TestCase):
         reference = report["metrics"]["train_prevalence_reference"]
         self.assertEqual(reference["train_prevalence"], 0.5)
         self.assertAlmostEqual(reference["holdout_brier_score"], 0.25)
+        uncertainty = report["metrics"]["paired_brier_delta_entity_bootstrap"]
+        self.assertEqual(uncertainty["entity_count"], 8)
+        self.assertEqual(len(uncertainty["interval95"]), 2)
+        self.assertAlmostEqual(uncertainty["model_minus_reference_brier"],
+                               report["metrics"]["brier_score"] - reference["holdout_brier_score"])
         drift = report["metrics"]["feature_distribution_shift"]["event_count"]
         self.assertEqual(drift["out_of_train_range_test_count"], 8)
         self.assertEqual(sum(drift["train_bin_counts"]), 16)

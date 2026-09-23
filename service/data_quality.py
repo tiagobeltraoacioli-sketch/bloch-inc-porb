@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ethereum import ADDRESS, TOKEN_CONTRACTS
+from .bitcoin_pilot import verify_header, verify_merkle_proof
 from .normalization import Movement
 
 
@@ -233,7 +234,9 @@ def inspect_bitcoin_pilot(pilot_path):
     """Verify a bounded Bitcoin block artifact and return no transaction IDs."""
     raw = Path(pilot_path).read_bytes()
     sample = json.loads(raw)
+    schema_version = sample.get("schema_version")
     if (sample.get("kind") != "bounded_private_bitcoin_block_pilot"
+            or schema_version not in (1, 2) or type(schema_version) is not int
             or sample.get("chain") != "bitcoin" or sample.get("network") != "mainnet"
             or sample.get("source_id") != "blockstream-esplora-bitcoin-mainnet"
             or not HEX64.fullmatch(sample.get("block_hash", ""))
@@ -247,6 +250,15 @@ def inspect_bitcoin_pilot(pilot_path):
             or sample.get("sender_ownership_inferred") is not False
             or sample.get("aml_scores_computed") != 0):
         raise ValueError("invalid Bitcoin pilot provenance")
+    if schema_version == 2:
+        if (sample.get("header_hash_locally_verified") is not True
+                or sample.get("merkle_inclusion_locally_verified") is not True
+                or not HEX64.fullmatch(sample.get("block_merkle_root_source_reported", ""))):
+            raise ValueError("invalid Bitcoin pilot proof provenance")
+        verify_header(sample.get("block_header_hex"), sample["block_hash"],
+                      sample["block_merkle_root_source_reported"])
+    elif sample.get("merkle_inclusion_locally_verified") is True:
+        raise ValueError("legacy Bitcoin pilot cannot assert verified inclusion")
     transactions = sample.get("transactions")
     if (not isinstance(transactions, list) or not 1 <= len(transactions) <= 5
             or len(transactions) != sample.get("sampled_transactions")
@@ -264,6 +276,13 @@ def inspect_bitcoin_pilot(pilot_path):
                 or not isinstance(tx.get("outputs"), list)):
             raise ValueError("invalid Bitcoin pilot transaction")
         seen.add(txid)
+        if schema_version == 2:
+            if tx.get("merkle_position") != index or type(tx.get("merkle_position")) is not int:
+                raise ValueError("Bitcoin pilot Merkle position mismatch")
+            verify_merkle_proof(txid, index, sample["block_height"],
+                                {"block_height": sample["block_height"], "pos": index,
+                                 "merkle": tx.get("merkle_branch")},
+                                sample["block_merkle_root_source_reported"])
         coinbase = 0
         for entry in tx["inputs"]:
             if entry.get("kind") == "coinbase_input" and entry.get("spent_outpoint") is None:
@@ -299,6 +318,8 @@ def inspect_bitcoin_pilot(pilot_path):
         "confirmations_source_reported": sample["confirmations_source_reported"],
         "sampled_transactions": len(transactions), "sampled_outputs": outputs,
         "sampled_spent_outpoint_references": references,
+        "header_hash_locally_verified": schema_version == 2,
+        "merkle_inclusion_locally_verified": schema_version == 2,
         "chain_history_complete": False, "independent_node_reconciliation": False,
         "quality_gate": "pass",
         "caveat": "one source-reported best-chain block; probabilistic confirmations, no history or ownership claim",

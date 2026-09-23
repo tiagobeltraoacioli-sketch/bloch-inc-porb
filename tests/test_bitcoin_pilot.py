@@ -1,16 +1,23 @@
 import json
+import hashlib
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from service.bitcoin_pilot import collect, write_private
+from service.bitcoin_pilot import collect, verify_header, verify_merkle_proof, write_private
 
 
-BLOCK, COINBASE, SPEND, PREVIOUS = (letter * 64 for letter in "abcd")
+COINBASE, SPEND, PREVIOUS = (letter * 64 for letter in "bcd")
+def double_sha256(payload):
+    return hashlib.sha256(hashlib.sha256(payload).digest()).digest()
+
+MERKLE = double_sha256(bytes.fromhex(COINBASE)[::-1] + bytes.fromhex(SPEND)[::-1])[::-1].hex()
+HEADER = bytes(36) + bytes.fromhex(MERKLE)[::-1] + bytes(12)
+BLOCK = double_sha256(HEADER)[::-1].hex()
 
 
-def source(*, bad_status=False, reorg=False, bad_output=False):
+def source(*, bad_status=False, reorg=False, bad_output=False, bad_proof=False, bad_header=False):
     calls = []
     def get(path):
         calls.append(path)
@@ -19,13 +26,19 @@ def source(*, bad_status=False, reorg=False, bad_output=False):
         if path == "/block-height/995":
             return BLOCK if calls.count(path) == 1 or not reorg else "e" * 64
         if path == f"/block/{BLOCK}":
-            return {"id": BLOCK, "height": 995, "tx_count": 2, "merkle_root": "f" * 64}
+            return {"id": BLOCK, "height": 995, "tx_count": 2, "merkle_root": MERKLE}
+        if path == f"/block/{BLOCK}/header":
+            return (bytes(80) if bad_header else HEADER).hex()
         if path == f"/block/{BLOCK}/status":
             return {"in_best_chain": not (reorg and calls.count(path) > 1)}
         if path == f"/block/{BLOCK}/txid/0":
             return COINBASE
         if path == f"/block/{BLOCK}/txid/1":
             return SPEND
+        if path == f"/tx/{COINBASE}/merkle-proof":
+            return {"block_height": 995, "pos": 0, "merkle": [SPEND if not bad_proof else PREVIOUS]}
+        if path == f"/tx/{SPEND}/merkle-proof":
+            return {"block_height": 995, "pos": 1, "merkle": [COINBASE]}
         if path == f"/tx/{COINBASE}":
             return {"txid": COINBASE, "status": {"confirmed": True, "block_hash": BLOCK,
                     "block_height": 995}, "vin": [{"is_coinbase": True}],
@@ -54,6 +67,8 @@ class BitcoinPilotTest(unittest.TestCase):
         self.assertEqual(sample["transactions"][1]["inputs"][0]["spent_outpoint"],
                          {"txid": PREVIOUS, "vout": 2})
         self.assertFalse(sample["transactions"][1]["single_sender_inferred"])
+        self.assertTrue(sample["header_hash_locally_verified"])
+        self.assertTrue(sample["merkle_inclusion_locally_verified"])
         self.assertFalse(sample["merkle_inclusion_independently_verified"])
         self.assertEqual(calls.count(f"/block/{BLOCK}/status"), 2)
         with tempfile.TemporaryDirectory() as temporary:
@@ -81,6 +96,18 @@ class BitcoinPilotTest(unittest.TestCase):
         for kwargs in ({"tx_limit": 6}, {"min_confirmations": 0}, {"tx_limit": True}):
             with self.assertRaises(ValueError):
                 collect(get=lambda path: None, **kwargs)
+
+    def test_rejects_mismatched_header_and_merkle_branch(self):
+        for options, message in (({"bad_header": True}, "header hash mismatch"),
+                                 ({"bad_proof": True}, "inclusion mismatch")):
+            get, _ = source(**options)
+            with self.assertRaisesRegex(ValueError, message):
+                collect(min_confirmations=6, tx_limit=2, get=get)
+        with self.assertRaisesRegex(ValueError, "position"):
+            verify_merkle_proof(COINBASE, 0, 995, {"block_height": 995, "pos": 1,
+                                                  "merkle": [SPEND]}, MERKLE)
+        with self.assertRaisesRegex(ValueError, "Merkle root mismatch"):
+            verify_header(HEADER.hex(), BLOCK, PREVIOUS)
 
 
 if __name__ == "__main__":

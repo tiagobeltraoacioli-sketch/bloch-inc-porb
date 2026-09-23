@@ -41,6 +41,8 @@ class TemporalEvent:
             raise ValueError("direct sender must be present")
         if self.sender_attribution == "unknown" and self.sender is not None:
             raise ValueError("unknown sender cannot be asserted")
+        if self.chain in {"bitcoin", "bloch"} and self.sender_attribution != "unknown":
+            raise ValueError("UTXO and eUTXO outputs do not identify a direct sender")
         timestamp(self.observed_at)
 
 
@@ -110,6 +112,82 @@ class GraphAnalytics:
             "evidence_event_ids": sorted(item.event_id for item in related),
             "source_ids": sorted({item.source_id for item in related}),
             "caveats": ["no_ownership_or_illicitness_inference", "unknown_sender_excluded_from_counterparty_graph", "regression_is_descriptive_not_causal"],
+        }
+
+    def wallet_constellation(self, *, chain, network, asset_id, wallet, start, end, max_events=200):
+        """Build a bounded event-centered view without inventing UTXO senders.
+
+        Each observation is an event node with its source and finality. A direct
+        source link is present only for a directly observed account transfer.
+        Neither the reference nodes nor temporal adjacency imply ownership.
+        """
+        if not isinstance(wallet, str) or not wallet:
+            raise ValueError("wallet reference required")
+        if not isinstance(max_events, int) or isinstance(max_events, bool) or not 1 <= max_events <= 500:
+            raise ValueError("event bound exceeded")
+        related = sorted(
+            (item for item in self._window(chain, network, asset_id, start, end)
+             if item.destination == wallet or item.sender == wallet),
+            key=lambda item: (timestamp(item.observed_at), item.event_id),
+        )
+        if len(related) > max_events:
+            raise ValueError("constellation exceeds event bound; narrow the window")
+        references = {wallet}
+        nodes = []
+        links = []
+        source_counts = defaultdict(int)
+        finality_counts = defaultdict(int)
+        for item in related:
+            event_node = f"event:{item.event_id}"
+            source_counts[item.source_id] += 1
+            finality_counts[item.finality] += 1
+            references.add(item.destination)
+            nodes.append({
+                "id": event_node, "kind": "observed_event", "event_id": item.event_id,
+                "observed_at": item.observed_at, "source_id": item.source_id,
+                "finality": item.finality, "amount_base_units": item.amount_base_units,
+                "sender_attribution": item.sender_attribution,
+            })
+            links.append({
+                "from": event_node, "to": f"reference:{item.destination}",
+                "kind": "observed_destination", "event_id": item.event_id,
+            })
+            if item.sender_attribution == "direct":
+                references.add(item.sender)
+                links.append({
+                    "from": f"reference:{item.sender}", "to": event_node,
+                    "kind": "direct_observed_sender", "event_id": item.event_id,
+                })
+        reference_nodes = [
+            {"id": f"reference:{reference}", "kind": "chain_reference",
+             "reference": reference, "focus": reference == wallet}
+            for reference in sorted(references)
+        ]
+        return {
+            "classification": "event_centered_observation_graph",
+            "chain": chain, "network": network, "asset_id": asset_id,
+            "focus_reference": wallet,
+            "window": {"start": start, "end_exclusive": end},
+            "nodes": reference_nodes + nodes, "links": links,
+            "summary": {
+                "observed_events": len(related),
+                "direct_sender_links": sum(item.sender_attribution == "direct" for item in related),
+                "unknown_sender_events": sum(item.sender_attribution == "unknown" for item in related),
+                "source_event_counts": [
+                    {"source_id": source, "events": count}
+                    for source, count in sorted(source_counts.items())
+                ],
+                "finality_event_counts": [
+                    {"finality": finality, "events": count}
+                    for finality, count in sorted(finality_counts.items())
+                ],
+            },
+            "caveats": [
+                "chain_references_are_not_people_or_ownership_claims",
+                "UTXO_and_eUTXO_inputs_do_not_identify_a_sender",
+                "event_adjacency_does_not_prove_value_continuity",
+                "bounded_observations_do_not_establish_chain_coverage",
+            ],
         }
 
     def temporal_paths(self, *, chain, network, asset_id, source_wallet, target_wallet, start, end, max_hops=3, max_paths=20):

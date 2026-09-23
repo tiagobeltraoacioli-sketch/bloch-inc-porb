@@ -60,6 +60,50 @@ class GraphAnalyticsTest(unittest.TestCase):
         self.assertEqual(linear_trend([1, 2, 3, 4])["r2"], 1)
         self.assertIsNone(linear_trend([1, 2])["slope"])
 
+    def test_constellation_uses_event_nodes_and_direct_evm_sender_only(self):
+        view = self.graph.wallet_constellation(
+            chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+            start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z",
+        )
+        self.assertEqual(view["summary"]["observed_events"], 3)
+        self.assertEqual(view["summary"]["direct_sender_links"], 3)
+        self.assertEqual(view["summary"]["source_event_counts"],
+                         [{"source_id": "synthetic-fixture", "events": 3}])
+        self.assertEqual({node["id"] for node in view["nodes"] if node["kind"] == "observed_event"},
+                         {"event:e1", "event:e2", "event:e4"})
+        self.assertEqual(len([link for link in view["links"] if link["kind"] == "direct_observed_sender"]), 3)
+        self.assertNotIn("usdt1", str(view))
+        self.assertEqual(view, GraphAnalytics(reversed(self.graph.events)).wallet_constellation(
+            chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+            start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z",
+        ))
+
+    def test_utxo_and_eutxo_constellation_has_no_sender_or_peer_claim(self):
+        for chain, asset in (("bitcoin", "btc"), ("bloch", "blch")):
+            with self.subTest(chain=chain):
+                graph = GraphAnalytics([event("output-1", None, "script-1", 500, 2,
+                                              chain=chain, asset=asset, attribution="unknown")])
+                view = graph.wallet_constellation(
+                    chain=chain, network="mainnet", asset_id=asset, wallet="script-1",
+                    start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z",
+                )
+                self.assertEqual(view["summary"]["unknown_sender_events"], 1)
+                self.assertEqual(view["summary"]["direct_sender_links"], 0)
+                self.assertEqual([link["kind"] for link in view["links"]], ["observed_destination"])
+                self.assertEqual([node["reference"] for node in view["nodes"]
+                                  if node["kind"] == "chain_reference"], ["script-1"])
+                with self.assertRaises(ValueError):
+                    event("bad", "inferred-sender", "script-1", 500, 2, chain=chain, asset=asset)
+
+    def test_constellation_rejects_silent_truncation_and_invalid_bounds(self):
+        arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+                         start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        with self.assertRaisesRegex(ValueError, "narrow the window"):
+            self.graph.wallet_constellation(**arguments, max_events=2)
+        for bound in (0, True, 501):
+            with self.assertRaises(ValueError):
+                self.graph.wallet_constellation(**arguments, max_events=bound)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,3 +18,9 @@ Edges: spent output, created output, instruction effect, token transfer, source 
 - Explanation: every proposed relationship can be expanded to its typed path, source, time, and alternative interpretation. Corrections and disputes remove or downgrade the affected edge and trigger dependent score recomputation.
 
 The `service/graph.py` module implements a small bounded path prototype with source IDs, expiry, event-time ordering, finality, bridge-proof gates, and hub downweighting. It is not a production graph database or a trained AML model.
+
+## Event-centered constellation prototype
+
+`service/graph_analytics.py` exposes `wallet_constellation` for a single chain, network, asset, reference, and time window. It returns source- and finality-tagged **event nodes** plus typed links to chain references. A Bitcoin or Bloch output has an `observed_destination` link only; its input references do not identify a sender. A directly observed Ethereum native or ERC-20 transfer can additionally have a `direct_observed_sender` link. The module rejects direct sender attribution for Bitcoin UTXO and Bloch eUTXO events. A chain reference can be an address or script reference; it is not a person or ownership claim.
+
+The response reports event counts by source and finality, plus the number of direct and unknown sender observations. It is deterministic across event input order. It refuses more than 500 events, with a caller-selected lower limit, instead of silently truncating a constellation. It does not link assets or chains, infer value continuity through intermediary events, score wallets, or establish historical coverage. The current public Graphus view still uses synthetic fixtures; the private bounded pilots are not exposed through this graph method on the public site.

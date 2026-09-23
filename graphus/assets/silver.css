@@ -63,3 +63,20 @@ footer{background:#e9edf0;border-color:#cdd5da;color:#50616e}footer a{color:#344
 .source-status th{font-weight:700;color:#344f5e}
 .source-status td:last-child{color:#5b7583}
 @media(max-width:700px){.source-status summary{flex-wrap:wrap;gap:.35rem .55rem}.source-status summary span:nth-child(3){flex-basis:calc(100% - 25px);margin-left:20px}}
+.temporal-panel{background:#fff;border:1px solid #c8d2d9;margin-top:1rem;padding:1.6rem;min-width:0}
+.temporal-heading>span{font:.63rem var(--mono);letter-spacing:.13em;color:#697d89}
+.temporal-heading h3{font-size:1.6rem;margin:.45rem 0 .35rem}
+.temporal-heading p{color:#60717b;font-size:.82rem;line-height:1.6;margin:0 0 1.4rem}
+.temporal-days{display:flex;gap:.25rem;overflow-x:auto;padding:.3rem .1rem .75rem;border-bottom:1px solid #dce4e9}
+.temporal-day{display:flex;flex:1 0 34px;min-width:34px;max-width:60px;height:128px;flex-direction:column;align-items:center;justify-content:flex-end;gap:.4rem;background:#f1f4f6;border:1px solid transparent;color:#566f7e;cursor:pointer;font:.62rem var(--mono);padding:.4rem .2rem}
+.temporal-day:hover,.temporal-day:focus-visible{border-color:#668da3;outline:0;background:#e7eff3}
+.temporal-day[aria-pressed="true"]{border-color:#3f718d;background:#dfeaf0;color:#243f50}
+.temporal-bars{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%;height:92px}
+.temporal-bars i{display:block;width:38%;min-height:0;border-radius:2px 2px 0 0}
+.temporal-bars i.in{background:#6faaa9}.temporal-bars i.out{background:#b87e76}
+.temporal-detail{padding:.95rem 0 0;font-size:.78rem;color:#405663}
+.temporal-detail>p{margin:.2rem 0 .65rem;line-height:1.5}
+.temporal-events{display:flex;flex-wrap:wrap;gap:.4rem}
+.temporal-events button{background:#eef3f5;border:1px solid #cad8df;color:#31536a;cursor:pointer;padding:.45rem .6rem;text-align:left;font:.66rem var(--mono);overflow-wrap:anywhere}
+.temporal-events button:hover,.temporal-events button:focus-visible{background:#dfeaf0;border-color:#7395a8}
+@media(max-width:700px){.temporal-panel{padding:1rem}.temporal-day{flex-basis:36px}}

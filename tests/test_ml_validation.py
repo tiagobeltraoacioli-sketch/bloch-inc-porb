@@ -1,7 +1,8 @@
 import unittest
 
 from service.ml_validation import (calibration_summary, confusion_metrics,
-                                   distribution_shift, validate_holdout, wilson_interval)
+                                   distribution_shift, paired_brier_entity_bootstrap,
+                                   validate_holdout, wilson_interval)
 
 
 class ModelValidationTest(unittest.TestCase):
@@ -64,6 +65,27 @@ class ModelValidationTest(unittest.TestCase):
             distribution_shift([0], [float("inf")])
         with self.assertRaises(ValueError):
             distribution_shift([0], [])
+
+    def test_paired_brier_bootstrap_is_deterministic_and_entity_clustered(self):
+        labels = [0, 0, 1, 1]
+        probabilities = [0.1, 0.2, 0.8, 0.9]
+        entities = ["first", "first", "second", "second"]
+        result = paired_brier_entity_bootstrap(labels, probabilities, 0.5, entities,
+                                                seed="synthetic-fixture")
+        self.assertEqual(result, paired_brier_entity_bootstrap(
+            labels, probabilities, 0.5, entities, seed="synthetic-fixture"))
+        self.assertEqual(result["entity_count"], 2)
+        self.assertAlmostEqual(result["model_minus_reference_brier"], -0.225)
+        self.assertLess(result["interval95"][1], 0)
+        self.assertNotIn("first", str(result))
+
+    def test_paired_brier_bootstrap_single_entity_has_no_interval(self):
+        result = paired_brier_entity_bootstrap([0, 1], [0.2, 0.8], 0.5,
+                                                ["one", "one"], seed="fixture")
+        self.assertIsNone(result["interval95"])
+        self.assertEqual(result["interval_unavailable_reason"], "fewer_than_two_holdout_entities")
+        with self.assertRaises(ValueError):
+            paired_brier_entity_bootstrap([0], [float("nan")], 0.5, ["one"], seed="fixture")
 
 
 if __name__ == "__main__":

@@ -195,6 +195,52 @@ function renderEvidence(wallet,tx=null) {
   setText('evidence-finality','Not applicable; no chain transaction or block exists');
   setText('evidence-limit',semantics[wallet.asset]+' No identity, geographic location or AML conclusion follows from this fixture.');
 }
+const temporalPanel=document.createElement('article');
+temporalPanel.className='temporal-panel';
+temporalPanel.innerHTML='<div class="temporal-heading"><span>03 / DAILY FLOW</span><h3>Trace activity by day</h3><p>Select a day to inspect its synthetic events. Teal bars show inbound volume; rose bars show outbound volume. Empty days remain visible. Direction describes this fixture only.</p></div><div id="temporal-days" class="temporal-days" role="group" aria-label="Synthetic daily wallet flow"></div><div id="temporal-detail" class="temporal-detail" aria-live="polite">Select a wallet star.</div>';
+document.querySelector('.analytics-grid').after(temporalPanel);
+function renderTemporal(wallet) {
+  const days=document.getElementById('temporal-days');
+  const detail=document.getElementById('temporal-detail');
+  days.replaceChildren();detail.replaceChildren();
+  const first=Date.parse(wallet.transactions[0].observed+'T00:00:00Z');
+  const last=Date.parse(wallet.transactions.at(-1).observed+'T00:00:00Z');
+  const dates=Array.from({length:Math.round((last-first)/86400000)+1},(_,index)=>new Date(first+index*86400000).toISOString().slice(0,10));
+  const buckets=dates.map(date=>({date,events:wallet.transactions.filter(tx=>tx.observed===date)}));
+  const maxVolume=Math.max(...buckets.map(day=>day.events.reduce((sum,tx)=>sum+tx.amount,0)));
+  function selectDay(day,button) {
+    days.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+    detail.replaceChildren();
+    const inbound=day.events.filter(tx=>tx.direction==='IN');
+    const outbound=day.events.filter(tx=>tx.direction==='OUT');
+    const volume=day.events.reduce((sum,tx)=>sum+tx.amount,0);
+    const peers=new Set(day.events.map(tx=>tx.counterparty));
+    const summary=document.createElement('p');
+    summary.textContent=`${day.date} · ${day.events.length} ${day.events.length===1?'event':'events'} · ${inbound.length} in / ${outbound.length} out · ${volume.toLocaleString('en-US')} ${units[wallet.asset]} · ${peers.size} distinct peer ${peers.size===1?'point':'points'}`;
+    detail.append(summary);
+    if(!day.events.length){const empty=document.createElement('p');empty.textContent='No synthetic events observed on this day.';detail.append(empty);return;}
+    const list=document.createElement('div');list.className='temporal-events';
+    day.events.forEach(tx=>{
+      const event=document.createElement('button');event.type='button';
+      event.textContent=`${tx.id} · ${tx.direction} · ${tx.amount.toLocaleString('en-US')} ${units[wallet.asset]} · ${tx.counterparty}`;
+      event.addEventListener('click',()=>selectTransaction(wallet,tx));list.append(event);
+    });
+    detail.append(list);
+  }
+  buckets.forEach(day=>{
+    const inbound=day.events.filter(tx=>tx.direction==='IN').reduce((sum,tx)=>sum+tx.amount,0);
+    const outbound=day.events.filter(tx=>tx.direction==='OUT').reduce((sum,tx)=>sum+tx.amount,0);
+    const button=document.createElement('button');button.type='button';button.className='temporal-day';button.setAttribute('aria-pressed','false');
+    button.setAttribute('aria-label',`${day.date}: ${day.events.length} synthetic events, ${inbound.toLocaleString('en-US')} ${units[wallet.asset]} inbound and ${outbound.toLocaleString('en-US')} outbound`);
+    const bars=document.createElement('span');bars.className='temporal-bars';bars.setAttribute('aria-hidden','true');
+    for(const [direction,value] of [['in',inbound],['out',outbound]]){
+      const bar=document.createElement('i');bar.className=direction;bar.style.height=value?`${Math.max(3,100*value/maxVolume)}%`:'0';bars.append(bar);
+    }
+    const label=document.createElement('span');label.textContent=day.date.slice(8);
+    button.append(bars,label);button.addEventListener('click',()=>selectDay(day,button));days.append(button);
+  });
+  const latest=buckets.at(-1);selectDay(latest,days.lastElementChild);
+}
 for(const [label,id,caption] of [['DAILY VOLUME SLOPE','analysis-slope','synthetic units per day'],['LINEAR FIT R²','analysis-fit','descriptive, not a risk signal']]){
   const card=document.createElement('article');
   const heading=document.createElement('span');heading.textContent=label;
@@ -294,6 +340,7 @@ function clearWallet() {
   flowList.textContent='Select a wallet.';
   document.getElementById('activity-chart').replaceChildren();
   document.getElementById('analysis-ledger').innerHTML='<tr><td colspan="5">Select a wallet star.</td></tr>';
+  document.getElementById('temporal-days').replaceChildren();document.getElementById('temporal-detail').textContent='Select a wallet star.';
 }
 function selectWallet(wallet,updateQuery=false) {
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
@@ -309,6 +356,7 @@ function selectWallet(wallet,updateQuery=false) {
   setText('record-meaning','Feature windows and temporal ML are research; no trained model or score.');
   renderEvidence(wallet);
   renderAnalytics(wallet);
+  renderTemporal(wallet);
   renderFlows(wallet);
   const list=document.getElementById('transaction-list');list.replaceChildren();
   wallet.transactions.forEach(tx=>{
