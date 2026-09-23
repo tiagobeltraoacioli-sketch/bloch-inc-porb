@@ -1,0 +1,17 @@
+[Unit]
+Description=BI-PoRB bounded Bloch indexer health probe
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=porb
+Group=porb
+WorkingDirectory=/opt/bi-porb
+Environment=PORB_STATUS_DIR=/var/lib/bi-porb/status
+ExecStart=/usr/bin/python3 -m service.bloch_probe
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/bi-porb

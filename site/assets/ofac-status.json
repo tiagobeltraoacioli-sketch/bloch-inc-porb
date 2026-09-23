@@ -1,0 +1,40 @@
+{
+  "source_id": "ofac-sdn-official",
+  "kind": "official_public_sanctions_list",
+  "purpose": "exact identifier screening for human review",
+  "retrieved_at": "2026-09-23T20:35:44.971979Z",
+  "source_urls": [
+    "https://www.treasury.gov/ofac/downloads/sdn.csv",
+    "https://www.treasury.gov/ofac/downloads/sdn_comments.csv"
+  ],
+  "sha256": "6211c0848880a71f7dc3d62894a018e14fd889fbfae870869bf9c5de31c21808",
+  "sdn_rows": 19391,
+  "supplement_rows": 36,
+  "address_identifiers": 1048,
+  "by_symbol": {
+    "ARB": 1,
+    "BCH": 6,
+    "BNB": 1,
+    "BSC": 1,
+    "BSV": 1,
+    "BTG": 1,
+    "DASH": 5,
+    "DOGE": 2,
+    "ETC": 1,
+    "ETH": 118,
+    "LTC": 14,
+    "SOL": 3,
+    "TRX": 253,
+    "USDC": 2,
+    "USDT": 94,
+    "XBT": 528,
+    "XMR": 11,
+    "XRP": 1,
+    "XVG": 1,
+    "ZEC": 4
+  },
+  "bloch_blch_identifiers": 0,
+  "coverage_note": "Only explicitly listed identifiers in this OFAC snapshot. No match does not mean low risk; OFAC says listed digital currency addresses are not exhaustive.",
+  "match_policy": "Exact asset symbol and address; network/ownership verification and human review required.",
+  "wallets_or_people_screened": 0
+}

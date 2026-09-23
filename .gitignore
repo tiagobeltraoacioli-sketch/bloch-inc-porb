@@ -4,3 +4,4 @@ __pycache__/
 .env
 .wrangler/
 *.sqlite3
+.data/

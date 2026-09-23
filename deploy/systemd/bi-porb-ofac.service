@@ -1,0 +1,18 @@
+[Unit]
+Description=BI-PoRB official OFAC source refresh
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=porb
+Group=porb
+WorkingDirectory=/opt/bi-porb
+Environment=PORB_PRIVATE_DIR=/var/lib/bi-porb/private
+Environment=PORB_STATUS_DIR=/var/lib/bi-porb/status
+ExecStart=/usr/bin/python3 -m service.ofac_sync
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/bi-porb

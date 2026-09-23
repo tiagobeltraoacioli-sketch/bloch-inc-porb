@@ -1,0 +1,16 @@
+{
+  "source_id": "bloch-historical-indexer",
+  "kind": "public_chain_observation",
+  "retrieved_at": "2026-09-23T20:46:37.109461Z",
+  "source_url": "https://blochl1.com/indexer",
+  "indexer_source": "archival-1 / canonical blocks.log",
+  "indexed_to_slot": 117989,
+  "indexed_to_height": 88810,
+  "reported_finalized_height": 88740,
+  "as_of_slot": 117989,
+  "sampled_transactions": 5,
+  "sampled_finalized_outputs": 10,
+  "sample_only": true,
+  "risk_scores_computed": 0,
+  "coverage_note": "Bounded public indexer probe only; no wallet labels, full-history ingestion, or AML score. Node finality is reported, not an independent settlement guarantee."
+}

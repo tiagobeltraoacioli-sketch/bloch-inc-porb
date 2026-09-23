@@ -1,0 +1,12 @@
+[Unit]
+Description=Probe BI-PoRB Bloch indexer every fifteen minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+RandomizedDelaySec=2min
+Persistent=true
+Unit=bi-porb-bloch.service
+
+[Install]
+WantedBy=timers.target

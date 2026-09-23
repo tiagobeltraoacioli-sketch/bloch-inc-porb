@@ -4,7 +4,7 @@ BI-PoRB is a proposed **external, optional** Bloch Inc transaction monitoring an
 
 ## Current status
 
-This repository contains an English-language product site and **synthetic demonstration**, a local authenticated read-only example API, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest live chain or vendor data, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
+This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, a bounded Bloch indexer probe, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
 
 ## Run locally
 
@@ -19,7 +19,9 @@ PORB_DEMO_TOKEN='replace-with-local-test-token' python3 -m service.app
 curl -H 'Authorization: Bearer replace-with-local-test-token' http://127.0.0.1:8765/api/v1/overview
 ```
 
-The API binds to localhost and requires a token. Do not put real data into this prototype.
+The API binds to localhost and requires a token. To add the first official source, run `python3 -m service.ofac_sync`; this downloads OFAC SDN and supplementary comments into the ignored `.data/` directory, then publishes **aggregate source metadata only** to the site. The authenticated local `POST /api/v1/sanctions:screen` supports exact identifier comparison. Do not expose this preview API to the Internet or put customer data into it.
+
+Run `python3 -m service.bloch_probe` for a bounded, read-only health and five-transaction sample from the public Bloch historical indexer. It publishes aggregate source status only. It does not perform full ingestion or compute real AML scores.
 
 ## Product boundaries
 
@@ -29,4 +31,6 @@ The API binds to localhost and requires a token. Do not put real data into this 
 - Transaction signals (Red) and wallet context (Blue) are separate outputs. Blue is a contextual reputation estimate, not proof of identity or innocence.
 - Customer policy decisions remain outside this service; a score does not automatically block a transaction.
 
-See [architecture](docs/architecture.md), [API contract](docs/api-v1.md), [privacy design](docs/privacy.md), and [roadmap](docs/roadmap.md).
+See [architecture](docs/architecture.md), [four-chain adapter design](docs/chain-adapters.md), [temporal graph design](docs/graph-intelligence.md), [API contract](docs/api-v1.md), [privacy design](docs/privacy.md), [public/open source catalog](docs/source-catalog.md), [learning and validation design](docs/ml-validation.md), and [roadmap](docs/roadmap.md).
+
+The [infrastructure allocation](docs/infrastructure.md) reserves the L2 server and assigns the unused DEX and Bridge servers to private data and ML/ZK research roles. The [proof contract](docs/zk-proof-contract.md) defines the first research target. The initial server deployment runs only outbound source refresh jobs; it does not expose a customer API, train a live model, or produce a ZK proof.

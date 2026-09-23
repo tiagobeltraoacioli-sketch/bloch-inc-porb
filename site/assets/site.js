@@ -58,3 +58,33 @@ async function main() {
   }
 }
 main();
+
+async function renderOfficialSource() {
+  try {
+    const response = await fetch('assets/ofac-status.json', {cache:'no-store'});
+    if (!response.ok) throw new Error('source unavailable');
+    const data = await response.json();
+    const ageHours = (Date.now() - Date.parse(data.retrieved_at)) / 3600000;
+    const freshness = ageHours >= 0 && ageHours <= 48 ? 'CURRENT SNAPSHOT' : 'STALE SNAPSHOT';
+    $('#ofac-stats').innerHTML = `<div><strong>${format.format(data.address_identifiers)}</strong><span>Digital-currency identifiers explicitly listed in this OFAC snapshot</span></div><div><strong>${format.format(data.bloch_blch_identifiers)}</strong><span>BLCH identifiers explicitly listed; zero is not clearance</span></div><div><strong>${format.format(data.wallets_or_people_screened)}</strong><span>Customer wallets or people screened by this public page</span></div>`;
+    $('#ofac-meta').textContent = `${freshness} · RETRIEVED ${data.retrieved_at} · SHA-256 ${data.sha256.slice(0, 16)}… · SDN ROWS ${format.format(data.sdn_rows)} · SOURCE IS NOT EXHAUSTIVE · NO AUTOMATED DECISIONS`;
+  } catch (error) {
+    $('#ofac-stats').textContent = 'Official source metadata is unavailable.';
+  }
+}
+renderOfficialSource();
+
+async function renderBlochSource() {
+  try {
+    const response = await fetch('assets/bloch-status.json', {cache:'no-store'});
+    if (!response.ok) throw new Error('source unavailable');
+    const data = await response.json();
+    const ageHours = (Date.now() - Date.parse(data.retrieved_at)) / 3600000;
+    const freshness = ageHours >= 0 && ageHours <= 24 ? 'CURRENT SOURCE PROBE' : 'STALE SOURCE PROBE';
+    $('#bloch-source span').textContent = `Indexer slot ${format.format(data.indexed_to_slot)} · reported finalized height ${format.format(data.reported_finalized_height)} · ${format.format(data.sampled_transactions)} sampled transactions · ${format.format(data.sampled_finalized_outputs)} sampled finalized outputs`;
+    $('#bloch-meta').textContent = `${freshness} · RETRIEVED ${data.retrieved_at} · SAMPLE ONLY · 0 REAL AML SCORES · NO WALLET LABELS`;
+  } catch (error) {
+    $('#bloch-source span').textContent = 'Public indexer status unavailable.';
+  }
+}
+renderBlochSource();

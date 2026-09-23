@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh BI-PoRB official OFAC snapshot twice daily
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=12h
+RandomizedDelaySec=10min
+Persistent=true
+Unit=bi-porb-ofac.service
+
+[Install]
+WantedBy=timers.target
