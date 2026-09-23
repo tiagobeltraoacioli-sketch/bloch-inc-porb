@@ -1,5 +1,5 @@
 [Unit]
-Description=BI-PoRB public Ethereum Solana Bitcoin source health
+Description=BI-PoRB public Ethereum and Bitcoin source health
 Wants=network-online.target
 After=network-online.target
 

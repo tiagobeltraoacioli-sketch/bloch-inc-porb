@@ -1,6 +1,6 @@
 # Temporal evidence graph
 
-BI-PoRB's graph is a **heterogeneous, temporal evidence graph** designed for Bloch, Ethereum, Solana, and Bitcoin. It is private, tenant-scoped, and off-chain. Its purpose is to show why a case deserves review, not to classify people as criminals by graph proximity.
+BI-PoRB's graph is a **heterogeneous, temporal evidence graph** designed initially for Bloch, Ethereum native/USDT/USDC ERC-20, and Bitcoin. Solana is a later extension. The evidence graph is off-chain; public factual views and ML detail are separated from tenant-scoped cases and delegated scores. Its purpose is to show why a case deserves review, not to classify people as criminals by graph proximity.
 
 ## Typed nodes and edges
 

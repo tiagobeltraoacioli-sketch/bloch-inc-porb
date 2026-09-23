@@ -56,11 +56,17 @@ const chainData = {
     detail: 'Native value, ERC-20 transfer logs, contract calls, and traces are distinct facts. A contract or exchange address may represent many users.',
     boundary: 'Boundary: finalized height is observed; receipts, traces, and full transaction ingestion are future gates.'
   },
-  sol: {
-    family: 'INSTRUCTION + ACCOUNT / FINALIZED SLOT', title: 'Solana instruction map',
-    input: 'Slot + transaction', normalize: 'Instruction + balance', graph: 'Account-program graph', analysis: 'Program-aware motifs',
-    detail: 'Signer, fee payer, token account, owner, and program have different roles. Inner instructions and token balance deltas need explicit decoding.',
-    boundary: 'Boundary: finalized slot is observed; versioned transaction ingestion and archival gap handling are future gates.'
+  usdt: {
+    family: 'ETHEREUM MAINNET / ERC-20 CONTRACT', title: 'USDT transfer event map',
+    input: 'Successful receipt log', normalize: 'Pinned contract + Transfer', graph: 'USDT asset-flow graph', analysis: 'Stablecoin motifs',
+    detail: 'Only the issuer-published Ethereum contract and a correctly encoded Transfer event identify this asset. Mint and burn need separate event types.',
+    boundary: 'Boundary: an offline allowlisted parser exists; token logs are not yet ingested from a live source.'
+  },
+  usdc: {
+    family: 'ETHEREUM MAINNET / ERC-20 CONTRACT', title: 'USDC transfer event map',
+    input: 'Successful receipt log', normalize: 'Pinned contract + Transfer', graph: 'USDC asset-flow graph', analysis: 'Stablecoin motifs',
+    detail: 'The Circle-published Ethereum contract defines native USDC on this network. A similarly named wrapped or bridged token is a different asset.',
+    boundary: 'Boundary: an offline allowlisted parser exists; token logs are not yet ingested from a live source.'
   },
   blch: {
     family: 'EUTXO / FINALIZED INDEXER', title: 'Bloch output map',

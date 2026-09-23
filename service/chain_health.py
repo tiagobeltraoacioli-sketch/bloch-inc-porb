@@ -1,4 +1,4 @@
-"""Bounded public chain-source health checks, not transaction ingestion."""
+"""Bounded initial-scope Ethereum and Bitcoin source checks, not ingestion."""
 
 import json
 import os
@@ -53,7 +53,7 @@ def bitcoin():
 
 def publish_health():
     results = {}
-    for name, check in (("ethereum", ethereum), ("solana", solana), ("bitcoin", bitcoin)):
+    for name, check in (("ethereum", ethereum), ("bitcoin", bitcoin)):
         try:
             results[name] = {"status": "reachable", **check()}
         except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
@@ -64,7 +64,7 @@ def publish_health():
         "sources": results,
         "transactions_ingested": 0,
         "risk_scores_computed": 0,
-        "coverage_note": "Third-party/public endpoints report heights only. No independent finality verification, full history, or AML data coverage.",
+        "coverage_note": "Third-party/public Ethereum and Bitcoin endpoints report heights only. Bloch is probed separately. No independent finality verification, full history, or AML data coverage.",
     }
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     temporary = STATUS.with_suffix(".json.tmp")

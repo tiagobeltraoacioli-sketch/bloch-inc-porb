@@ -1,6 +1,6 @@
-# Graphus 2.0: deep four-chain intelligence architecture
+# Graphus 2.0: deep initial-asset intelligence architecture
 
-**Product:** Graphus of Bloch Inc — A Matter of Data 2.0. **Initial networks:** BTC, ETH, SOL, BLCH. **Status:** design and small verified components, not a production data lake or model. Graphus is an off-chain private platform; BI-PoRB is its first AML/FT application.
+**Product:** Graphus of Bloch Inc — A Matter of Data 2.0. **Initial assets:** BTC, ETH, USDT (ERC-20), USDC (ERC-20), BLCH on three networks. Solana is later-phase research. **Status:** design and small verified components, not a production data lake or model. Graphus is an off-chain private platform; BI-PoRB is its first AML/FT application.
 
 ## The graph map
 
@@ -9,11 +9,12 @@ flowchart LR
   subgraph Acquisition
     B[BLCH finalized eUTXO/indexer]
     T[BTC blocks and UTXO spends]
-    E[ETH execution receipts/logs/traces]
-    S[SOL blocks/instructions/balance deltas]
+    E[ETH blocks, native value and receipts]
+    U[USDT/ERC-20 contract logs]
+    C[USDC/ERC-20 contract logs]
     O[Official lists and rights-reviewed sources]
   end
-  B & T & E & S --> R[Immutable source manifests + replay cursors]
+  B & T & E & U & C --> R[Immutable source manifests + replay cursors]
   O --> P[Purpose/license/freshness gate]
   R --> N[Typed canonical event model]
   P --> N
@@ -29,24 +30,24 @@ flowchart LR
   C --> AML[BI-PoRB AML/FT]
 ```
 
-Every element must support event time, ingestion time, source version, chain/network/asset identity, finality or confirmation policy, rollback state, and lineage. A chain-height health check is not an event dataset; the current ETH/SOL/BTC jobs ingest zero transactions.
+Every element must support event time, ingestion time, source version, chain/network/asset identity, finality or confirmation policy, rollback state, and lineage. A chain-height health check is not an event dataset; the current ETH/BTC jobs ingest zero transactions. Bloch has a separate private, snapshot-pinned research sample of 400 finalized transactions. That bounded sample is not a live feed or a coverage claim.
 
 ## Canonical data and source semantics
 
 | Network | Base facts | Critical distinction | First replay gate |
 | --- | --- | --- | --- |
 | BTC | blocks, transactions, inputs, UTXOs, outpoints, scripts, spends | Multi-input transactions have no singular sender; change, CoinJoin, and common-input ownership are hypotheses | Reconstruct spent outpoints from a local node or licensed history; compare block hashes and undo reorgs |
-| ETH | blocks, native value, transaction receipts, event logs, contract calls, traces where available | ERC-20 `Transfer` logs, internal value calls, and user intent are different; a service address may custody many users | Resolve chain ID and finalized block hash; deduplicate `(tx_hash, log_index)`; replay removed logs |
-| SOL | slots, versioned transactions, instructions and inner instructions, token/account balance deltas, program IDs | Signer, fee payer, token account, owner, and program are distinct roles; not every program is a transfer | Pin finalized slot and transaction version; record missing/failed transactions and archival gaps |
+| ETH | blocks, native value, transaction receipts, contract calls, traces where available | Native ETH value, internal calls, and user intent are different; a service address may custody many users | Resolve chain ID and finalized block hash; require matching successful receipt and replay reorgs |
+| USDT/USDC on Ethereum | issuer-published contract identities, successful ERC-20 `Transfer` logs | Contract address defines asset identity; mint/burn and arbitrary contract calls are separate event types | Deduplicate `(tx_hash, log_index, contract)` and replay removed logs; recheck issuer registry |
 | BLCH | finalized indexed eUTXO transactions, inputs/outputs, script hashes, slot/block identity, asset units | A script hash does not identify a person; carryover and asset identity require explicit lineage | Reconcile indexer status with node finality, full input/output values, and state/block root |
 
 Use exact integer units per asset, explicit decimals and valuation timestamp when displaying fiat equivalents. Do not collapse bridge mappings, wrapped assets, native assets, and chain-specific token programs into a single address edge. Cross-chain value flow requires a verifiable source transaction, bridge message, destination receipt, and asset mapping. Otherwise it is a time correlation hypothesis, not a flow edge.
 
 ## Heterogeneous temporal graph
 
-**Nodes:** transaction, block/slot, BTC outpoint, UTXO script, EVM account/contract, Solana account/token account/program, BLCH output/script, asset, bridge message, source record, claim, case. **Edges:** spends, creates, emits log, calls contract, executes instruction, transfers token, changes balance, maps bridge receipt, appears in source, reviewed association. An edge includes `valid_from`, `valid_until`, `observed_at`, `ingested_at`, source, confidence, proof reference, tenant visibility, and deletion/rollback version. Avoid a permanent wallet-to-person edge from heuristics.
+**Nodes:** transaction, block/slot, BTC outpoint, UTXO script, EVM account/contract, ERC-20 contract and asset, BLCH output/script, bridge message, source record, claim, case. **Edges:** spends, creates, emits log, calls contract, transfers token, maps bridge receipt, appears in source, reviewed association. An edge includes `valid_from`, `valid_until`, `observed_at`, `ingested_at`, source, confidence, proof reference, tenant visibility, and deletion/rollback version. Avoid a permanent wallet-to-person edge from heuristics. The Solana account/program model remains a later-phase extension.
 
-The analyst graph map should expose a time slider, typed edge filters, direction/amount/asset filters, path limit, shared-service hub warnings, source card, finality, evidence strength, and alternative explanations. It must visually separate **observation**, **official exact match**, **third-party attribution**, **community allegation**, **model hypothesis**, and **human decision**. Export only tenant-authorized evidence with audit logging; no public wallet search.
+The graph map should expose a time slider, typed edge filters, direction/amount/asset filters, path limit, shared-service hub warnings, source card, finality, evidence strength, and alternative explanations. It must visually separate **observation**, **official exact match**, **third-party attribution**, **community allegation**, **model hypothesis**, and **human decision**. Public address search and lawful chain/ML details are planned, while private cases and scores require tenant authorization and audit logging. Public features require source-rights and data-protection review and must not trivially reveal the protected score.
 
 ## Deep analytics engine
 
@@ -61,11 +62,11 @@ The analyst graph map should expose a time slider, typed edge filters, direction
 
 | Host | First durable workload | Later workload after gates |
 | --- | --- | --- |
-| Data host, former DEX | Current OFAC snapshot, Bloch sample, ETH/SOL/BTC height probes; private status and source manifests | Chain-specific bounded ingestion, append-only compressed event partitions, replay cursors, source quality, encrypted backup |
-| Graphus host, former Bridge | Current graph prototype and 14-test validation suite locally; private workspace | Columnar feature windows, temporal graph adjacency, offline models, ZK benchmark and verifier artifacts |
+| Data host, former DEX | Current OFAC snapshot, Bloch sample, ETH/BTC height probes; private status and source manifests | Bounded BTC, ETH, USDT/USDC and BLCH ingestion, compressed event partitions, replay cursors, source quality, encrypted backup |
+| Graphus host, former Bridge | Current graph prototype and offline parser validation; private workspace | Columnar feature windows, temporal graph adjacency, offline models, ZK benchmark and verifier artifacts |
 | L2 host | Reserved for L2 | No Graphus workload |
 
-Start with local encrypted partitions and measured replay throughput. Consider Parquet/Iceberg-style snapshots for reproducible event history and deletion, a columnar query layer for time-window analytics, and a graph adjacency index for bounded traversals. Select concrete engines by a benchmark of ingest rate, reorg recovery, 3 TB disk budget, query latency, backup/restore, deletion, licensing, and operational load; do not install a large database merely to appear advanced. The two hosts do not provide high availability by themselves. Solana full history and Ethereum full archive need a separate capacity and source decision.
+Start with local encrypted partitions and measured replay throughput. Consider Parquet/Iceberg-style snapshots for reproducible event history and deletion, a columnar query layer for time-window analytics, and a graph adjacency index for bounded traversals. Select concrete engines by a benchmark of ingest rate, reorg recovery, 3 TB disk budget, query latency, backup/restore, deletion, licensing, and operational load; do not install a large database merely to appear advanced. The two hosts do not provide high availability by themselves. Ethereum full archive needs a separate capacity and source decision; Solana is outside the first-wave plan.
 
 ## Release gates and measures
 
@@ -81,7 +82,7 @@ Start with local encrypted partitions and measured replay throughput. Consider P
 
 ## Research and implementation references
 
-- [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/), [Solana transaction RPC](https://solana.com/docs/rpc/http/gettransaction), [Bitcoin Core RPC](https://bitcoincore.org/en/doc/31.0.0/rpc/), and the Bloch indexer source referenced in [chain adapters](chain-adapters.md).
+- [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/), [ERC-20 standard](https://eips.ethereum.org/EIPS/eip-20), [Tether USDT contract](https://tether.to/en/supported-protocols/), [Circle USDC contract](https://developers.circle.com/stablecoins/usdc-contract-addresses), [Bitcoin Core RPC](https://bitcoincore.org/en/doc/31.0.0/rpc/), and the Bloch indexer source referenced in [chain adapters](chain-adapters.md).
 - [Temporal Graph Networks](https://arxiv.org/abs/2006.10637) is a research candidate for dynamic-event modeling, not evidence that it outperforms the rule baseline on these chains.
 - [Apache Iceberg specification](https://iceberg.apache.org/spec/) documents snapshots and row-level deletes; an implementation still needs a tested privacy deletion lifecycle.
 - [GraphSense Library](https://github.com/graphsense/graphsense-lib) is a possible open-source reference after source and license review.

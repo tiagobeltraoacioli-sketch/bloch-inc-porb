@@ -4,11 +4,11 @@ BI-PoRB is a proposed **external, optional** Bloch Inc transaction monitoring an
 
 **Graphus of Bloch Inc — A Matter of Data 2.0** is the proposed data and graph platform behind BI-PoRB. See the [Graphus product boundary](docs/graphus-product.md).
 
-The [Graphus preview](https://bloch-graphus.pages.dev/) presents the four-chain map and analytics roadmap. The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
+The [Graphus preview](https://bloch-graphus.pages.dev/) presents the initial [three-network, five-asset scope](docs/initial-assets.md), a synthetic [wallet constellation](https://bloch-graphus.pages.dev/constellation.html), an [84-field data atlas](https://bloch-graphus.pages.dev/catalog.html), and a [DaaS proposal](https://bloch-graphus.pages.dev/daas.html). The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
 
 ## Current status
 
-This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, a bounded Bloch indexer probe, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
+This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, a bounded Bloch indexer probe and private paginated research sample, deterministic graph features, offline ML research tools, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
 
 ## Run locally
 
@@ -27,16 +27,16 @@ The API binds to localhost and requires a token. To add the first official sourc
 
 Run `python3 -m service.bloch_probe` for a bounded, read-only health and five-transaction sample from the public Bloch historical indexer. It publishes aggregate source status only. It does not perform full ingestion or compute real AML scores.
 
-Run `python3 -m service.chain_health` for bounded Ethereum, Solana, and Bitcoin public-source height checks. These checks ingest **zero transactions**; public endpoints are replaceable and cannot support a production coverage claim.
+Run `python3 -m service.chain_health` for bounded Ethereum and Bitcoin public-source height checks. Bloch is probed separately. These checks ingest **zero transactions**; public endpoints are replaceable and cannot support a production coverage claim.
 
 ## Product boundaries
 
 - The protocol adapter reads finalized public-chain data and reports finality/reorg status. It never changes validation, block headers, transaction acceptance, or balances.
 - Vendor connectors require a recorded contractual right to use each field, regional processing policy, retention window, and source freshness. A potential match is evidence for human review, never an accusation.
-- Wallet-level results are tenant-scoped and authenticated. The public site only shows synthetic aggregates.
+- The current public site uses synthetic wallets and transactions. Future lawful chain facts, graphs, regressions, and reviewed non-score ML detail may be public after source-rights and privacy review. Only a future score requires explicit delegation to a named, identity-verified person. Private identity, IP context, and customer cases remain restricted.
 - Transaction signals (Red) and wallet context (Blue) are separate outputs. Blue is a contextual reputation estimate, not proof of identity or innocence.
 - Customer policy decisions remain outside this service; a score does not automatically block a transaction.
 
-See [architecture](docs/architecture.md), [four-chain adapter design](docs/chain-adapters.md), [temporal graph design](docs/graph-intelligence.md), [API contract](docs/api-v1.md), [privacy design](docs/privacy.md), [public/open source catalog](docs/source-catalog.md), [learning and validation design](docs/ml-validation.md), and [roadmap](docs/roadmap.md).
+See [architecture](docs/architecture.md), [initial asset registry](docs/initial-assets.md), [adapter design](docs/chain-adapters.md), [temporal graph design](docs/graph-intelligence.md), [API contract](docs/api-v1.md), [privacy design](docs/privacy.md), [delegated score access](docs/access-policy.md), [DaaS contract](docs/graphus-daas.md), [AML/FT reference standard](docs/aml-reference-standard.md), [public/open source catalog](docs/source-catalog.md), [learning and validation design](docs/ml-validation.md), and [roadmap](docs/roadmap.md).
 
 The [infrastructure allocation](docs/infrastructure.md) reserves the L2 server and assigns the unused DEX and Bridge servers to private data and ML/ZK research roles. The [deployment verification](docs/deployment-status.md) records the first operational jobs and tested worker. The [proof contract](docs/zk-proof-contract.md) defines the first research target. The initial server deployment runs only outbound source refresh and bounded health jobs; it does not expose a customer API, train a live model, or produce a ZK proof.

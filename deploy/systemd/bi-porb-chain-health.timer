@@ -1,5 +1,5 @@
 [Unit]
-Description=Probe public Ethereum Solana Bitcoin sources every fifteen minutes
+Description=Probe public Ethereum and Bitcoin sources every fifteen minutes
 
 [Timer]
 OnBootSec=3min

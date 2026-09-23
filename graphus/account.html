@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="description" content="Graphus account workspace design for private wallet annotations and saved research.">
+  <title>Graphus Account — Bloch Inc</title>
+  <link rel="icon" href="assets/favicon.png"><link rel="stylesheet" href="assets/style.css"><link rel="stylesheet" href="assets/silver.css"><link rel="stylesheet" href="assets/account.css">
+  <script src="assets/account.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead"><a class="brand" href="/" aria-label="Graphus home"><img src="assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-divider"></span><span>GRAPHUS</span></a><nav aria-label="Main navigation"><a href="constellation.html">Constellation</a><a href="daas.html">Data as a Service</a><a class="nav-contact" href="https://blochinc.xyz/">Bloch Inc <span aria-hidden="true">↗</span></a></nav></header>
+  <main id="main">
+    <section class="account-intro"><p class="section-index">GRAPHUS / PERSONAL WORKSPACE</p><h1>Research deserves<br><em>your own notes.</em></h1><p>The planned account workspace will keep private annotations linked to a wallet reference. Your notes will be visible only to your account. Registration will not grant AML score access.</p></section>
+    <section class="account-grid" aria-label="Account and annotations">
+      <article class="account-panel"><span>01 / ACCOUNT</span><h2>Sign in to annotate.</h2><p id="account-status" role="status">Checking account availability…</p><div id="google-button"></div><div id="account-profile" hidden><p>Signed in as <strong id="account-email"></strong></p><button id="sign-out" type="button">Sign out</button></div><p class="account-fine">Google integration is deferred. The initial account method is being selected. A named person must receive a separate, explicit delegation to view future AML scores.</p></article>
+      <article class="account-panel"><span>02 / PRIVATE NOTES</span><h2>Annotate a wallet.</h2><form id="annotation-form"><label for="wallet-ref">Wallet address or reference</label><input id="wallet-ref" name="wallet_ref" maxlength="200" required placeholder="btc:simulated:00001" autocomplete="off"><label for="annotation-body">Your note</label><textarea id="annotation-body" name="body" rows="6" maxlength="4000" required placeholder="Record your source, question, or review context."></textarea><button type="submit" disabled>Save private note</button></form><p id="annotation-status" role="status">Sign in to save notes.</p></article>
+    </section>
+    <section class="notes-section"><div class="section-head"><p class="section-index">03 / YOUR RECORDS</p><h2>Private annotations.</h2><p>Notes are scoped to your account. You can delete your own notes. The public constellation and DaaS manifest never include them.</p></div><div id="annotation-list" class="annotation-list"><p>No notes loaded.</p></div></section>
+    <section class="account-boundary"><strong>Data boundary</strong><p>The current constellation uses synthetic wallet references. Google email and private note text are stored only when the account service is activated. Do not enter identity documents, raw IP addresses, or confidential third-party data in notes. AML scores remain in a separate delegated access service that is not live.</p><a class="button primary" href="daas.html">Explore Graphus DaaS <span aria-hidden="true">↗</span></a></section>
+  </main>
+  <footer><span>© 2026 Bloch Inc · Graphus account preview</span><span>No live AML score access</span><a href="https://blochinc.xyz/">blochinc.xyz ↗</a></footer>
+</body>
+</html>

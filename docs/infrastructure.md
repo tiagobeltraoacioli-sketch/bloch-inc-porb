@@ -16,7 +16,7 @@ Next data stages require separate go/no-go gates: chain-specific ingestion curso
 
 ## Capacity planning
 
-These 3 TB volumes are insufficient for a promise of complete archival history across Bloch, Ethereum, Solana, and Bitcoin. Allocate bounded, measurable windows first and alert before 70% disk use. Initial planning ceilings on the data host: 1.2 TB Bloch, 0.55 TB Bitcoin, 0.4 TB Ethereum derived events, 0.4 TB Solana derived events, 0.15 TB official/source snapshots, leaving at least 0.3 TB for OS, indexes, and headroom. These are **planning limits**, not preallocated quotas or evidence of stored history. Final storage policy must be benchmarked and revised from actual ingestion rates. Use each chain's public RPC or a rights-reviewed data source for bounded windows; a full Ethereum or Solana archive is a separate infrastructure project.
+These 3 TB volumes are insufficient for a promise of complete archival history across the initial networks. Allocate bounded, measurable windows first and alert before 70% disk use. Initial planning ceilings on the data host: 1.2 TB Bloch, 0.55 TB Bitcoin, 0.8 TB Ethereum native and USDT/USDC derived events, 0.15 TB official/source snapshots, leaving at least 0.3 TB for OS, indexes, and headroom. These are **planning limits**, not preallocated quotas or evidence of stored history. Final storage policy must be benchmarked and revised from actual ingestion rates. Use each chain's public RPC or a rights-reviewed data source for bounded windows; a full Ethereum archive is a separate infrastructure project. Solana is deferred.
 
 ## ML and zero knowledge
 
