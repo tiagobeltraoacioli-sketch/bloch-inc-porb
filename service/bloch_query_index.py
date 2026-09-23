@@ -158,7 +158,7 @@ def _read_only(path):
     return sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
 
 
-def _query(index_path, where, parameters, *, cursor=0, limit=50):
+def _query(index_path, where, parameters, *, cursor=0, limit=50, outpoint=None):
     if type(cursor) is not int or cursor < 0 or type(limit) is not int or not 1 <= limit <= MAX_PAGE_SIZE:
         raise ValueError("invalid bounded pagination")
     with closing(_read_only(index_path)) as db:
@@ -170,17 +170,62 @@ def _query(index_path, where, parameters, *, cursor=0, limit=50):
             f"FROM observations WHERE {where} AND id > ? ORDER BY id LIMIT ?",
             (*parameters, cursor, limit + 1),
         ).fetchall()
+        evidence = _outpoint_evidence(db, *outpoint) if outpoint is not None else None
     has_more = len(rows) > limit
     page = rows[:limit]
     columns = ("id", "record_type", "observed_tx_id", "outpoint_tx_id", "outpoint_vout", "script_hash",
                "value_sat", "block_ref", "height", "slot", "input_index", "source_line")
     observations = [dict(zip(columns, row)) for row in page]
-    return {
+    result = {
         "kind": "private_bounded_bloch_observation_query",
         "provenance": metadata,
         "observations": observations,
         "next_cursor": page[-1][0] if has_more else None,
         "semantics": "Created outputs and spent-outpoint references are separate observations; no sender or person-level ownership is inferred.",
+    }
+    if evidence is not None:
+        result["outpoint_evidence"] = evidence
+    return result
+
+
+def _outpoint_evidence(db, txid, vout):
+    """Summarize every observation for one exact outpoint, independent of page size."""
+    creation = db.execute(
+        "SELECT script_hash, value_sat, slot, source_line FROM observations "
+        "WHERE out_txid = ? AND vout = ? AND kind = 'created_output_observation'",
+        (txid, vout),
+    ).fetchone()
+    counts = db.execute(
+        "SELECT COUNT(*), "
+        "COALESCE(SUM(CASE WHEN script_hash != ? OR value_sat != ? THEN 1 ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN slot < ? THEN 1 ELSE 0 END), 0) "
+        "FROM observations WHERE out_txid = ? AND vout = ? "
+        "AND kind = 'spent_outpoint_observation'",
+        (creation[0] if creation else "", creation[1] if creation else "",
+         creation[2] if creation else 0, txid, vout),
+    ).fetchone()
+    spends, mismatches, preceding_spends = counts
+    if creation is None:
+        status = "spend_only_creation_not_in_sample" if spends else "outpoint_not_observed"
+        mismatches = preceding_spends = None
+    elif mismatches or preceding_spends:
+        status = "conflicting_observations"
+    elif spends > 1:
+        status = "multiple_spend_observations"
+    elif spends == 1:
+        status = "consistent_creation_and_spend_observations"
+    else:
+        status = "creation_only_spend_not_in_sample"
+    return {
+        "status": status,
+        "created_observation_count": int(creation is not None),
+        "spent_observation_count": spends,
+        "script_or_amount_mismatch_count": mismatches,
+        "spend_precedes_creation_slot_count": preceding_spends,
+        "created_source_line": creation[3] if creation else None,
+        "scope": "exact_outpoint_within_bounded_sample",
+        "source_finality_independently_verified": False,
+        "sender_ownership_inferred": False,
     }
 
 
@@ -191,7 +236,8 @@ def query_script(index_path, script_hash, *, cursor=0, limit=50):
 def query_outpoint(index_path, txid, vout, *, cursor=0, limit=50):
     txid = _hex(txid, "outpoint transaction ID")
     vout = _nonnegative(vout, "outpoint index")
-    result = _query(index_path, "out_txid = ? AND vout = ?", (txid, vout), cursor=cursor, limit=limit)
+    result = _query(index_path, "out_txid = ? AND vout = ?", (txid, vout), cursor=cursor, limit=limit,
+                    outpoint=(txid, vout))
     result["linkage"] = "within_sample_candidate_only"
     return result
 

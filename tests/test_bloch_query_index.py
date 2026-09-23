@@ -57,9 +57,46 @@ class BlochQueryIndexTest(unittest.TestCase):
             linked = query_outpoint(index, A, 0)
             self.assertEqual(len(linked["observations"]), 2)
             self.assertEqual(linked["linkage"], "within_sample_candidate_only")
+            self.assertEqual(linked["outpoint_evidence"]["status"], "consistent_creation_and_spend_observations")
+            self.assertEqual(linked["outpoint_evidence"]["created_source_line"], 1)
+            self.assertFalse(linked["outpoint_evidence"]["sender_ownership_inferred"])
             self.assertEqual(linked["provenance"]["source_id"], "bloch-historical-indexer")
-            self.assertEqual(len(query_outpoint(index, A, 1)["observations"]), 1)
-            self.assertEqual(len(query_outpoint(index, D, 2)["observations"]), 1)
+            self.assertEqual(query_outpoint(index, A, 0, limit=1)["outpoint_evidence"], linked["outpoint_evidence"])
+            self.assertEqual(query_outpoint(index, A, 1)["outpoint_evidence"]["status"],
+                             "creation_only_spend_not_in_sample")
+            self.assertEqual(query_outpoint(index, D, 2)["outpoint_evidence"]["status"],
+                             "spend_only_creation_not_in_sample")
+            self.assertEqual(query_outpoint(index, C, 99)["outpoint_evidence"]["status"],
+                             "outpoint_not_observed")
+
+    def test_outpoint_evidence_flags_conflicting_and_multiple_spend_observations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sample, index = Path(temporary) / "sample", Path(temporary) / "query.sqlite"
+            records = fixture(sample)
+            manifest = json.loads((sample / "bloch-sample-manifest.json").read_text())
+            records[2]["value_sat"] = "101"
+            write_private(manifest, records, sample)
+            build_index(sample, index)
+            evidence = query_outpoint(index, A, 0)["outpoint_evidence"]
+            self.assertEqual(evidence["status"], "conflicting_observations")
+            self.assertEqual(evidence["script_or_amount_mismatch_count"], 1)
+            records[2]["value_sat"] = "100"
+            records[2]["slot"] = 19
+            write_private(manifest, records, sample)
+            build_index(sample, index)
+            evidence = query_outpoint(index, A, 0)["outpoint_evidence"]
+            self.assertEqual(evidence["status"], "conflicting_observations")
+            self.assertEqual(evidence["spend_precedes_creation_slot_count"], 1)
+            records[2]["slot"] = 21
+            records[3]["prior_tx_id"] = A
+            records[3]["prior_vout"] = 0
+            records[3]["prior_script_hash"] = C
+            records[3]["value_sat"] = "100"
+            write_private(manifest, records, sample)
+            build_index(sample, index)
+            evidence = query_outpoint(index, A, 0, limit=1)["outpoint_evidence"]
+            self.assertEqual(evidence["status"], "multiple_spend_observations")
+            self.assertEqual(evidence["spent_observation_count"], 2)
 
     def test_bad_digest_fails_before_replacing_existing_index(self):
         with tempfile.TemporaryDirectory() as temporary:
