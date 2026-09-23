@@ -104,13 +104,41 @@ for (const node of nodes) {
 function isVisible(node) {
   return (asset === 'all' || node.assets.includes('all') || node.assets.includes(asset)) && (!query || `${node.title} ${node.subtitle} ${node.description}`.toLowerCase().includes(query));
 }
+function renderResults() {
+  const matches=nodes.filter(isVisible);
+  const list=document.getElementById('map-results');list.replaceChildren();
+  document.getElementById('map-result-count').textContent=`Browse ${matches.length} matching architecture ${matches.length===1?'node':'nodes'}`;
+  if (!matches.length) {
+    const empty=document.createElement('p');empty.textContent='No nodes match this search and asset filter.';list.append(empty);
+    return;
+  }
+  matches.forEach(node=>{
+    const button=document.createElement('button');button.type='button';
+    button.textContent=`${node.layer} / ${node.title} · ${node.status}`;
+    button.setAttribute('aria-pressed',String(node.id===selected));
+    button.addEventListener('click',()=>select(node.id));list.append(button);
+  });
+}
+function clearInspector() {
+  document.getElementById('node-layer').textContent='SELECT A NODE';
+  document.getElementById('node-title').textContent='A graph with boundaries.';
+  document.getElementById('node-description').textContent='Select a matching node to inspect its implementation stage.';
+  document.getElementById('node-status').textContent='Architecture preview';
+  document.getElementById('node-evidence').textContent='Source, asset, finality, and purpose must stay attached.';
+  document.getElementById('node-access').textContent='Public facts and reviewed ML detail; delegated scores stay private.';
+}
 function refresh() {
+  if(selected&&!isVisible(byId.get(selected))) {selected=null;clearInspector();}
   const neighbors = new Set(selected ? [selected] : []);
   if (selected) edges.forEach(([from,to])=>{if(from===selected)neighbors.add(to);if(to===selected)neighbors.add(from);});
   nodes.forEach(node=>{
     const element=nodeEls.get(node.id);
     element.classList.toggle('selected',node.id===selected);
-    element.classList.toggle('dimmed',!isVisible(node)||(selected&&!neighbors.has(node.id)));
+    const filtered=!isVisible(node);
+    element.classList.toggle('filtered',filtered);
+    element.classList.toggle('dimmed',filtered||(selected&&!neighbors.has(node.id)));
+    element.setAttribute('aria-hidden',String(filtered));
+    element.setAttribute('tabindex',filtered?'-1':'0');
   });
   edgeEls.forEach(({fromId,toId,path})=>{
     const active = !selected || fromId===selected || toId===selected;
@@ -118,8 +146,10 @@ function refresh() {
     path.classList.toggle('highlight',Boolean(selected&&active&&visible));
     path.classList.toggle('dimmed',!visible||Boolean(selected&&!active));
   });
+  renderResults();
 }
 function select(id) {
+  if(!isVisible(byId.get(id)))return;
   selected=id;
   const node=byId.get(id);
   document.getElementById('node-layer').textContent=`${node.layer} / ${node.subtitle}`;
@@ -135,7 +165,11 @@ document.querySelectorAll('[data-asset]').forEach(button=>button.addEventListene
   document.querySelectorAll('[data-asset]').forEach(item=>{item.classList.toggle('active',item===button);item.setAttribute('aria-pressed',String(item===button));});
   refresh();
 }));
-document.getElementById('node-search').addEventListener('input',event=>{query=event.target.value.trim().toLowerCase();selected=null;refresh();});
+document.getElementById('node-search').addEventListener('input',event=>{
+  query=event.target.value.trim().toLowerCase();selected=null;clearInspector();refresh();
+  const matches=nodes.filter(isVisible);
+  if(matches.length===1)select(matches[0].id);
+});
 function setZoom(next){zoom=Math.max(.75,Math.min(1.8,next));const width=1600/zoom,height=940/zoom;map.setAttribute('viewBox',`${(1600-width)/2} ${(940-height)/2} ${width} ${height}`);}
 document.getElementById('zoom-out').addEventListener('click',()=>setZoom(zoom-.15));
 document.getElementById('zoom-in').addEventListener('click',()=>setZoom(zoom+.15));

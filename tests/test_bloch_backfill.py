@@ -59,6 +59,24 @@ class BlochBackfillTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             collect(pages=2, page_size=1, fetch=changed)
 
+    def test_large_response_retries_with_smaller_bounded_page(self):
+        calls = []
+        def oversized(path):
+            calls.append(path)
+            if path == "/health":
+                return {"ok": True, "finalized_height": 9}
+            if path == "/transactions?limit=4":
+                raise ValueError("indexer response exceeds bound")
+            if path == "/transactions?limit=2":
+                return {"as_of_height": 10, "as_of_slot": 21, "transactions": [TX1], "next_cursor": CURSOR}
+            raise AssertionError(path)
+        manifest, records = collect(pages=1, page_size=4, fetch=oversized)
+        self.assertEqual(manifest["response_bound_retries"], 1)
+        self.assertEqual(manifest["page_limits_used"], [2])
+        self.assertEqual(manifest["finalized_transactions"], 1)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(calls, ["/health", "/transactions?limit=4", "/transactions?limit=2"])
+
 
 if __name__ == "__main__":
     unittest.main()

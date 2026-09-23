@@ -11,7 +11,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 
-from service.ml_validation import confusion_metrics, validate_holdout
+from service.ml_validation import calibration_summary, confusion_metrics, validate_holdout, wilson_interval
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,8 @@ class ResearchExample:
     label: int
     reviewed: bool
     features: dict[str, float]
+    feature_as_of: str | None = None
+    reviewed_at: str | None = None
 
 
 def sigmoid(value):
@@ -38,6 +40,11 @@ def precision_at_k(labels, probabilities, k):
         raise ValueError("review capacity out of range")
     ranked = sorted(range(len(labels)), key=lambda index: (-probabilities[index], index))[:k]
     return sum(labels[index] for index in ranked) / k
+
+
+def top_k_positive_count(labels, probabilities, k):
+    ranked = sorted(range(len(labels)), key=lambda index: (-probabilities[index], index))[:k]
+    return sum(labels[index] for index in ranked)
 
 
 def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity, epochs=400, learning_rate=0.1, l2=0.01):
@@ -94,6 +101,15 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
     metrics["brier_score"] = sum((probability - label) ** 2 for probability, label in zip(probabilities, labels)) / len(labels)
     metrics["precision_at_review_capacity"] = precision_at_k(labels, probabilities, review_capacity)
     metrics["review_capacity"] = review_capacity
+    metrics["precision_at_review_capacity_wilson95"] = wilson_interval(
+        top_k_positive_count(labels, probabilities, review_capacity), review_capacity)
+    metrics["reviewed_holdout_prevalence"] = sum(labels) / len(labels)
+    metrics["reviewed_holdout_prevalence_wilson95"] = wilson_interval(sum(labels), len(labels))
+    metrics["calibration"] = calibration_summary(labels, probabilities)
+    metrics["feature_shift_standardized_mean"] = {
+        name: sum(values[index] for values in test_vectors) / len(test_vectors)
+        for index, name in enumerate(feature_names)
+    }
     canonical = json.dumps({"features": feature_names, "train_ids": sorted(item.case_id for item in train),
                             "test_ids": sorted(item.case_id for item in test), "cutoff": cutoff}, sort_keys=True)
     model_manifest = hashlib.sha256(canonical.encode()).hexdigest()
@@ -104,5 +120,6 @@ def train_reviewed_baseline(examples, *, cutoff, feature_names, review_capacity,
         "holdout": manifest,
         "model_manifest_sha256": model_manifest,
         "metrics": metrics,
-        "limitations": ["no_production_promotion", "requires_real_independent_labels", "requires_calibration_and_external_validation"],
+        "limitations": ["no_production_promotion", "requires_real_independent_labels",
+                        "descriptive_calibration_is_not_probability_calibration", "requires_external_validation"],
     }

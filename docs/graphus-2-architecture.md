@@ -30,7 +30,7 @@ flowchart LR
   C --> AML[BI-PoRB AML/FT]
 ```
 
-Every element must support event time, ingestion time, source version, chain/network/asset identity, finality or confirmation policy, rollback state, and lineage. A chain-height health check is not an event dataset; the current ETH/BTC jobs ingest zero transactions. Bloch has a separate private, snapshot-pinned research sample of 400 finalized transactions. That bounded sample is not a live feed or a coverage claim.
+Every element must support event time, ingestion time, source version, chain/network/asset identity, finality or confirmation policy, rollback state, and lineage. A chain-height health check is not an event dataset; the current ETH/BTC jobs ingest zero transactions. Bloch has two separate private, snapshot-pinned research samples of 400 and 495 finalized transactions. Neither bounded sample is a live feed or a coverage claim.
 
 ## Canonical data and source semantics
 

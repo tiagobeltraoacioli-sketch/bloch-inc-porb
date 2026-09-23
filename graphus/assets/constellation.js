@@ -67,7 +67,25 @@ function magnitude(wallet) {
   const volume=wallet.volume/maxVolumeByAsset[wallet.asset];
   return Math.min(1,.5*activity+.5*volume);
 }
-function point(wallet) { return {x:wallet.x*width,y:wallet.y*height}; }
+function focusedPeers() {
+  if(!search||!selectedWallet)return [];
+  return [...new Set(selectedWallet.transactions.map(tx=>tx.counterparty))].sort();
+}
+function displayed(wallet) {
+  return visible(wallet) && (!search || Boolean(selectedWallet && (wallet.id===selectedWallet.id || focusedPeers().includes(wallet.id))));
+}
+function point(wallet) {
+  if(search&&selectedWallet){
+    if(wallet.id===selectedWallet.id)return {x:width*.5,y:height*.5};
+    const peers=focusedPeers(),index=peers.indexOf(wallet.id);
+    if(index>=0){
+      const angle=-Math.PI*.5+index*Math.PI*2/peers.length;
+      const radius=Math.max(110,Math.min(width*.32,height*.32,205));
+      return {x:width*.5+Math.cos(angle)*radius,y:height*.5+Math.sin(angle)*radius};
+    }
+  }
+  return {x:wallet.x*width,y:wallet.y*height};
+}
 function resize() {
   const rect = canvas.getBoundingClientRect();
   width=rect.width;height=rect.height;dpr=Math.min(window.devicePixelRatio||1,2);
@@ -101,6 +119,7 @@ function draw() {
   gradient.addColorStop(0,'#153752');gradient.addColorStop(.55,'#0a1b2a');gradient.addColorStop(1,'#07111b');
   context.fillStyle=gradient;context.fillRect(0,0,width,height);
   for (const [asset,[cx,cy]] of Object.entries(centers)) {
+    if(search)continue;
     if (activeAsset !== 'all' && activeAsset !== asset) continue;
     context.save();context.globalAlpha=.13;context.strokeStyle=colors[asset];context.lineWidth=1;
     context.beginPath();context.ellipse(cx*width,cy*height,width*.16,height*.20,0,0,Math.PI*2);context.stroke();
@@ -108,18 +127,19 @@ function draw() {
     context.fillText(`${asset.toUpperCase()} FIELD`,cx*width-width*.065,cy*height-height*.17);context.restore();
   }
   for (const [from,to] of relations) {
-    if (!visible(from)||!visible(to)) continue;
+    if (!displayed(from)||!displayed(to)) continue;
+    if(search&&selectedWallet&&from.id!==selectedWallet.id&&to.id!==selectedWallet.id)continue;
     const selected=selectedWallet && (from.id===selectedWallet.id||to.id===selectedWallet.id);
     line(point(from),point(to),selected?'#9bc6e2':'#6da8c8',selected?.48:.12,selected?1.5:.8);
   }
-  if(selectedWallet&&visible(selectedWallet)){
+  if(selectedWallet&&displayed(selectedWallet)){
     for(const tx of selectedWallet.transactions){
       const from=walletById.get(tx.from),to=walletById.get(tx.to);
       arrow(point(from),point(to),tx.direction==='OUT'?'#f3a295':'#91d9d4');
     }
   }
   for (const wallet of wallets) {
-    if (!visible(wallet)) continue;
+    if (!displayed(wallet)) continue;
     const p=point(wallet);
     const selected=selectedWallet?.id===wallet.id;
     const level=magnitude(wallet);
@@ -131,7 +151,7 @@ function draw() {
     }
   }
   transactionDots=[];
-  if (selectedWallet && visible(selectedWallet)) {
+  if (selectedWallet && displayed(selectedWallet)) {
     const base=point(selectedWallet);const count=selectedWallet.transactions.length;
     const fan={x:Math.max(105,Math.min(width-105,base.x)),y:Math.max(108,Math.min(height-108,base.y))};
     if (Math.hypot(fan.x-base.x,fan.y-base.y)>2) line(base,fan,'#f4aa9f',.7,1.5);
@@ -214,11 +234,37 @@ function renderFlows(wallet){
   [...peers.entries()].sort((a,b)=>b[1].volume-a[1].volume).forEach(([id,entry])=>{
     const button=document.createElement('button');button.type='button';
     button.textContent=`${id} · ${entry.inbound} in / ${entry.outbound} out · ${entry.volume.toLocaleString('en-US')} ${units[wallet.asset]} →`;
-    button.addEventListener('click',()=>selectWallet(walletById.get(id)));
+    button.addEventListener('click',()=>selectWallet(walletById.get(id),Boolean(search)));
     flowList.append(button);
   });
 }
-function selectWallet(wallet) {
+function updateSearchUrl() {
+  const url=new URL(window.location.href);
+  url.searchParams.delete('address');url.searchParams.delete('wallet');
+  if(search)url.searchParams.set('wallet',selectedWallet?.id||search);
+  window.history.replaceState(null,'',url);
+}
+function renderSearchStatus() {
+  const status=document.getElementById('wallet-search-status');
+  if(!search){status.textContent='Search a synthetic wallet ID or address to isolate its local constellation.';return;}
+  const matches=wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
+  if(!matches.length){status.textContent=`No synthetic wallet matches “${search}” in this asset filter.`;return;}
+  const peers=focusedPeers().length;
+  status.textContent=`${matches.length} ${matches.length===1?'match':'matches'} · ${selectedWallet.id} centered with ${peers} connected ${peers===1?'wallet':'wallets'} and ${selectedWallet.transactions.length} transaction events. Select another result below to change focus.`;
+}
+function clearWallet() {
+  selectedWallet=null;selectedTransaction=null;
+  setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
+  setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
+  for(const id of ['record-asset','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
+  setText('record-source','Synthetic fixture');setText('record-meaning','No trained or validated model.');
+  document.getElementById('transaction-list').textContent='Select a wallet.';
+  flowList.textContent='Select a wallet.';
+  document.getElementById('activity-chart').replaceChildren();
+  document.getElementById('analysis-ledger').innerHTML='<tr><td colspan="5">Select a wallet star.</td></tr>';
+}
+function selectWallet(wallet,updateQuery=false) {
+  if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
   selectedWallet=wallet;selectedTransaction=null;
   noteLink.href=`account.html?wallet=${encodeURIComponent(wallet.address)}`;
   setText('record-type','SYNTHETIC WALLET / '+wallet.asset.toUpperCase());
@@ -237,7 +283,8 @@ function selectWallet(wallet) {
     button.textContent=`${tx.id} · ${tx.direction} · ${tx.amount} ${units[wallet.asset]} · ${tx.counterparty}`;
     button.addEventListener('click',()=>selectTransaction(wallet,tx));list.append(button);
   });
-  draw();
+  document.querySelector('.record-card').scrollTop=0;
+  renderSearchStatus();updateSearchUrl();renderList();draw();
 }
 function selectTransaction(wallet,tx) {
   selectedTransaction=tx;
@@ -252,9 +299,11 @@ function selectTransaction(wallet,tx) {
 }
 function renderList() {
   const list=document.getElementById('accessible-records');list.replaceChildren();
-  wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet)).forEach(wallet=>{
+  const matches=wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
+  if(!matches.length){const empty=document.createElement('p');empty.textContent='No synthetic wallets match this search and asset filter.';list.append(empty);return;}
+  matches.forEach(wallet=>{
     const button=document.createElement('button');button.type='button';button.textContent=`${wallet.id} · ${wallet.address} · ${wallet.transactions.length} tx`;
-    button.addEventListener('click',()=>selectWallet(wallet));list.append(button);
+    button.addEventListener('click',()=>selectWallet(wallet,Boolean(search)));list.append(button);
   });
 }
 canvas.addEventListener('click',event=>{
@@ -262,22 +311,29 @@ canvas.addEventListener('click',event=>{
   const txHit=transactionDots.find(({p})=>Math.hypot(x-p.x,y-p.y)<12);
   if(txHit && selectedWallet){selectTransaction(selectedWallet,txHit.tx);return;}
   let nearest=null,distance=14;
-  for(const wallet of wallets.filter(visible)){const p=point(wallet),d=Math.hypot(x-p.x,y-p.y);if(d<distance){nearest=wallet;distance=d;}}
-  if(nearest)selectWallet(nearest);
+  for(const wallet of wallets.filter(displayed)){const p=point(wallet),d=Math.hypot(x-p.x,y-p.y);if(d<distance){nearest=wallet;distance=d;}}
+  if(nearest)selectWallet(nearest,Boolean(search));
 });
 document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.addEventListener('click',()=>{
   activeAsset=button.dataset.constellationAsset;
   document.querySelectorAll('[data-constellation-asset]').forEach(item=>{item.classList.toggle('active',item===button);item.setAttribute('aria-pressed',String(item===button));});
-  if(selectedWallet&&!visible(selectedWallet)){selectedWallet=null;selectedTransaction=null;}
-  renderList();draw();
+  if(selectedWallet&&!visible(selectedWallet))clearWallet();
+  if(search){const match=wallets.find(wallet=>visible(wallet)&&matchesSearch(wallet));if(match&&!selectedWallet)selectWallet(match);}
+  renderSearchStatus();renderList();draw();
 }));
 document.getElementById('record-search').addEventListener('input',event=>{
-  search=event.target.value.trim().toLowerCase();renderList();
+  search=event.target.value.trim().toLowerCase();
   const match=wallets.find(wallet=>visible(wallet)&&matchesSearch(wallet));
-  if(search&&match)selectWallet(match);else draw();
+  if(search&&match)selectWallet(match);
+  else {clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();}
+});
+document.getElementById('clear-wallet-search').addEventListener('click',()=>{
+  const input=document.getElementById('record-search');input.value='';search='';clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();input.focus();
 });
 const pauseButton=document.getElementById('pause-constellation');
 pauseButton.addEventListener('click',()=>{paused=!paused;pauseButton.setAttribute('aria-pressed',String(paused));pauseButton.textContent=paused?'Resume motion':'Pause motion';draw();});
 if(paused){pauseButton.setAttribute('aria-pressed','true');pauseButton.textContent='Resume motion';}
 new ResizeObserver(resize).observe(canvas);
-renderList();resize();requestAnimationFrame(frame);
+const initialWallet=new URL(window.location.href).searchParams.get('wallet')||new URL(window.location.href).searchParams.get('address');
+if(initialWallet){const input=document.getElementById('record-search');input.value=initialWallet;input.dispatchEvent(new Event('input',{bubbles:true}));}
+renderList();renderSearchStatus();resize();requestAnimationFrame(frame);

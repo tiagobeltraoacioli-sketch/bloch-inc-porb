@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 from datetime import datetime
 
 
@@ -64,3 +65,42 @@ def confusion_metrics(labels, predictions):
         "recall": tp / (tp + fn) if tp + fn else None,
         "false_positive_rate": fp / (fp + tn) if fp + tn else None,
     }
+
+
+def calibration_summary(labels, probabilities, *, bins=5):
+    """Return aggregate reliability counts without exposing case predictions."""
+    if len(labels) != len(probabilities) or not labels or not 2 <= bins <= 20:
+        raise ValueError("nonempty equal-length observations and 2-20 bins required")
+    if any(type(label) is not int or label not in (0, 1) for label in labels):
+        raise ValueError("binary labels required")
+    if any(type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1
+           for value in probabilities):
+        raise ValueError("finite probabilities in [0, 1] required")
+    groups = [[] for _ in range(bins)]
+    for label, probability in zip(labels, probabilities):
+        groups[min(int(probability * bins), bins - 1)].append((label, probability))
+    rows = []
+    for index, group in enumerate(groups):
+        count = len(group)
+        rows.append({
+            "lower": index / bins,
+            "upper": (index + 1) / bins,
+            "count": count,
+            "mean_probability": sum(value for _, value in group) / count if count else None,
+            "observed_rate": sum(label for label, _ in group) / count if count else None,
+        })
+    error = sum(row["count"] * abs(row["mean_probability"] - row["observed_rate"])
+                for row in rows if row["count"]) / len(labels)
+    return {"bins": rows, "expected_calibration_error": error,
+            "warning": "descriptive_holdout_only_not_calibrated_probability"}
+
+
+def wilson_interval(successes, total, *, z=1.959963984540054):
+    """Descriptive binomial interval; sampling bias is outside its scope."""
+    if type(successes) is not int or type(total) is not int or not 0 <= successes <= total or total < 1:
+        raise ValueError("valid nonempty count required")
+    fraction = successes / total
+    adjustment = z * z / total
+    center = (fraction + adjustment / 2) / (1 + adjustment)
+    margin = z * math.sqrt(fraction * (1 - fraction) / total + adjustment / (4 * total)) / (1 + adjustment)
+    return [max(0.0, center - margin), min(1.0, center + margin)]

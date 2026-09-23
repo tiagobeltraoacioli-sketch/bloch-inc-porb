@@ -55,11 +55,23 @@ def collect(*, pages=5, page_size=100, fetch=get_json):
     snapshot_height = snapshot_slot = None
     records = []
     page_count = tx_count = output_count = input_count = 0
+    response_bound_retries = 0
+    page_limits_used = []
     for _ in range(pages):
-        suffix = f"/transactions?limit={page_size}"
-        if cursor:
-            suffix += "&cursor=" + quote(cursor, safe="")
-        page = fetch(suffix)
+        request_limit = page_size
+        while True:
+            suffix = f"/transactions?limit={request_limit}"
+            if cursor:
+                suffix += "&cursor=" + quote(cursor, safe="")
+            try:
+                page = fetch(suffix)
+                break
+            except ValueError as error:
+                if str(error) != "indexer response exceeds bound" or request_limit == 1:
+                    raise
+                request_limit = max(1, request_limit // 2)
+                response_bound_retries += 1
+        page_limits_used.append(request_limit)
         if not isinstance(page.get("transactions"), list) or not isinstance(page.get("as_of_height"), int) or not isinstance(page.get("as_of_slot"), int):
             raise ValueError("invalid indexer page")
         if snapshot_height is None:
@@ -114,6 +126,8 @@ def collect(*, pages=5, page_size=100, fetch=get_json):
         "reported_finalized_height": finalized_height,
         "pages": page_count, "finalized_transactions": tx_count,
         "created_outputs": output_count, "spent_outpoint_observations": input_count,
+        "response_bound_retries": response_bound_retries,
+        "page_limits_used": page_limits_used,
         "next_cursor": cursor,
         "source_complete": cursor is None,
         "wallet_ownership_inferred": False,

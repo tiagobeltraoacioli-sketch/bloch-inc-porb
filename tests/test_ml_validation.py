@@ -1,6 +1,6 @@
 import unittest
 
-from service.ml_validation import confusion_metrics, validate_holdout
+from service.ml_validation import calibration_summary, confusion_metrics, validate_holdout, wilson_interval
 
 
 class ModelValidationTest(unittest.TestCase):
@@ -27,6 +27,21 @@ class ModelValidationTest(unittest.TestCase):
         result = confusion_metrics([1, 0], [0, 0])
         self.assertIsNone(result["precision"])
         self.assertEqual(result["recall"], 0)
+
+    def test_calibration_counts_empty_bins_and_rejects_invalid_probabilities(self):
+        summary = calibration_summary([0, 1], [0.1, 0.9], bins=5)
+        self.assertEqual(sum(row["count"] for row in summary["bins"]), 2)
+        self.assertIsNone(summary["bins"][2]["observed_rate"])
+        self.assertAlmostEqual(summary["expected_calibration_error"], 0.1)
+        with self.assertRaises(ValueError):
+            calibration_summary([1], [float("nan")])
+
+    def test_wilson_interval_preserves_small_sample_uncertainty(self):
+        low, high = wilson_interval(1, 2)
+        self.assertLess(low, 0.1)
+        self.assertGreater(high, 0.9)
+        with self.assertRaises(ValueError):
+            wilson_interval(0, 0)
 
 
 if __name__ == "__main__":
