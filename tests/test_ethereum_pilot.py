@@ -61,6 +61,29 @@ class EthereumPilotTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mismatch"):
             collect(limit=1, fetch=wrong_receipt)
 
+    def test_historical_height_requires_finalized_head_and_exact_selected_height(self):
+        requested = []
+
+        def historical(url, method, params):
+            if method == "eth_getBlockByNumber":
+                requested.append(params[0])
+            return fixture(url, method, params)
+
+        manifest, _ = collect(limit=1, block_number=42, fetch=historical)
+        self.assertEqual(requested, ["finalized", "0x2a"])
+        self.assertEqual(manifest["finalized_head_number_at_collection"], 42)
+        with self.assertRaisesRegex(ValueError, "exceeds source-reported finalized head"):
+            collect(limit=1, block_number=43, fetch=historical)
+
+        def wrong_height(url, method, params):
+            result = fixture(url, method, params)
+            if method == "eth_getBlockByNumber" and params[0] != "finalized":
+                return {**result, "number": "0x29"}
+            return result
+
+        with self.assertRaisesRegex(ValueError, "height differs"):
+            collect(limit=1, block_number=42, fetch=wrong_height)
+
     def test_transaction_position_and_duplicate_block_hashes_are_rejected(self):
         def wrong_position(url, method, params):
             result = fixture(url, method, params)

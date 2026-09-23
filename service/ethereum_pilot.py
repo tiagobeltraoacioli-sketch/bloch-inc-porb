@@ -66,13 +66,24 @@ def _validate_receipt_logs(receipt, *, tx_hash, block_hash, block_number, transa
         previous_log_index = log_index
 
 
-def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
+def collect(*, limit=5, block_number=None, fetch=rpc, rpc_url=ETH_RPC):
     if type(limit) is not int or not 1 <= limit <= 10:
         raise ValueError("pilot limit must be 1-10 transactions")
+    if block_number is not None and (type(block_number) is not int or block_number < 0):
+        raise ValueError("pilot block number must be nonnegative")
     chain_id = fetch(rpc_url, "eth_chainId", [])
     if not isinstance(chain_id, str) or not HEX_QUANTITY.fullmatch(chain_id) or int(chain_id, 16) != 1:
         raise ValueError("Ethereum mainnet chain ID required")
-    block = fetch(rpc_url, "eth_getBlockByNumber", ["finalized", False])
+    finalized_head = fetch(rpc_url, "eth_getBlockByNumber", ["finalized", False])
+    if (not isinstance(finalized_head, dict)
+            or not HEX64.fullmatch(finalized_head.get("hash", ""))):
+        raise ValueError("invalid finalized head response")
+    finalized_head_number = _quantity(finalized_head.get("number"))
+    if block_number is not None and block_number > finalized_head_number:
+        raise ValueError("requested block exceeds source-reported finalized head")
+    requested_block_number = block_number
+    block = (finalized_head if requested_block_number is None else
+             fetch(rpc_url, "eth_getBlockByNumber", [hex(block_number), False]))
     if (not isinstance(block, dict) or not HEX64.fullmatch(block.get("hash", ""))
             or not isinstance(block.get("number"), str) or not HEX_QUANTITY.fullmatch(block["number"])
             or not isinstance(block.get("transactions"), list)
@@ -80,6 +91,10 @@ def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
         raise ValueError("invalid finalized block response")
     block_hash = block["hash"].lower()
     block_number = int(block["number"], 16)
+    if requested_block_number is not None and block_number != requested_block_number:
+        raise ValueError("selected block height differs from request")
+    if block_number > finalized_head_number:
+        raise ValueError("selected block exceeds source-reported finalized head")
     if len(set(tx_hash.lower() for tx_hash in block["transactions"])) != len(block["transactions"]):
         raise ValueError("duplicate transaction hash in finalized block")
     selected = block["transactions"][:limit]
@@ -130,6 +145,7 @@ def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
         "source_id": "ethereum-mainnet-rpc", "source_host": urlsplit(rpc_url).hostname, "chain_id": 1,
         "source_reported_finalized_block_number": block_number,
         "source_reported_finalized_block_hash": block_hash,
+        "finalized_head_number_at_collection": finalized_head_number,
         "block_transaction_count": len(block["transactions"]),
         "sampled_transactions": len(selected), "sample_selection": "first_transaction_hashes_in_source_reported_finalized_block",
         "within_block_sample_fraction": len(selected) / len(block["transactions"]) if block["transactions"] else None,
@@ -162,9 +178,11 @@ def write_private(manifest, records, output_dir):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=5)
+    parser.add_argument("--block-number", type=int,
+                        help="select a historical height at or below the source-reported finalized head")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
-    manifest, records = collect(limit=args.limit)
+    manifest, records = collect(limit=args.limit, block_number=args.block_number)
     saved = write_private(manifest, records, args.output_dir)
     print(json.dumps({key: saved[key] for key in ("status", "sampled_transactions", "normalized_movements", "movement_counts", "record_count")}))
 

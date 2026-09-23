@@ -9,6 +9,7 @@ from service.bitcoin_pilot import collect as collect_bitcoin, write_private as w
 from service.bitcoin_reconcile import reconcile as reconcile_bitcoin, write_private as write_reconciliation
 from service.data_quality import build_ledger, inspect_bloch_sample, write_private as write_ledger
 from service.ethereum_pilot import collect as collect_ethereum, write_private as write_ethereum
+from service.ethereum_reconcile import reconcile as reconcile_ethereum, write_private as write_ethereum_reconciliation
 from tests.test_ethereum_pilot import fixture as ethereum_fixture
 from tests.test_bitcoin_pilot import source as bitcoin_source
 
@@ -135,6 +136,63 @@ class DataQualityTest(unittest.TestCase):
             write_ethereum(manifest, records, folder)
             with self.assertRaisesRegex(ValueError, "invalid Ethereum normalized movement"):
                 build_ledger(ethereum_pilot_dir=folder)
+
+    def test_ethereum_historical_pilot_requires_head_at_or_above_selected_height(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "ethereum"
+            manifest, records = collect_ethereum(limit=1, block_number=42, fetch=ethereum_fixture)
+            manifest["finalized_head_number_at_collection"] = 41
+            write_ethereum(manifest, records, folder)
+            with self.assertRaisesRegex(ValueError, "finalized head"):
+                build_ledger(ethereum_pilot_dir=folder)
+
+    def test_ethereum_second_source_binds_exact_pilot_without_identifiers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "ethereum"
+            manifest, records = collect_ethereum(limit=2, fetch=ethereum_fixture,
+                                                 rpc_url="https://primary.example")
+            write_ethereum(manifest, records, folder)
+            def secondary(url, method, params):
+                if method == "eth_getBlockByHash":
+                    return ethereum_fixture(url, "eth_getBlockByNumber", ["finalized", False])
+                return ethereum_fixture(url, method, params)
+
+            report = reconcile_ethereum(folder, fetch=secondary,
+                                        rpc_url="https://secondary.example")
+            report_path = folder / "second-source.json"
+            write_ethereum_reconciliation(report, report_path)
+            as_of = datetime.fromisoformat(report["retrieved_at"].replace("Z", "+00:00")) + timedelta(minutes=5)
+            ledger = build_ledger(ethereum_pilot_dir=folder,
+                                  ethereum_reconciliation_path=report_path, as_of=as_of)
+            for asset in ledger["assets"][1:4]:
+                evidence = asset["second_source_reconciliation"]
+                self.assertEqual(evidence["pilot_records_sha256"], asset["lineage"]["sample_sha256"])
+                self.assertEqual(evidence["sampled_transactions_compared"], 2)
+                self.assertEqual(evidence["normalized_movements_compared"], 2)
+                self.assertEqual(evidence["age_seconds"], 300)
+                self.assertFalse(evidence["consensus_independently_validated"])
+                self.assertEqual(asset["independent_source_reconciliation"],
+                                 "bounded_second_public_rpc_agreement_not_node_validated")
+            self.assertFalse(ledger["production_ready"])
+            self.assertNotIn(records[0]["tx_id"], json.dumps(ledger))
+            self.assertNotIn(manifest["source_reported_finalized_block_hash"], json.dumps(ledger))
+
+            for field, value in (("pilot_records_sha256", "e" * 64),
+                                 ("pilot_manifest_sha256", "e" * 64),
+                                 ("normalized_movements_compared", 1),
+                                 ("secondary_source_host", "primary.example"),
+                                 ("operator_independence_verified", True)):
+                with self.subTest(field=field):
+                    report_path.write_text(json.dumps({**report, field: value}))
+                    with self.assertRaisesRegex(ValueError, "provenance mismatch"):
+                        build_ledger(ethereum_pilot_dir=folder,
+                                     ethereum_reconciliation_path=report_path, as_of=as_of)
+            report_path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, "stale or future"):
+                build_ledger(ethereum_pilot_dir=folder, ethereum_reconciliation_path=report_path,
+                             as_of=as_of + timedelta(days=1))
+            with self.assertRaisesRegex(ValueError, "requires a verified pilot"):
+                build_ledger(ethereum_reconciliation_path=report_path, as_of=as_of)
 
     def test_bitcoin_pilot_ledger_keeps_outputs_without_sender_or_coverage(self):
         with tempfile.TemporaryDirectory() as temporary:

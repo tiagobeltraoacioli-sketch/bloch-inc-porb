@@ -4,11 +4,13 @@ import unittest
 from pathlib import Path
 
 from service.ethereum_pilot import collect, write_private as write_pilot
+from service.ethereum import TOKEN_CONTRACTS, TRANSFER_TOPIC
 from service.ethereum_reconcile import reconcile, write_private
 
 
 BLOCK = "0x" + "a" * 64
 TX = "0x" + "b" * 64
+USDT = next(contract for contract, symbol in TOKEN_CONTRACTS.items() if symbol == "usdt")
 
 
 def source(url, method, params):
@@ -104,6 +106,34 @@ class EthereumReconcileTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "regressed"):
             reconcile(self.pilot, fetch=regress, rpc_url="https://other.example")
+
+    def test_changed_token_movement_fails_even_when_receipt_identity_matches(self):
+        log = {"address": USDT, "blockHash": BLOCK, "transactionHash": TX,
+               "blockNumber": "0x2a", "transactionIndex": "0x0", "logIndex": "0x0",
+               "topics": [TRANSFER_TOPIC, "0x" + "0" * 24 + "1" * 40,
+                          "0x" + "0" * 24 + "2" * 40],
+               "data": "0x" + format(25, "064x")}
+
+        def primary(url, method, params):
+            result = source(url, method, params)
+            if method == "eth_getTransactionReceipt":
+                return {**result, "status": "0x1", "logs": [log]}
+            return result
+
+        manifest, records = collect(limit=1, fetch=primary, rpc_url="https://primary.example")
+        write_pilot(manifest, records, self.pilot)
+        report = reconcile(self.pilot, fetch=primary, rpc_url="https://other.example")
+        self.assertTrue(report["normalized_eth_usdt_usdc_movements_agree"])
+        self.assertEqual(report["normalized_movements_compared"], 1)
+
+        def changed_amount(url, method, params):
+            result = primary(url, method, params)
+            if method == "eth_getTransactionReceipt":
+                return {**result, "logs": [{**log, "data": "0x" + format(26, "064x")}]}
+            return result
+
+        with self.assertRaisesRegex(ValueError, "normalized movements differ"):
+            reconcile(self.pilot, fetch=changed_amount, rpc_url="https://other.example")
 
 
 if __name__ == "__main__":

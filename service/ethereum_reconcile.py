@@ -5,16 +5,18 @@ import hashlib
 import json
 import os
 import tempfile
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from .data_quality import inspect_ethereum_pilot
-from .ethereum_pilot import HEX64, HEX_QUANTITY
+from .ethereum import erc20_transfers, native_value_movement
+from .ethereum_pilot import HEX64, HEX_QUANTITY, _validate_receipt_logs
 
 
-SECONDARY_RPC = "https://public.1rpc.io/eth"
+SECONDARY_RPC = "https://eth.drpc.org/"
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_TRANSACTIONS = 10
 MAX_RPC_CALLS = 6 + 2 * MAX_TRANSACTIONS
@@ -79,6 +81,10 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
     if [row["transaction_index"] for row in sampled] != list(range(len(sampled))):
         raise ValueError("Ethereum pilot sampled positions are not the first contiguous positions")
     selected = [row["tx_id"] for row in sampled]
+    primary_movements = sorted(
+        (row for row in rows if row["record_type"] == "normalized_movement"),
+        key=lambda row: row["event_key"],
+    )
     primary_host = manifest.get("source_host")
     secondary_parts = urlsplit(rpc_url)
     if (secondary_parts.scheme != "https" or not secondary_parts.hostname
@@ -109,6 +115,7 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
     by_hash = get("eth_getBlockByHash", [block_hash, False])
     _block_matches(by_hash, expected_hash=block_hash, expected_number=height,
                    expected_count=count, selected=selected)
+    secondary_movements = []
     for row in sampled:
         txid = row["tx_id"]
         position = row["transaction_index"]
@@ -125,6 +132,20 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
                 or _quantity(receipt.get("transactionIndex")) != position
                 or receipt.get("status") != row["receipt_status"]):
             raise ValueError("secondary Ethereum sampled transaction or receipt differs")
+        _validate_receipt_logs(receipt, tx_hash=txid, block_hash=block_hash,
+                               block_number=height, transaction_index=position)
+        native = native_value_movement(at_height, tx, receipt, source_id=manifest["source_id"])
+        if native is not None:
+            secondary_movements.append(native)
+        if receipt["status"] == "0x1":
+            secondary_movements.extend(erc20_transfers(at_height, receipt, source_id=manifest["source_id"]))
+    normalized_secondary = sorted(
+        ({"record_type": "normalized_movement", "event_key": movement.key,
+          **asdict(movement)} for movement in secondary_movements),
+        key=lambda row: row["event_key"],
+    )
+    if normalized_secondary != primary_movements:
+        raise ValueError("secondary Ethereum normalized movements differ")
     finalized_after = get("eth_getBlockByNumber", ["finalized", False])
     at_height_again = get("eth_getBlockByNumber", [hex(height), False])
     if (not isinstance(finalized_after, dict)
@@ -144,6 +165,8 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
         "sampled_transactions_compared": len(sampled),
         "block_hash_count_positions_agree": True,
         "sampled_transaction_receipt_identity_status_agree": True,
+        "normalized_eth_usdt_usdc_movements_agree": True,
+        "normalized_movements_compared": len(normalized_secondary),
         "secondary_finalized_head_and_height_checked_twice": True,
         "rpc_calls": calls,
         "max_rpc_calls": MAX_RPC_CALLS,

@@ -6,6 +6,10 @@ The first private run selected five transaction hashes from one source-reported 
 
 A second five-transaction run with stricter receipt and log placement checks yielded 4 direct ETH movements, 3 USDT events, and 24 USDC events in a separate private sample. The two samples may overlap and must not be added to imply unique transaction coverage.
 
+To reconcile with a second RPC that reports a lower finalized head, `--block-number HEIGHT` selects an older block. The pilot first checks that `HEIGHT` does not exceed the primary source's reported finalized head, then fetches that exact height and records both the sampled block and the primary head height. The second provider must separately report finality at or beyond `HEIGHT`; the two hostnames still do not prove independent consensus validation.
+
+A third private pilot selected five transactions from such a historical height. It produced two direct ETH movements and one USDT event; a separate dRPC comparison matched all three normalized movements. This is a source agreement for one biased sample, not history coverage.
+
 Run only on the private data host:
 
 ```sh
