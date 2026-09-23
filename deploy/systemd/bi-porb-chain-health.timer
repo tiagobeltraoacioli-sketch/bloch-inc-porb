@@ -1,0 +1,12 @@
+[Unit]
+Description=Probe public Ethereum Solana Bitcoin sources every fifteen minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=2min
+Persistent=true
+Unit=bi-porb-chain-health.service
+
+[Install]
+WantedBy=timers.target

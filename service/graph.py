@@ -49,12 +49,17 @@ class EvidenceGraph:
             raise ValueError("path bounds exceeded")
         now = as_of or datetime.now(timezone.utc)
         found = []
-        queue = deque([(start, (), frozenset({start}), 1.0)])
+        queue = deque([(start, (), frozenset({start}), 1.0, None)])
         while queue and len(found) < max_paths:
-            node, path, visited, weight = queue.popleft()
+            node, path, visited, weight, last_observed = queue.popleft()
             if len(path) >= max_hops:
                 continue
-            eligible = [edge for edge in self.outgoing[node] if datetime.fromisoformat(edge.expires_at.replace("Z", "+00:00")) > now]
+            eligible = []
+            for edge in self.outgoing[node]:
+                observed = datetime.fromisoformat(edge.observed_at.replace("Z", "+00:00"))
+                expires = datetime.fromisoformat(edge.expires_at.replace("Z", "+00:00"))
+                if observed <= now < expires and (last_observed is None or observed >= last_observed):
+                    eligible.append(edge)
             hub_factor = 1 / math.sqrt(max(1, len(eligible)))
             for edge in eligible:
                 if edge.target_node in visited:
@@ -73,5 +78,5 @@ class EvidenceGraph:
                     if len(found) >= max_paths:
                         break
                 else:
-                    queue.append((edge.target_node, next_path, visited | {edge.target_node}, next_weight))
+                    queue.append((edge.target_node, next_path, visited | {edge.target_node}, next_weight, datetime.fromisoformat(edge.observed_at.replace("Z", "+00:00"))))
         return sorted(found, key=lambda item: (-item["ranking_weight_not_probability"], item["hops"]))

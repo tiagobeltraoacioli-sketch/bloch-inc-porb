@@ -8,8 +8,8 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 API = "https://api.cloudflare.com/client/v4"
-DOMAIN = "aml-blochinc.xyz"
-PROJECT = "aml-blochinc"
+DOMAIN = os.environ.get("PAGES_DOMAIN", "aml-blochinc.xyz")
+PROJECT = os.environ.get("PAGES_PROJECT", "aml-blochinc")
 
 
 def api(token, method, path, body=None):

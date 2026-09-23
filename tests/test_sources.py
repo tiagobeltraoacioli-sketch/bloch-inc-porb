@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from service.ofac import parse_identifiers, public_status, screen_identifier
@@ -60,6 +61,13 @@ class SourceTest(unittest.TestCase):
         self.assertEqual(paths[0]["classification"], "association_only")
         self.assertEqual(paths[0]["edge_ids"], ["e1", "e2"])
         self.assertTrue(paths[0]["review_required"])
+
+    def test_graph_rejects_reverse_time_and_future_paths(self):
+        graph = EvidenceGraph()
+        graph.add(EvidenceEdge("first", "a", "b", "value_flow", "chain", "2026-09-22T12:00:00Z", "2026-09-25T00:00:00Z", 1, True))
+        graph.add(EvidenceEdge("older", "b", "listed", "value_flow", "chain", "2026-09-22T10:00:00Z", "2026-09-25T00:00:00Z", 1, True))
+        self.assertEqual(graph.trace_to_anchors("a", {"listed"}), [])
+        self.assertEqual(graph.trace_to_anchors("a", {"b"}, as_of=datetime.fromisoformat("2026-09-22T11:00:00+00:00")), [])
 
     def test_bloch_adapter_uses_reported_finality_and_keeps_sender_unknown(self):
         tx = {"txid": "a" * 64, "block_id": "b" * 64, "slot": 900, "height": 800,

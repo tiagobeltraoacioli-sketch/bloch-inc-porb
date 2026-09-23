@@ -17,4 +17,4 @@ Edges: spent output, created output, instruction effect, token transfer, source 
 - Graph learning research: temporal graph embeddings or neural models may be evaluated offline against rule baselines, with leakage controls, reviewer labels, calibration, and adversarial tests. They cannot go live based on synthetic data.
 - Explanation: every proposed relationship can be expanded to its typed path, source, time, and alternative interpretation. Corrections and disputes remove or downgrade the affected edge and trigger dependent score recomputation.
 
-The `service/graph.py` module implements a small bounded path prototype with source IDs, expiry, finality, bridge-proof gates, and hub downweighting. It is not a production graph database or a trained AML model.
+The `service/graph.py` module implements a small bounded path prototype with source IDs, expiry, event-time ordering, finality, bridge-proof gates, and hub downweighting. It is not a production graph database or a trained AML model.
