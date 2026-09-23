@@ -38,6 +38,10 @@ class StructuralMonitorTest(unittest.TestCase):
         self.assertLessEqual(report["distribution_comparison"]["total_variation_distance"], 1)
         self.assertFalse(report["production_ready"])
         self.assertEqual(report["wallet_scores_computed"], 0)
+        self.assertFalse(report["comparability"]["temporal_trend_supported_by_monitor"])
+        self.assertEqual(report["comparability"]["external_declarations"]["disjoint_transaction_sets"],
+                         "not_supplied")
+        self.assertFalse(report["comparability"]["sampling_confidence_interval_available"])
         text = json.dumps(report)
         self.assertNotIn("input_log2_bin", text)
         self.assertNotIn("source_sample_sha256", text)
@@ -46,6 +50,37 @@ class StructuralMonitorTest(unittest.TestCase):
         report = compare_histograms(histogram("a"), histogram("b"))
         self.assertEqual(report["distribution_comparison"]["jensen_shannon_divergence_bits"], 0)
         self.assertEqual(report["distribution_comparison"]["total_variation_distance"], 0)
+
+    def test_suppression_sensitivity_is_deterministic_and_conservative(self):
+        reference = histogram("a", counts=(10, 5), suppressed=2, unrepresented=3)
+        current = histogram("b", counts=(5, 15), suppressed=4, unrepresented=1)
+        report = compare_histograms(reference, current)
+        distance = report["distribution_comparison"]["total_variation_distance"]
+        bounds = report["distribution_comparison"]["true_shape_tv_suppression_sensitivity"]
+        uncertainty_budget = 2 / 20 + 4 / 25
+        self.assertAlmostEqual(bounds["lower_bound"], max(0, distance - uncertainty_budget), places=5)
+        self.assertAlmostEqual(bounds["upper_bound"], min(1, distance + uncertainty_budget), places=5)
+        self.assertFalse(bounds["sampling_uncertainty_included"])
+
+    def test_external_comparability_is_declared_only_and_schema_limited(self):
+        declarations = {
+            "same_chain_network": True,
+            "same_sampling_frame": True,
+            "same_extractor_version": True,
+            "nonoverlapping_time_windows": True,
+            "disjoint_transaction_sets": True,
+            "independent_source_reconciliation": True,
+        }
+        report = compare_histograms(histogram("a"), histogram("b"), comparison_evidence=declarations)
+        self.assertTrue(report["comparability"]["all_external_gates_declared_yes"])
+        self.assertFalse(report["comparability"]["external_declarations_independently_verified"])
+        self.assertFalse(report["comparability"]["temporal_trend_supported_by_monitor"])
+        with self.assertRaisesRegex(ValueError, "evidence fields"):
+            compare_histograms(histogram("a"), histogram("b"),
+                               comparison_evidence={"wallet": "private-address"})
+        with self.assertRaisesRegex(ValueError, "booleans"):
+            compare_histograms(histogram("a"), histogram("b"),
+                               comparison_evidence={"disjoint_transaction_sets": "yes"})
 
     def test_rejects_invalid_accounting_and_small_cells(self):
         bad = histogram("b")

@@ -12,4 +12,6 @@ python3 -m service.bitcoin_reconcile \
 
 The report is atomically written as a `0600` file in a `0700` directory. Standard output and the report contain only aggregate counts, source names, the digest of the private pilot, and verification flags; no transaction IDs, addresses, scripts, wallet references, or scores are exported. A mismatch or source error fails closed and produces no success report.
 
+Pass the report alongside the exact pilot to `service.data_quality` with `--bitcoin-reconciliation`. The ledger verifies its pilot digest, source IDs, block height, sampled transaction count, confirmation depth, agreement flags, and timestamp. Reports older than 24 hours at ledger generation fail closed; rerun the comparison to refresh evidence. The ledger stores the report hash and aggregate source agreement only. `production_ready` remains false.
+
 Agreement between two public operators improves source reconciliation for this **one bounded sample**. It does not prove their nodes are operationally independent, validate proof of work or consensus rules with a local full node, establish historical coverage, resolve Bitcoin input ownership, or provide AML conclusions. Production ingestion still needs a controlled node or independently governed source, reorganization replay, gap detection, retention review, and broader reconciliation.

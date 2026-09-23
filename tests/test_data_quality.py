@@ -1,11 +1,12 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from service.bloch_backfill import write_private
 from service.bitcoin_pilot import collect as collect_bitcoin, write_private as write_bitcoin
+from service.bitcoin_reconcile import reconcile as reconcile_bitcoin, write_private as write_reconciliation
 from service.data_quality import build_ledger, inspect_bloch_sample, write_private as write_ledger
 from service.ethereum_pilot import collect as collect_ethereum, write_private as write_ethereum
 from tests.test_ethereum_pilot import fixture as ethereum_fixture
@@ -165,6 +166,66 @@ class DataQualityTest(unittest.TestCase):
             path.write_text(json.dumps(sample))
             with self.assertRaisesRegex(ValueError, "Merkle inclusion mismatch"):
                 build_ledger(bitcoin_pilot_path=path)
+
+    def test_bitcoin_second_source_report_is_bound_to_exact_pilot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            pilot = folder / "bitcoin-pilot.json"
+            report_path = folder / "second-source.json"
+            get, _ = bitcoin_source()
+            sample = collect_bitcoin(min_confirmations=6, tx_limit=2, get=get)
+            write_bitcoin(sample, pilot)
+            report = reconcile_bitcoin(pilot, get=get)
+            write_reconciliation(report, report_path)
+            as_of = datetime.fromisoformat(report["retrieved_at"].replace("Z", "+00:00")) + timedelta(minutes=5)
+            ledger = build_ledger(bitcoin_pilot_path=pilot, bitcoin_reconciliation_path=report_path, as_of=as_of)
+            btc = ledger["assets"][0]
+            evidence = btc["second_source_reconciliation"]
+            self.assertEqual(evidence["pilot_artifact_sha256"], btc["lineage"]["sample_sha256"])
+            self.assertEqual(evidence["sampled_transactions_compared"], 2)
+            self.assertEqual(evidence["age_seconds"], 300)
+            self.assertEqual(btc["independent_source_reconciliation"],
+                             "bounded_second_public_operator_agreement_not_node_validated")
+            self.assertFalse(evidence["consensus_independently_validated"])
+            self.assertFalse(ledger["production_ready"])
+            self.assertNotIn(sample["transactions"][0]["txid"], json.dumps(ledger))
+            self.assertNotIn(sample["block_hash"], json.dumps(ledger))
+
+    def test_bitcoin_second_source_report_rejects_mismatch_and_staleness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            pilot = folder / "bitcoin-pilot.json"
+            report_path = folder / "second-source.json"
+            get, _ = bitcoin_source()
+            write_bitcoin(collect_bitcoin(min_confirmations=6, tx_limit=2, get=get), pilot)
+            report = reconcile_bitcoin(pilot, get=get)
+            as_of = datetime.fromisoformat(report["retrieved_at"].replace("Z", "+00:00"))
+            for key, value in (
+                ("pilot_artifact_sha256", "e" * 64),
+                ("primary_source_id", "mempool-space-bitcoin-mainnet"),
+                ("secondary_source_id", "blockstream-esplora-bitcoin-mainnet"),
+                ("sampled_transactions_compared", 1),
+                ("block_hash_and_header_agree", False),
+                ("best_chain_checked_twice", False),
+                ("consensus_independently_validated", True),
+                ("full_history_coverage", True),
+            ):
+                with self.subTest(key=key):
+                    report_path.write_text(json.dumps(dict(report, **{key: value})))
+                    with self.assertRaisesRegex(ValueError, "provenance mismatch"):
+                        build_ledger(bitcoin_pilot_path=pilot, bitcoin_reconciliation_path=report_path, as_of=as_of)
+            report_path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, "stale or future"):
+                build_ledger(bitcoin_pilot_path=pilot, bitcoin_reconciliation_path=report_path,
+                             as_of=as_of + timedelta(days=1, seconds=1))
+            with self.assertRaisesRegex(ValueError, "stale or future"):
+                build_ledger(bitcoin_pilot_path=pilot, bitcoin_reconciliation_path=report_path,
+                             as_of=as_of - timedelta(seconds=1))
+            report_path.write_text(json.dumps(dict(report, txid="a" * 64)))
+            with self.assertRaisesRegex(ValueError, "report fields"):
+                build_ledger(bitcoin_pilot_path=pilot, bitcoin_reconciliation_path=report_path, as_of=as_of)
+            with self.assertRaisesRegex(ValueError, "requires a verified pilot"):
+                build_ledger(bitcoin_reconciliation_path=report_path, as_of=as_of)
 
     def test_legacy_bitcoin_pilot_does_not_claim_merkle_verification(self):
         with tempfile.TemporaryDirectory() as temporary:

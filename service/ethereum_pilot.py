@@ -20,6 +20,7 @@ from .ethereum import TOKEN_CONTRACTS, erc20_transfers, native_value_movement
 
 
 HEX64 = re.compile(r"0x[0-9a-fA-F]{64}\Z")
+ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}\Z")
 HEX_QUANTITY = re.compile(r"0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)\Z")
 MAX_RESPONSE = 2_000_000
 
@@ -39,6 +40,32 @@ def rpc(url, method, params):
     return body["result"]
 
 
+def _quantity(value):
+    if not isinstance(value, str) or not HEX_QUANTITY.fullmatch(value):
+        raise ValueError("invalid Ethereum quantity")
+    return int(value, 16)
+
+
+def _validate_receipt_logs(receipt, *, tx_hash, block_hash, block_number, transaction_index):
+    """Check every receipt log's placement, including logs from other contracts."""
+    logs = receipt.get("logs")
+    if not isinstance(logs, list):
+        raise ValueError("Ethereum receipt logs required")
+    previous_log_index = -1
+    for log in logs:
+        if (not isinstance(log, dict) or log.get("removed") is True
+                or not isinstance(log.get("address"), str) or not ADDRESS.fullmatch(log["address"])
+                or str(log.get("blockHash", "")).lower() != block_hash
+                or str(log.get("transactionHash", "")).lower() != tx_hash
+                or _quantity(log.get("blockNumber")) != block_number
+                or _quantity(log.get("transactionIndex")) != transaction_index):
+            raise ValueError("Ethereum receipt log placement mismatch")
+        log_index = _quantity(log.get("logIndex"))
+        if log_index <= previous_log_index:
+            raise ValueError("Ethereum receipt logs out of order or duplicated")
+        previous_log_index = log_index
+
+
 def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
     if type(limit) is not int or not 1 <= limit <= 10:
         raise ValueError("pilot limit must be 1-10 transactions")
@@ -53,10 +80,12 @@ def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
         raise ValueError("invalid finalized block response")
     block_hash = block["hash"].lower()
     block_number = int(block["number"], 16)
+    if len(set(tx_hash.lower() for tx_hash in block["transactions"])) != len(block["transactions"]):
+        raise ValueError("duplicate transaction hash in finalized block")
     selected = block["transactions"][:limit]
     records = []
     movements = []
-    for tx_hash in selected:
+    for position, tx_hash in enumerate(selected):
         tx = fetch(rpc_url, "eth_getTransactionByHash", [tx_hash])
         receipt = fetch(rpc_url, "eth_getTransactionReceipt", [tx_hash])
         if not isinstance(tx, dict) or not isinstance(receipt, dict):
@@ -67,9 +96,12 @@ def collect(*, limit=5, fetch=rpc, rpc_url=ETH_RPC):
                 or str(receipt.get("transactionHash", "")).lower() != tx_hash.lower()
                 or str(tx.get("blockNumber", "")).lower() != block["number"].lower()
                 or str(receipt.get("blockNumber", "")).lower() != block["number"].lower()
-                or str(tx.get("transactionIndex", "")).lower() != str(receipt.get("transactionIndex", "")).lower()
+                or _quantity(tx.get("transactionIndex")) != position
+                or _quantity(receipt.get("transactionIndex")) != position
                 or receipt.get("status") not in ("0x0", "0x1")):
             raise ValueError("sampled transaction, receipt, or finalized block mismatch")
+        _validate_receipt_logs(receipt, tx_hash=tx_hash.lower(), block_hash=block_hash,
+                               block_number=block_number, transaction_index=position)
         records.append({"record_type": "sampled_transaction", "tx_id": tx_hash.lower(),
                         "block_hash": block_hash, "block_number": block_number,
                         "transaction_index": int(tx["transactionIndex"], 16),

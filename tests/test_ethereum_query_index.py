@@ -69,6 +69,17 @@ class EthereumQueryIndexTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "native event index"):
                 build_index(sample, index)
 
+    def test_rehashed_sampled_transaction_order_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            sample, records = self.sample(temporary)
+            index = Path(temporary) / "ethereum.sqlite"
+            manifest = json.loads((sample / "ethereum-pilot-manifest.json").read_text())
+            records[0]["transaction_index"] = 1
+            records[1]["transaction_index"] = 0
+            write_private(manifest, records, sample)
+            with self.assertRaisesRegex(ValueError, "sampled transaction order"):
+                build_index(sample, index)
+
     def test_query_inputs_are_bounded(self):
         with tempfile.TemporaryDirectory() as temporary:
             sample, _ = self.sample(temporary)

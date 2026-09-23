@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ethereum import ADDRESS, TOKEN_CONTRACTS
-from .bitcoin_pilot import verify_header, verify_merkle_proof
+from .bitcoin_pilot import SOURCE_ID as BITCOIN_PRIMARY_SOURCE_ID, verify_header, verify_merkle_proof
 from .normalization import Movement
 
 
@@ -35,6 +35,8 @@ UNITS = {
 HEX64 = re.compile(r"[0-9a-fA-F]{64}")
 BASE_UNITS = re.compile(r"[0-9]{1,39}")
 ETH_HEX64 = re.compile(r"0x[0-9a-fA-F]{64}")
+BITCOIN_SECONDARY_SOURCE_ID = "mempool-space-bitcoin-mainnet"
+BITCOIN_RECONCILIATION_MAX_AGE_SECONDS = 86_400
 
 
 def freshness(observed_at, as_of):
@@ -238,7 +240,7 @@ def inspect_bitcoin_pilot(pilot_path):
     if (sample.get("kind") != "bounded_private_bitcoin_block_pilot"
             or schema_version not in (1, 2) or type(schema_version) is not int
             or sample.get("chain") != "bitcoin" or sample.get("network") != "mainnet"
-            or sample.get("source_id") != "blockstream-esplora-bitcoin-mainnet"
+            or sample.get("source_id") != BITCOIN_PRIMARY_SOURCE_ID
             or not HEX64.fullmatch(sample.get("block_hash", ""))
             or type(sample.get("block_height")) is not int or sample["block_height"] < 0
             or type(sample.get("confirmations_source_reported")) is not int
@@ -326,7 +328,75 @@ def inspect_bitcoin_pilot(pilot_path):
     }
 
 
+def inspect_bitcoin_reconciliation(report_path, bitcoin_sample, *, as_of,
+                                   max_age_seconds=BITCOIN_RECONCILIATION_MAX_AGE_SECONDS):
+    """Bind a second-public-operator report to the exact verified private pilot."""
+    report_raw = Path(report_path).read_bytes()
+    report = json.loads(report_raw)
+    expected_fields = {
+        "schema_version", "kind", "retrieved_at", "primary_source_id", "secondary_source_id",
+        "pilot_artifact_sha256", "block_height", "sampled_transactions_compared",
+        "secondary_confirmations_at_completion", "block_hash_and_header_agree",
+        "sampled_positions_and_merkle_proofs_agree", "best_chain_checked_twice",
+        "consensus_independently_validated", "full_history_coverage", "aml_scores_computed", "caveat",
+    }
+    if not isinstance(report, dict) or set(report) != expected_fields:
+        raise ValueError("invalid Bitcoin reconciliation report fields")
+    if (type(report["schema_version"]) is not int or report["schema_version"] != 1
+            or report["kind"] != "bounded_bitcoin_second_source_reconciliation"
+            or report["primary_source_id"] != BITCOIN_PRIMARY_SOURCE_ID
+            or report["secondary_source_id"] != BITCOIN_SECONDARY_SOURCE_ID
+            or report["primary_source_id"] == report["secondary_source_id"]
+            or report["pilot_artifact_sha256"] != bitcoin_sample["sample_digest"]
+            or type(report["block_height"]) is not int
+            or report["block_height"] != bitcoin_sample["block_height"]
+            or type(report["sampled_transactions_compared"]) is not int
+            or report["sampled_transactions_compared"] != bitcoin_sample["sampled_transactions"]
+            or type(report["secondary_confirmations_at_completion"]) is not int
+            or report["secondary_confirmations_at_completion"] < bitcoin_sample["confirmations_source_reported"]
+            or report["block_hash_and_header_agree"] is not True
+            or report["sampled_positions_and_merkle_proofs_agree"] is not True
+            or report["best_chain_checked_twice"] is not True
+            or report["consensus_independently_validated"] is not False
+            or report["full_history_coverage"] is not False
+            or type(report["aml_scores_computed"]) is not int or report["aml_scores_computed"] != 0
+            or report["caveat"] != "two public operators agree on a bounded sample; no local full-node consensus validation"
+            or not bitcoin_sample["header_hash_locally_verified"]
+            or not bitcoin_sample["merkle_inclusion_locally_verified"]):
+        raise ValueError("Bitcoin reconciliation provenance mismatch")
+    if type(max_age_seconds) is not int or max_age_seconds < 0:
+        raise ValueError("invalid Bitcoin reconciliation maximum age")
+    try:
+        observed = datetime.fromisoformat(report["retrieved_at"].replace("Z", "+00:00"))
+        pilot_observed = datetime.fromisoformat(bitcoin_sample["retrieved_at"].replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("invalid Bitcoin reconciliation timestamp") from error
+    if observed.tzinfo is None or pilot_observed.tzinfo is None:
+        raise ValueError("Bitcoin reconciliation timestamp has no timezone")
+    age = (as_of - observed).total_seconds()
+    if observed < pilot_observed or age < 0 or age > max_age_seconds:
+        raise ValueError("stale or future Bitcoin reconciliation")
+    return {
+        "kind": report["kind"],
+        "retrieved_at": report["retrieved_at"],
+        "age_seconds": int(age),
+        "report_sha256": hashlib.sha256(report_raw).hexdigest(),
+        "pilot_artifact_sha256": bitcoin_sample["sample_digest"],
+        "primary_source_id": report["primary_source_id"],
+        "secondary_source_id": report["secondary_source_id"],
+        "sampled_transactions_compared": report["sampled_transactions_compared"],
+        "secondary_confirmations_at_completion": report["secondary_confirmations_at_completion"],
+        "block_hash_and_header_agree": True,
+        "sampled_positions_and_merkle_proofs_agree": True,
+        "best_chain_checked_twice": True,
+        "consensus_independently_validated": False,
+        "chain_history_complete": False,
+        "caveat": report["caveat"],
+    }
+
+
 def build_ledger(*, bloch_sample_dir=None, ethereum_pilot_dir=None, bitcoin_pilot_path=None,
+                 bitcoin_reconciliation_path=None,
                  chain_health_path=None, as_of=None):
     as_of = as_of or datetime.now(timezone.utc)
     if as_of.tzinfo is None:
@@ -342,6 +412,10 @@ def build_ledger(*, bloch_sample_dir=None, ethereum_pilot_dir=None, bitcoin_pilo
     bloch = inspect_bloch_sample(bloch_sample_dir) if bloch_sample_dir is not None else None
     ethereum_sample = inspect_ethereum_pilot(ethereum_pilot_dir) if ethereum_pilot_dir is not None else None
     bitcoin_sample = inspect_bitcoin_pilot(bitcoin_pilot_path) if bitcoin_pilot_path is not None else None
+    if bitcoin_reconciliation_path is not None and bitcoin_sample is None:
+        raise ValueError("Bitcoin reconciliation requires a verified pilot")
+    bitcoin_reconciliation = (inspect_bitcoin_reconciliation(bitcoin_reconciliation_path, bitcoin_sample, as_of=as_of)
+                              if bitcoin_reconciliation_path is not None else None)
     entries = []
     for chain, asset in ASSETS:
         if chain == "bloch":
@@ -403,6 +477,9 @@ def build_ledger(*, bloch_sample_dir=None, ethereum_pilot_dir=None, bitcoin_pilo
             }
         elif chain == "bitcoin" and status == "bounded_private_sample":
             entry["private_sample"] = source
+            if bitcoin_reconciliation is not None:
+                entry["second_source_reconciliation"] = bitcoin_reconciliation
+                entry["independent_source_reconciliation"] = "bounded_second_public_operator_agreement_not_node_validated"
             entry["finality_evidence"] = "source_reported_probabilistic_confirmations_not_independently_verified"
             entry["lineage"] = {"source_id": source["source_id"], "sample_sha256": source["sample_digest"]}
             entry["completeness"] = {
@@ -470,11 +547,13 @@ def main():
     parser.add_argument("--bloch-sample-dir", type=Path)
     parser.add_argument("--ethereum-pilot-dir", type=Path)
     parser.add_argument("--bitcoin-pilot", type=Path)
+    parser.add_argument("--bitcoin-reconciliation", type=Path)
     parser.add_argument("--chain-health", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     ledger = build_ledger(bloch_sample_dir=args.bloch_sample_dir, ethereum_pilot_dir=args.ethereum_pilot_dir,
                           bitcoin_pilot_path=args.bitcoin_pilot,
+                          bitcoin_reconciliation_path=args.bitcoin_reconciliation,
                           chain_health_path=args.chain_health)
     write_private(ledger, args.output)
     print(json.dumps({"kind": ledger["kind"], "assets": {row["asset"]: row["status"] for row in ledger["assets"]}, "production_ready": False}))

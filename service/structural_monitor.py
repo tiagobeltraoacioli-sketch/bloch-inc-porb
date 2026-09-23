@@ -12,6 +12,14 @@ from service.aggregate_ml import FEATURES
 
 MAX_INPUT_BYTES = 2_000_000
 MAX_CELLS = 5000
+COMPARABILITY_DECLARATIONS = (
+    "same_chain_network",
+    "same_sampling_frame",
+    "same_extractor_version",
+    "nonoverlapping_time_windows",
+    "disjoint_transaction_sets",
+    "independent_source_reconciliation",
+)
 
 
 def _positive_integer(value, name, *, minimum=0):
@@ -59,7 +67,30 @@ def _validate(histogram):
     return buckets
 
 
-def compare_histograms(reference, current):
+def _comparability(reference, current, evidence):
+    """Separate checks available here from externally declared study properties."""
+    if evidence is None:
+        evidence = {}
+    if not isinstance(evidence, dict) or set(evidence) - set(COMPARABILITY_DECLARATIONS):
+        raise ValueError("invalid comparison evidence fields")
+    if any(type(value) is not bool for value in evidence.values()):
+        raise ValueError("comparison evidence must contain booleans")
+    declarations = {name: ("declared_yes" if evidence.get(name) is True else
+                           "declared_no" if evidence.get(name) is False else "not_supplied")
+                    for name in COMPARABILITY_DECLARATIONS}
+    return {
+        "same_bins_and_suppression_threshold_verified": True,
+        "distinct_source_digests_checked": True,
+        "both_sources_declare_complete": reference["source_complete"] and current["source_complete"],
+        "external_declarations": declarations,
+        "all_external_gates_declared_yes": all(value == "declared_yes" for value in declarations.values()),
+        "external_declarations_independently_verified": False,
+        "temporal_trend_supported_by_monitor": False,
+        "sampling_confidence_interval_available": False,
+    }
+
+
+def compare_histograms(reference, current, *, comparison_evidence=None):
     """Compare released structure and coverage without identifiers or cell-level output."""
     old = _validate(reference)
     new = _validate(current)
@@ -83,6 +114,10 @@ def compare_histograms(reference, current):
 
     js = (divergence(left) + divergence(right)) / 2
     tv = sum(abs(a - b) for a, b in zip(left, right)) / 2
+    # Reassigning each opaque suppressed bucket to its unknown original shapes
+    # can change TV by at most its mass. This bound is deterministic, not a CI.
+    suppressed_mass = (reference["suppressed_transactions"] / reference["sampled_transactions"]
+                       + current["suppressed_transactions"] / current["sampled_transactions"])
     def quality(histogram):
         total = histogram["sampled_transactions"]
         return {
@@ -104,11 +139,19 @@ def compare_histograms(reference, current):
             "jensen_shannon_divergence_bits": round(js, 6),
             "total_variation_distance": round(tv, 6),
             "suppressed_and_unrepresented_kept_as_separate_opaque_buckets": True,
+            "true_shape_tv_suppression_sensitivity": {
+                "lower_bound": math.floor(max(0.0, tv - suppressed_mass) * 1_000_000) / 1_000_000,
+                "upper_bound": math.ceil(min(1.0, tv + suppressed_mass) * 1_000_000) / 1_000_000,
+                "method": "triangle_inequality_opaque_suppressed_mass",
+                "unrepresented_retained_as_separate_category": True,
+                "sampling_uncertainty_included": False,
+            },
         },
+        "comparability": _comparability(reference, current, comparison_evidence),
         "aml_labels_used": False,
         "wallet_scores_computed": 0,
         "production_ready": False,
-        "caveat": "Descriptive sample difference only. Samples may overlap, suppressed shapes are pooled, coverage may differ, and no temporal trend, AML accuracy, alert threshold, or wallet conclusion follows.",
+        "caveat": "Descriptive sample difference only. Suppression bounds exclude sampling uncertainty; externally declared comparability is not independently verified. Samples may overlap, coverage may differ, and no temporal trend, AML accuracy, alert threshold, or wallet conclusion follows.",
     }
 
 
@@ -144,8 +187,12 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--current", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--comparison-evidence", type=Path,
+                        help="Optional private JSON of boolean study declarations; not independent proof")
     args = parser.parse_args()
-    report = compare_histograms(read_private_histogram(args.reference), read_private_histogram(args.current))
+    evidence = read_private_histogram(args.comparison_evidence) if args.comparison_evidence else None
+    report = compare_histograms(read_private_histogram(args.reference), read_private_histogram(args.current),
+                                comparison_evidence=evidence)
     write_private_report(report, args.output)
     print(json.dumps({"status": report["status"], "distribution_comparison": report["distribution_comparison"],
                       "production_ready": False}))

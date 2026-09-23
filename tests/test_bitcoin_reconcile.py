@@ -6,7 +6,7 @@ from pathlib import Path
 
 from service.bitcoin_pilot import collect, write_private as write_pilot
 from service.bitcoin_reconcile import reconcile, write_private
-from test_bitcoin_pilot import source
+from tests.test_bitcoin_pilot import source
 
 
 class BitcoinReconcileTest(unittest.TestCase):

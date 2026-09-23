@@ -25,7 +25,7 @@ def fixture(url, method, params):
                 "value": "0x64" if tx_hash == TX1 else "0x20"}
     if method == "eth_getTransactionReceipt":
         log = {"address": USDT, "blockHash": BLOCK_HASH, "transactionHash": TX1,
-               "logIndex": "0x0", "topics": [TRANSFER_TOPIC,
+               "blockNumber": "0x2a", "transactionIndex": "0x0", "logIndex": "0x0", "topics": [TRANSFER_TOPIC,
                "0x" + "0" * 24 + "1" * 40, "0x" + "0" * 24 + "2" * 40],
                "data": "0x" + format(25, "064x")}
         return {"transactionHash": tx_hash, "blockHash": BLOCK_HASH, "blockNumber": "0x2a",
@@ -60,6 +60,43 @@ class EthereumPilotTest(unittest.TestCase):
             return {**result, "blockHash": "0x" + "f" * 64} if method == "eth_getTransactionReceipt" else result
         with self.assertRaisesRegex(ValueError, "mismatch"):
             collect(limit=1, fetch=wrong_receipt)
+
+    def test_transaction_position_and_duplicate_block_hashes_are_rejected(self):
+        def wrong_position(url, method, params):
+            result = fixture(url, method, params)
+            if method == "eth_getTransactionByHash":
+                return {**result, "transactionIndex": "0x1"}
+            return result
+        with self.assertRaisesRegex(ValueError, "mismatch"):
+            collect(limit=1, fetch=wrong_position)
+
+        def duplicate_hash(url, method, params):
+            result = fixture(url, method, params)
+            if method == "eth_getBlockByNumber":
+                return {**result, "transactions": [TX1, TX1]}
+            return result
+        with self.assertRaisesRegex(ValueError, "duplicate transaction hash"):
+            collect(limit=1, fetch=duplicate_hash)
+
+    def test_unrelated_receipt_logs_must_match_transaction_and_order(self):
+        def bad_log(url, method, params):
+            result = fixture(url, method, params)
+            if method == "eth_getTransactionReceipt":
+                unrelated = {**result["logs"][0], "address": "0x" + "3" * 40,
+                             "transactionIndex": "0x1"}
+                return {**result, "logs": [unrelated]}
+            return result
+        with self.assertRaisesRegex(ValueError, "log placement"):
+            collect(limit=1, fetch=bad_log)
+
+        def duplicate_log_index(url, method, params):
+            result = fixture(url, method, params)
+            if method == "eth_getTransactionReceipt":
+                unrelated = {**result["logs"][0], "address": "0x" + "3" * 40}
+                return {**result, "logs": [result["logs"][0], unrelated]}
+            return result
+        with self.assertRaisesRegex(ValueError, "out of order or duplicated"):
+            collect(limit=1, fetch=duplicate_log_index)
 
 
 if __name__ == "__main__":

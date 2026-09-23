@@ -59,12 +59,9 @@ def build_index(sample_dir, index_path):
         raise ValueError("Ethereum pilot changed after validation")
     records = [json.loads(line) for line in raw.splitlines()]
     sampled = {row["tx_id"]: row for row in records if row["record_type"] == "sampled_transaction"}
-    seen_indices = set()
-    for row in sampled.values():
-        key = row["transaction_index"]
-        if key in seen_indices or key >= manifest["block_transaction_count"]:
-            raise ValueError("duplicate or out-of-range transaction index")
-        seen_indices.add(key)
+    positions = [row["transaction_index"] for row in records if row["record_type"] == "sampled_transaction"]
+    if positions != list(range(len(positions))) or len(positions) > manifest["block_transaction_count"]:
+        raise ValueError("sampled transaction order does not match first block positions")
     movements = [row for row in records if row["record_type"] == "normalized_movement"]
     for row in movements:
         tx = sampled.get(row["tx_id"])
