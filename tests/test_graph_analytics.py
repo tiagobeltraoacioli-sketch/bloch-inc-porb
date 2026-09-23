@@ -1,6 +1,7 @@
 import unittest
 
-from service.graph_analytics import GraphAnalytics, TemporalEvent, linear_trend
+from service.graph_analytics import GraphAnalytics, TemporalEvent, events_from_movements, linear_trend
+from service.normalization import Movement, bitcoin_output
 
 
 def event(event_id, sender, destination, amount, day, *, chain="ethereum", network="mainnet", asset="eth", attribution="direct"):
@@ -103,6 +104,74 @@ class GraphAnalyticsTest(unittest.TestCase):
         for bound in (0, True, 501):
             with self.assertRaises(ValueError):
                 self.graph.wallet_constellation(**arguments, max_events=bound)
+
+    def test_normalized_movement_adapter_preserves_provenance_and_asset_scope(self):
+        movements = [
+            Movement("ethereum", "mainnet", "eth", "eth-tx", 0, "eth-block", 100,
+                     "finalized", 30, "bob", "alice", "direct", "private-eth-pilot"),
+            Movement("ethereum", "mainnet", "erc20:usdc", "eth-tx", 1, "eth-block", 100,
+                     "finalized", 900, "bob", "alice", "direct", "private-eth-pilot"),
+            bitcoin_output(network="mainnet", tx_id="btc-tx", vout=0,
+                           block_hash="btc-block", height=200, value_sats=500,
+                           destination="script-hash", source_id="private-btc-pilot"),
+            Movement("bloch", "genesis4-mainnet", "blch", "blch-tx", 0,
+                     "blch-block", 300, "finalized", 700, "blch-script", None,
+                     "unknown", "private-blch-pilot"),
+        ]
+        times = {
+            ("ethereum", "mainnet", "eth-block"): "2026-09-02T12:00:00+00:00",
+            ("bitcoin", "mainnet", "btc-block"): "2026-09-03T12:00:00Z",
+            ("bloch", "genesis4-mainnet", "blch-block"): "2026-09-04T12:00:00Z",
+        }
+        graph = GraphAnalytics.from_movements(movements, block_times=times)
+        view = graph.wallet_constellation(
+            chain="ethereum", network="mainnet", asset_id="eth", wallet="bob",
+            start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        self.assertEqual(view["summary"]["observed_events"], 1)
+        observed = next(node for node in view["nodes"] if node["kind"] == "observed_event")
+        self.assertEqual(observed["event_id"], movements[0].key)
+        self.assertEqual(observed["transaction_id"], "eth-tx")
+        self.assertEqual(observed["block_ref"], "eth-block")
+        self.assertEqual(observed["observed_at"], "2026-09-02T12:00:00Z")
+        self.assertEqual(observed["source_id"], "private-eth-pilot")
+        self.assertNotIn("usdc", str(view))
+        for chain, network, asset, wallet in (
+            ("bitcoin", "mainnet", "btc", "script-hash"),
+            ("bloch", "genesis4-mainnet", "blch", "blch-script"),
+        ):
+            with self.subTest(chain=chain):
+                result = graph.wallet_constellation(
+                    chain=chain, network=network, asset_id=asset, wallet=wallet,
+                    start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+                self.assertEqual([edge["kind"] for edge in result["links"]],
+                                 ["observed_destination"])
+                self.assertEqual(result["summary"]["direct_sender_links"], 0)
+
+    def test_movement_adapter_rejects_missing_time_unsafe_sender_and_duplicates(self):
+        output = bitcoin_output(network="mainnet", tx_id="btc-tx", vout=0,
+                                block_hash="btc-block", height=200, value_sats=500,
+                                destination="script-hash", source_id="private-btc-pilot")
+        times = {("bitcoin", "mainnet", "btc-block"): "2026-09-03T12:00:00Z"}
+        with self.assertRaisesRegex(ValueError, "timestamp required"):
+            events_from_movements([output], block_times={})
+        with self.assertRaisesRegex(ValueError, "timezone"):
+            events_from_movements([output], block_times={times.popitem()[0]: "2026-09-03T12:00:00"})
+        times = {("bitcoin", "mainnet", "btc-block"): "2026-09-03T12:00:00Z"}
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            GraphAnalytics.from_movements([output, output], block_times=times)
+        with self.assertRaisesRegex(ValueError, "event bound"):
+            GraphAnalytics.from_movements([output, output], block_times=times, max_events=1)
+        attributed = Movement("bitcoin", "mainnet", "btc", "btc-tx", 0,
+                              "btc-block", 200, "confirmed", 500, "script-hash",
+                              "alice", "direct", "private-btc-pilot")
+        with self.assertRaisesRegex(ValueError, "UTXO"):
+            events_from_movements([attributed], block_times=times)
+        heuristic = Movement("ethereum", "mainnet", "eth", "eth-tx", 0,
+                             "eth-block", 1, "finalized", 1, "bob", "alice",
+                             "heuristic", "private-eth-pilot")
+        with self.assertRaisesRegex(ValueError, "heuristic"):
+            events_from_movements([heuristic], block_times={
+                ("ethereum", "mainnet", "eth-block"): "2026-09-03T12:00:00Z"})
 
 
 if __name__ == "__main__":

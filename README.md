@@ -10,6 +10,8 @@ The [Graphus preview](https://bloch-graphus.pages.dev/) presents the initial [th
 
 This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, bounded private Bitcoin, Ethereum, and Bloch transaction pilots, a private Bloch query index, deterministic graph features, offline ML research tools, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
 
+Private research now includes [second-operator Bitcoin sample reconciliation](docs/bitcoin-second-source-reconciliation.md), a bounded [Ethereum movement query index](docs/ethereum-private-query-index.md), an event-centered normalized [graph adapter](docs/graph-intelligence.md), and [aggregate structural monitoring](docs/ml-validation.md). None is connected to the public synthetic dashboard or a production decision service.
+
 ## Run locally
 
 ```sh

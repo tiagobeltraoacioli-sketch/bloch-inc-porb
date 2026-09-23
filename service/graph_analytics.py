@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import sqrt
 
+from .normalization import Movement
+
 
 def timestamp(value):
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -27,6 +29,10 @@ class TemporalEvent:
     source_id: str
     finality: str
     sender_attribution: str
+    transaction_id: str | None = None
+    event_index: int | None = None
+    block_ref: str | None = None
+    height_or_slot: int | None = None
 
     def __post_init__(self):
         if not all(isinstance(value, str) and value for value in (self.event_id, self.chain, self.network, self.asset_id, self.destination, self.source_id)):
@@ -46,6 +52,42 @@ class TemporalEvent:
         timestamp(self.observed_at)
 
 
+def events_from_movements(movements, *, block_times, max_events=50000):
+    """Adapt normalized observations using explicit, source-provided block times.
+
+    The caller must validate the block-time evidence and sample manifest. This
+    adapter never substitutes ingestion time for an absent block timestamp.
+    """
+    if type(max_events) is not int or not 1 <= max_events <= 50000:
+        raise ValueError("invalid event bound")
+    if not isinstance(block_times, dict):
+        raise ValueError("block timestamp mapping required")
+    movements = tuple(movements)
+    if len(movements) > max_events:
+        raise ValueError("event bound exceeded")
+    events = []
+    for movement in movements:
+        if not isinstance(movement, Movement):
+            raise ValueError("normalized Movement required")
+        if movement.finality not in {"confirmed", "finalized"}:
+            raise ValueError("unconfirmed movement excluded")
+        if movement.sender_attribution == "heuristic":
+            raise ValueError("heuristic sender attribution excluded")
+        key = (movement.chain, movement.network, movement.block_ref)
+        block_time = block_times.get(key)
+        if not isinstance(block_time, str):
+            raise ValueError("source-provided block timestamp required for every movement")
+        observed_at = timestamp(block_time).isoformat().replace("+00:00", "Z")
+        events.append(TemporalEvent(
+            movement.key, movement.chain, movement.network, movement.asset_id,
+            movement.sender, movement.destination, movement.amount_base_units,
+            observed_at, movement.source_id, movement.finality,
+            movement.sender_attribution, movement.tx_id, movement.event_index,
+            movement.block_ref, movement.height_or_slot,
+        ))
+    return tuple(events)
+
+
 class GraphAnalytics:
     def __init__(self, events, max_events=50000):
         events = tuple(events)
@@ -55,6 +97,12 @@ class GraphAnalytics:
         if len(keys) != len(set(keys)):
             raise ValueError("duplicate chain event")
         self.events = events
+
+    @classmethod
+    def from_movements(cls, movements, *, block_times, max_events=50000):
+        """Build a bounded private observation graph from normalized movements."""
+        return cls(events_from_movements(movements, block_times=block_times,
+                                         max_events=max_events), max_events=max_events)
 
     def _window(self, chain, network, asset_id, start, end):
         lower, upper = timestamp(start), timestamp(end)
@@ -147,6 +195,8 @@ class GraphAnalytics:
                 "observed_at": item.observed_at, "source_id": item.source_id,
                 "finality": item.finality, "amount_base_units": item.amount_base_units,
                 "sender_attribution": item.sender_attribution,
+                "transaction_id": item.transaction_id, "event_index": item.event_index,
+                "block_ref": item.block_ref, "height_or_slot": item.height_or_slot,
             })
             links.append({
                 "from": event_node, "to": f"reference:{item.destination}",
