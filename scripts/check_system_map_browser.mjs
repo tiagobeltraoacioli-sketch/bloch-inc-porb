@@ -79,6 +79,7 @@ try{
   await page.click('#capture-filtered-analytics');await page.waitForURL('**/analytics*');await page.waitForFunction(()=>document.querySelector('#lab-badge')?.textContent.includes('REAL NETWORK COLLECTION'));assert.equal(await page.evaluate(()=>sessionStorage.getItem('graphus.analytics.network.v1')),null);
   await page.goto(origin+'/map?category=access&module=api-keys');assert.equal(await page.locator('#node-inspector a[href*="view=access"]').count(),1);
   if(!live){
+    await page.keyboard.press('Escape');await page.setViewportSize({width:1440,height:1000});
     await page.route('**/api/chain/network?*',route=>route.fulfill({status:503,json:{error:'test-only failure'}}));await page.click('#capture-button');await idle();assert.match(await page.locator('#capture-status').innerText(),/503/);assert.equal(await page.locator('#capture-result').isVisible(),false);
     await page.unroute('**/api/chain/network?*');await page.route('**/api/chain/network?*',route=>route.fulfill(new URL(route.request().url()).searchParams.has('cursor')?{status:503,json:{error:'test-only second-page failure'}}:{json:fixture(route.request().url())}));
     await page.selectOption('#capture-pages','2');await page.click('#capture-button');await idle();assert.match(await page.locator('#capture-status').innerText(),/503.*1 completed/);const retained=await exported();assert.equal(retained.dataset.snapshots.length,1);

@@ -1,35 +1,38 @@
 import {fetchEvidence,mergeEvidence,selectRecords,filteredEvidence,compareEvidence,COLLECTION_LIMITS} from './system_evidence.js';
+import {summarizeSample} from './system_observation.js';
 
-export function createEvidenceWorkbench(){
+export function createEvidenceWorkbench({onObservation=()=>{}}={}){
   const $=id=>document.getElementById(id);
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const short=value=>value.length>26?value.slice(0,12)+'…'+value.slice(-10):value;
   const link=(text,href)=>{const a=el('a',text);a.href=href;if(href.startsWith('https://')){a.target='_blank';a.rel='noopener noreferrer';}return a;};
   const button=(text,action)=>{const b=el('button',text);b.type='button';b.onclick=action;return b;};
-  let packet=null,baseline=null,comparison=null,comparisonPage=0,recordPage=0,controller=null,requestId=0,capacityStopped=false;
+  let packet=null,baseline=null,comparison=null,comparisonPage=0,recordPage=0,controller=null,requestId=0,capacityStopped=false,phase='idle';
   const filters={query:'capture-search',kind:'filter-kind',direction:'filter-direction',minBlock:'filter-from',maxBlock:'filter-to',minimum:'filter-minimum',maximum:'filter-maximum'};
   const options=()=>Object.fromEntries(Object.entries(filters).map(([key,id])=>[key,$(id).value]));
   function resetFilters(){for(const[key,id]of Object.entries(filters))$(id).value=['kind','direction'].includes(key)?'all':'';recordPage=0;if(packet)ledger();}
+  function publish(){onObservation({asset:$('capture-asset').value,phase,busy:Boolean(controller),canLoadEarlier:!$('capture-older').disabled,message:$('capture-status').textContent,sample:summarizeSample(packet)});}
   function controls(){
     const busy=Boolean(controller);$('capture-button').disabled=busy;$('capture-pages').disabled=busy;$('capture-cancel').hidden=!busy;
     $('capture-older').disabled=busy||!packet||capacityStopped||packet.dataset.snapshots.length>=COLLECTION_LIMITS.pages||packet.pagination.next_cursor===null;
     $('baseline-pin').disabled=busy||!packet;$('baseline-clear').disabled=!baseline;$('baseline-export').disabled=!baseline;$('comparison-export').disabled=!comparison;
     $('capture-baseline-panel').hidden=!packet&&!baseline;
+    publish();
   }
   function clearCapture(message='Workspace cleared. Captures and baseline were kept only in this tab.',keepBaseline=false){
-    requestId++;controller?.abort();controller=null;packet=null;comparison=null;capacityStopped=false;recordPage=comparisonPage=0;if(!keepBaseline)baseline=null;
+    requestId++;controller?.abort();controller=null;packet=null;comparison=null;capacityStopped=false;phase='idle';recordPage=comparisonPage=0;if(!keepBaseline)baseline=null;
     $('capture-result').hidden=true;$('capture-status').textContent=message;
     for(const id of ['capture-ledger','capture-source','capture-metrics','capture-blocks','capture-types','capture-provenance','filter-totals'])$(id).replaceChildren();
     resetFilters();renderComparison();controls();
   }
-  function cancel(){requestId++;controller?.abort();controller=null;$('capture-status').textContent=`Collection canceled. ${packet?packet.dataset.snapshots.length+' completed source pages retained.':'No source page was committed.'}`;controls();}
-  function setAsset(asset){if($('capture-asset').value!==asset){clearCapture('Asset changed. Capture a new source page.');$('capture-asset').value=asset;}$('reference-asset').value=asset;}
+  function cancel(){requestId++;controller?.abort();controller=null;phase='canceled';$('capture-status').textContent=`Collection canceled. ${packet?packet.dataset.snapshots.length+' completed source pages retained.':'No source page was committed.'}`;controls();}
+  function setAsset(asset){if($('capture-asset').value!==asset){$('capture-asset').value=asset;clearCapture('Asset changed. Capture a new source page.');}$('reference-asset').value=asset;}
   $('capture-asset').onchange=()=>{clearCapture('Asset changed. Capture a new source page.');$('reference-asset').value=$('capture-asset').value;};
   $('capture-clear').onclick=()=>clearCapture();$('capture-cancel').onclick=cancel;
   async function collect(older=false){
     if(controller||older&&$('capture-older').disabled)return;
     if(!older)clearCapture('Starting a new source collection. The pinned baseline is retained.',true);
-    const id=++requestId,asset=$('capture-asset').value,active=new AbortController();controller=active;
+    const id=++requestId,asset=$('capture-asset').value,active=new AbortController();controller=active;phase='collecting';
     const wanted=Math.min(Number($('capture-pages').value),COLLECTION_LIMITS.pages-(packet?.dataset.snapshots.length||0));
     let completed=0;controls();
     try{
@@ -37,6 +40,7 @@ export function createEvidenceWorkbench(){
         const cursor=packet?packet.pagination.next_cursor:null;
         if(packet&&cursor===null)break;
         $('capture-status').textContent=`Reading real ${asset} source page ${page+1}/${wanted}… ${packet?packet.diagnostics.records+' committed records retained.':''}`;
+        publish();
         const timer=setTimeout(()=>active.abort(),65000);let result;
         try{result=await fetchEvidence(asset,{signal:active.signal,cursor});}finally{clearTimeout(timer);}
         if(id!==requestId)return;if(active.signal.aborted)throw new Error('Source request timed out.');
@@ -44,9 +48,9 @@ export function createEvidenceWorkbench(){
         if(id!==requestId)return;if(active.signal.aborted)throw new Error('Source request timed out.');
         packet=merged;completed++;renderCapture();
       }
-      $('capture-status').textContent=`Captured ${packet.diagnostics.records} unique ${asset} records across ${packet.dataset.snapshots.length} source pages. ${completed} pages added; ${packet.collection?.duplicate_records_omitted||0} overlapping records omitted. Latest retrieval: ${packet.dataset.retrieved_at}.`;
+      phase='ready';$('capture-status').textContent=`Captured ${packet.diagnostics.records} unique ${asset} records across ${packet.dataset.snapshots.length} source pages. ${completed} pages added; ${packet.collection?.duplicate_records_omitted||0} overlapping records omitted. Latest retrieval: ${packet.dataset.retrieved_at}.`;
     }catch(error){
-      if(id===requestId){capacityStopped=/capacity|3 MB/.test(error.message);$('capture-status').textContent=`${active.signal.aborted?'Source request timed out.':error.message} ${packet?packet.dataset.snapshots.length+' completed source pages remain available with their original provenance.':'No source page was committed.'}`;}
+      if(id===requestId){phase='error';capacityStopped=/capacity|3 MB/.test(error.message);$('capture-status').textContent=`${active.signal.aborted?'Source request timed out.':error.message} ${packet?packet.dataset.snapshots.length+' completed source pages remain available with their original provenance.':'No source page was committed.'}`;}
     }finally{if(id===requestId){controller=null;controls();}}
   }
   $('capture-form').onsubmit=event=>{event.preventDefault();collect();};$('capture-older').onclick=()=>collect(true);
@@ -80,9 +84,9 @@ export function createEvidenceWorkbench(){
   function download(value,name){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=link('',url);a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   const filename=(value,prefix)=>`graphus-${prefix}-${value.dataset.asset}-${value.dataset_sha256.slice(0,12)}.json`;
   $('capture-export').onclick=()=>{if(packet)download(packet,filename(packet,'collection'));};
-  function analyze(value){try{sessionStorage.setItem('graphus.analytics.network.v1',JSON.stringify(value));location.href='analytics.html?import=network';}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and import it into Analytics.';}}
+  function analyze(value){try{sessionStorage.setItem('graphus.analytics.network.v1',JSON.stringify(value));location.href='analytics.html?import=network';return true;}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and import it into Analytics.';publish();return false;}}
   $('capture-analytics').onclick=()=>{if(packet)analyze(packet);};
-  function graph(value,reference=''){try{sessionStorage.setItem('graphus.constellation.evidence.v1',JSON.stringify(value));location.href='constellation.html?'+new URLSearchParams({import:'evidence',...(reference?{reference}:{})});}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and open it in Constellation.';}}
+  function graph(value,reference=''){try{sessionStorage.setItem('graphus.constellation.evidence.v1',JSON.stringify(value));location.href='constellation.html?'+new URLSearchParams({import:'evidence',...(reference?{reference}:{})});return true;}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and open it in Constellation.';publish();return false;}}
   $('capture-graph').onclick=()=>{if(packet)graph(packet);};
   async function useFiltered(target='export',reference=''){if(!packet)return;const source=packet;try{const subset=await filteredEvidence(source,options());if(packet!==source)return;if(target==='analytics')analyze(subset);else if(target==='graph')graph(subset,reference);else download(subset,filename(subset,'filtered'));}catch(error){$('filter-status').textContent=error.message;}}
   $('capture-filtered-export').onclick=()=>useFiltered();$('capture-filtered-analytics').onclick=()=>useFiltered('analytics');$('capture-filtered-graph').onclick=()=>useFiltered('graph');
@@ -113,5 +117,15 @@ export function createEvidenceWorkbench(){
   $('baseline-export').onclick=()=>{if(baseline)download(baseline,filename(baseline,'baseline'));};
   $('comparison-export').onclick=()=>{if(comparison)download(comparison,`graphus-comparison-${comparison.asset}-${comparison.current_sha256.slice(0,12)}.json`);};
   $('comparison-kind').onchange=()=>{comparisonPage=0;comparisonLedger();};$('comparison-prev').onclick=()=>{comparisonPage--;comparisonLedger();};$('comparison-next').onclick=()=>{comparisonPage++;comparisonLedger();};
-  controls();return {setAsset};
+  controls();return {setAsset,
+    useCurrent(asset,action){
+      if(!packet||packet.dataset.asset!==asset||controller)return false;
+      if(action==='graph')return graph(packet);
+      else if(action==='analytics')return analyze(packet);
+      else if(action==='export')download(packet,filename(packet,'collection'));
+      else if(action==='older'&&!$('capture-older').disabled)collect(true);
+      else return false;
+      return true;
+    }
+  };
 }

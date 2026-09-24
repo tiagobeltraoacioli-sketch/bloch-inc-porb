@@ -1,5 +1,6 @@
 import {ASSETS,LAYERS,STATUS,CATEGORIES,MODULES,CONNECTIONS,matchesModule,effectiveAsset,actionLinks} from './system_modules.js';
-import {createEvidenceWorkbench} from './system_workbench.js';
+import {createEvidenceWorkbench} from './system_workbench.js?v=20260924observation';
+import {supportsCapturedSample,sampleForModule} from './system_observation.js';
 const $=id=>document.getElementById(id),byId=new Map(MODULES.map(n=>[n.id,n]));
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const button=(text,action)=>{const b=el('button',text);b.type='button';b.onclick=action;return b;};
@@ -8,7 +9,8 @@ const svg=(tag,attrs={})=>{const n=document.createElementNS('http://www.w3.org/2
 const compact=matchMedia('(max-width:1100px)');
 const state={asset:'all',layer:'all',category:'all',status:'all',query:'',selected:null,directory:matchMedia('(max-width:700px)').matches,inspectorOpen:false,box:[0,0,1530,930]};
 let dimensions=[1530,930],positions=new Map(),layoutKey='',fitWidth=1530,drag=null,connection=null,detailsMarker=null,expandMarker=null;
-const {setAsset:setCaptureAsset}=createEvidenceWorkbench();
+let observation={phase:'idle',sample:null,busy:false},observationKey='';
+const {setAsset:setCaptureAsset,useCurrent}=createEvidenceWorkbench({onObservation:updateObservation});
 $('layer-filter').append(...LAYERS.map(value=>new Option(value,value)));
 $('category-filter').replaceChildren(...Object.entries(CATEGORIES).map(([value,text])=>new Option(text,value)));
 function readLocation(){
@@ -34,7 +36,7 @@ function render({refit=false}={}){
   $('map-results').hidden=!state.directory;$('map-canvas-wrap').hidden=state.directory;
   $('show-map').setAttribute('aria-pressed',String(!state.directory));$('show-directory').setAttribute('aria-pressed',String(state.directory));
   for(const id of ['zoom-in','zoom-out','zoom-reset'])$(id).disabled=state.directory;
-  draw(nodes,refit);inspect();writeLocation();
+  draw(nodes,refit);inspect();renderObservation();writeLocation();
 }
 function select(id){
   const node=byId.get(id);if(!node)return;
@@ -53,6 +55,33 @@ function openDetails(){
   if(compact.matches&&!$('map-details-dialog').open){detailsMarker=document.createComment('module details');$('inspector-shell').before(detailsMarker);$('map-details-dialog').append($('inspector-shell'));$('inspector-shell').hidden=false;$('map-details-dialog').showModal();$('node-inspector').focus({preventScroll:true});}
   syncInspector();$('node-inspector').scrollTop=0;if(!compact.matches)$('inspector-shell').scrollIntoView({block:'nearest'});
 }
+function openWorkbench(){closeDetails();closeExpanded();$('module-workbench').scrollIntoView({block:'start'});$('capture-status').focus({preventScroll:true});}
+function useSample(action,asset){if(!useCurrent(asset,action)){openWorkbench();announce('Could not open the sample. Inspect the data workbench for details.');return;}if(action==='older')openWorkbench();}
+function updateObservation(value){const key=JSON.stringify(value);if(key===observationKey)return;observationKey=key;observation=value;renderObservation();}
+function renderObservation(){
+  const {sample,busy,phase}=observation,phases={idle:'Not captured',collecting:'Collecting',ready:'Captured',error:'Source request failed',canceled:'Capture canceled'};
+  const count=(value,label)=>`${value.toLocaleString()} ${label}${value===1?'':'s'}`;
+  const status=$('observation-status');status.textContent=phases[phase];status.dataset.phase=phase;
+  $('observation-title').textContent=sample?`${sample.asset} · ${count(sample.records,'record')} · ${count(sample.pages,'source page')}`:'Connect the map to a source sample';
+  $('observation-message').textContent=observation.message||'Capture public observations to inspect their source and reuse the same records across tools.';
+  $('observation-source').textContent=sample?`${sample.source} · Highest sampled anchor ${sample.anchor.height} · Retrieved ${sample.retrieved_at}`:'Source queries run only when requested.';
+  $('observation-open').onclick=openWorkbench;
+  for(const node of MODULES){
+    const available=sampleForModule(node,observation,state.asset),g=$('graphus-map').querySelector(`[data-module="${node.id}"]`),card=$('map-results').querySelector(`[data-module="${node.id}"]`);
+    if(g){g.querySelector('.sample-indicator')?.remove();g.setAttribute('aria-label',`${node.title}, ${STATUS[node.status]}, ${node.access}${available?`, captured ${available.asset} sample available`:''}`);if(available){const p=positions.get(node.id),dot=svg('circle',{cx:p.x+196,cy:p.y+16,r:4,class:'sample-indicator'}),title=svg('title');title.textContent=`Captured ${available.asset} sample available`;dot.append(title);g.append(dot);}}
+    if(card){card.querySelector('.sample-badge')?.remove();if(available)card.append(el('span',`Captured ${available.asset} sample available`,'sample-badge'));}
+  }
+  const panel=$('module-observation'),node=byId.get(state.selected);if(!panel||!node)return;panel.replaceChildren();
+  const current=sampleForModule(node,observation,state.asset);panel.append(el('h4','Captured sample'));
+  if(!current){panel.append(el('p',sample?'The current capture does not apply to this module and asset selection.':'No source page has been captured in this tab.'),button('Open data workbench',openWorkbench));return;}
+  panel.append(el('p',`${current.asset} / ${current.network} · ${count(current.records,'record')} · ${count(current.references,'reference')} · ${count(current.pages,'source page')}`,'observation-counts'),el('p',`${count(current.transactions,'transaction')} · ${count(current.blocks,'returned block')} · ${count(current.missing_timestamps,'record')} without timestamps`));
+  const details=el('details');details.append(el('summary','Source, anchor and dataset digest'));
+  const fields=el('dl');for(const [label,value]of [['Source',current.source],['Retrieved',current.retrieved_at],['Highest sampled anchor',`${current.anchor.height} · ${current.anchor.hash}`],['Source finality',current.anchor.finality||'Not supplied'],['Dataset SHA-256',current.dataset_sha256]])fields.append(el('dt',label),el('dd',value));details.append(fields,el('p',current.coverage));panel.append(details);
+  panel.append(el('p','These actions use the full captured sample. Ledger filters apply only in the data workbench.','observation-note'));
+  if(phase==='error'||phase==='canceled'||busy)panel.append(el('p',observation.message,'observation-note'));
+  const actions=el('div',undefined,'observation-actions');actions.append(button('Inspect captured records',openWorkbench));
+  for(const [label,action]of [['Graph captured sample','graph'],['Analyze captured sample','analytics'],['Export captured JSON','export'],['Load earlier sample pages','older']]){const b=button(label,()=>useSample(action,current.asset));b.disabled=busy||(action==='older'&&!observation.canLoadEarlier);actions.append(b);}panel.append(actions);
+}
 function restoreDetails(){
   if(!detailsMarker)return;detailsMarker.replaceWith($('inspector-shell'));detailsMarker=null;state.inspectorOpen=false;syncInspector();$('show-details').focus({preventScroll:true});
 }
@@ -67,10 +96,11 @@ function inspect(){
   const target=$('node-inspector');target.replaceChildren();if(connection){renderConnection(connection);return;}const node=byId.get(state.selected);
   if(!node){target.append(el('p','MODULE INSPECTOR','section-index'),el('h3','Choose a module.'),el('p','Inspect its inputs, outputs and dependencies. Available actions open the corresponding tool.'));return;}
   target.append(el('p',`${node.layer} / ${CATEGORIES[node.category]}`,'section-index'),el('h3',node.title),el('p',`${STATUS[node.status]} · ${node.access} access`,'module-badge'),el('p',node.description));
+  if(supportsCapturedSample(node)){const section=el('section',undefined,'module-observation');section.id='module-observation';section.setAttribute('aria-label','Captured public sample');target.append(section);}
   for(const[heading,items]of [['Inputs',node.inputs],['Outputs',node.outputs]]){target.append(el('h4',heading));const list=el('ul');list.append(...items.map(text=>el('li',text)));target.append(list);}
   target.append(el('h4','Coverage & implementation'),el('p',node.limits,'module-limit'));
   const actions=el('div',undefined,'module-actions');
-  if(node.actions.includes('capture')){const asset=effectiveAsset(node,state.asset);actions.append(button(`Capture ${asset} evidence`,()=>{setCaptureAsset(asset);closeDetails();closeExpanded();$('module-workbench').scrollIntoView({block:'start'});$('capture-form').requestSubmit();}));}
+  if(node.actions.includes('capture')){const asset=effectiveAsset(node,state.asset);actions.append(button(`Capture ${asset} evidence`,()=>{setCaptureAsset(asset);openWorkbench();$('capture-form').requestSubmit();}));}
   for(const action of actionLinks(node,state.asset))actions.append(link(action.label+' ↗',action.href));
   actions.append(button('Copy module link',async()=>{try{await navigator.clipboard.writeText(location.href);announce('Module link copied.');}catch{announce('Copy unavailable. The address bar contains this module link.');}}));target.append(actions);
   for(const[heading,edges,key]of [['Upstream modules',CONNECTIONS.filter(e=>e.to===node.id),'from'],['Downstream modules',CONNECTIONS.filter(e=>e.from===node.id),'to']]){

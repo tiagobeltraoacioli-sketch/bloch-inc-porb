@@ -17,6 +17,16 @@ The details panel opens beside the diagram on wide screens. On screens up to 1,1
 
 **Expand workspace** opens the controls and diagram in a full-window dialog. **Exit expanded view** or Escape restores the original workspace. Native dialogs manage focus and prevent interaction with content behind them. Source-module **Capture … evidence** actions start the selected capture and return to its workbench, including from the expanded workspace.
 
+### Current captured observations
+
+The source panel reflects the current committed workbench capture: asset, record/page counts, source, highest sampled anchor and retrieval time. Its states distinguish no capture, collection in progress, completed capture, failed source request and cancellation. It does not run background queries or claim continuous source health.
+
+Blue dots in the diagram and badges in the directory identify public modules that can open the current sample. The selected asset must match, and the module must support captured records. Private scores, access administration, research prototypes, Space series and independent balance queries do not receive these badges. A badge means a sample is available, not that a module ran or that a private score was calculated.
+
+Applicable module inspectors show reference, transaction, returned-block and missing-timestamp counts, plus source coverage, finality, full anchor hash and dataset SHA-256. **Inspect captured records** returns to the workbench. **Graph captured sample**, **Analyze captured sample** and **Export captured JSON** reuse the exact full packet; workbench ledger filters do not alter these actions. **Load earlier sample pages** explicitly requests the next batch under the existing page limits. Graph/analysis handoffs do not issue another source query. If browser storage blocks a handoff, the workbench displays the export/import fallback and keeps the collection.
+
+The panel updates after each committed page. A failed or canceled continuation keeps those pages and their original digest available, while reporting the interruption. Switching the capture asset or clearing the workspace removes stale indicators. Switching only a map filter never clears or changes the underlying capture. Captures remain in tab memory and are not a permanent multi-asset data store.
+
 ## AML evidence preparation
 
 The workbench queries the existing public `/api/chain/network?asset=...` endpoint only when requested. BTC, ETH, Ethereum USDT/USDC and BLCH use their existing bounded source adapters. This does not activate a sanctions matcher, case manager, automatic monitoring schedule, identity resolver or AML classifier. Those modules retain their documented prototype/planned stages. The private Red/Blue portal provides descriptive observation scores under its existing model and organization access contract.
@@ -50,11 +60,13 @@ Full and filtered collections also open directly in Constellation through **Grap
 ## Verification and deployment
 
 ```sh
-node --test tests/test_system_map.mjs
+node --test tests/test_system_map.mjs tests/test_system_observation.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
 GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_panel_browser.mjs
 GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_panel_browser.mjs
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_observation_browser.mjs
+GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_observation_browser.mjs
 ```
 
 Unit checks cover module contracts, fixed product routes, exact values, stripped fields, reproducible digests, cursor/anchor binding, atomic deduplication, page/record capacity, exact filters, subset lineage and comparisons with conflicting anchors. Local WebKit uses explicitly synthetic fixtures and checks module navigation, keyboard/connection selection, historical collection, baseline retention/comparison, filtered exports, ledger controls, partial failures/cancellation, asset-switch races, capacity, Analytics handoff and mobile layout. Live mode uses actual deployed APIs for all five assets, collects two pages and retries a failed public read once. The browser harness prints only aggregate counts, not private data.
@@ -62,6 +74,8 @@ Unit checks cover module contracts, fixed product routes, exact values, stripped
 Set `GRAPHUS_MAP_ASSETS=USDC` (or a comma-separated subset of the five supported assets) to repeat only a failed live source check. Live failures log the public response status, cursor and a bounded error-body excerpt for diagnosis.
 
 The panel regression harness checks actual pointer clicks and SVG bounds at 1,440, 1,280, 1,024 and 390 px. It covers the formerly cropped last column, all 44 modules, zoom retention, focus, layer/search filters, empty results, expanded-view sizing, Escape, compact dialogs, dependency navigation, deep links and a source-module capture action. Local capture uses a fixture; production mode requests BTC from the real deployed endpoint. Screenshots remain in ignored `.data/system-map-panel/`.
+
+The observation harness checks all five assets locally and BTC/ETH/BLCH in production by default; `GRAPHUS_MAP_ASSETS` selects an explicit subset. It verifies sample metadata, exact inspector exports despite ledger filters, module/asset boundaries, graph and Analytics handoffs without additional source queries, and phone inspection. Local fixtures additionally exercise failed continuation, retry, cancellation, late responses after an asset switch and unavailable browser storage. Screenshots remain in ignored `.data/system-observation/`.
 
 Deploy from `graphus/` with `wrangler pages deploy . --project-name bloch-graphus --branch main` so its existing Functions are included. The portal screen-link change deploys separately from `site/` to `rednblue-space`. Neither deployment contains private handoff files or operator research artifacts.
 
