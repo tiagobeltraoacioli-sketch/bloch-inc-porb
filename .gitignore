@@ -5,3 +5,7 @@ __pycache__/
 .wrangler/
 *.sqlite3
 .data/
+
+# Local desktop build products and test artifacts
+desktop/dist/
+space/test-artifacts/

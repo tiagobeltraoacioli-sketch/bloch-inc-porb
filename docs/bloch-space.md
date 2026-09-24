@@ -232,3 +232,11 @@ Sources: [Blockstream Esplora API](https://github.com/blockstream/esplora/blob/m
 [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/),
 [Ethereum `eth_feeHistory` specification](https://ethereum.github.io/execution-apis/api/methods/eth_feeHistory/),
 and the Bloch Explorer public `/api/v1` and `/indexer` APIs.
+
+## Intelligence, PWA and desktop release
+
+See [the intelligence release](bloch-space-intelligence.md) for the new statistical
+and ML panels, direct Graphus integration, account workspace, PWA installation,
+and universal macOS desktop package. The application now opens in the dark
+research palette; the light theme remains selectable. Bare-domain navigation
+opens `/app/`, while query-string record explorer links are preserved.

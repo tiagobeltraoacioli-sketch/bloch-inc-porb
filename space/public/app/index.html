@@ -1,15 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f8faf4">
   <meta name="description" content="Live Bitcoin, Ethereum and Bloch data workspace with interactive charts, source records and network switching.">
-  <title>Data workspace — Bloch Space</title>
+  <title>Bloch Space — Multichain intelligence</title>
   <link rel="icon" href="/assets/favicon.png">
   <link rel="stylesheet" href="/assets/site.css">
   <link rel="stylesheet" href="/assets/light.css">
   <link rel="stylesheet" href="/assets/workspace.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png">
+  <link rel="stylesheet" href="/assets/research.css">
+  <script src="/assets/pwa.js" type="module"></script>
   <script src="/assets/workspace.js" type="module"></script>
 </head>
 <body>
@@ -17,12 +21,12 @@
   <header class="topbar workspace-topbar">
     <a class="brand" href="/" aria-label="Bloch Space home"><img src="/assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-rule"></span><span class="brand-word">SPACE<span class="brand-pulse"></span></span></a>
     <span class="workspace-topbar-label">DATA WORKSPACE <span> / </span> LIVE SOURCES</span>
-    <a class="workspace-explorer-link" href="/">Explorer ↗</a>
+    <a class="workspace-explorer-link" href="/?network=bloch">Explorer ↗</a><a class="workspace-explorer-link" href="/account/">BI-PoRB · Sign in</a><button id="install-app" class="theme-toggle" type="button">Install app ↓</button>
     <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme"><span aria-hidden="true">◐</span><span class="theme-toggle-label">Dark</span></button>
   </header>
-  <main id="workspace-main" class="workspace">
+  <div id="connectivity" class="connectivity" role="status" hidden></div><main id="workspace-main" class="workspace">
     <section class="workspace-intro">
-      <div><p class="eyebrow"><span class="live-pip"></span> BLOCH SPACE / MULTICHAIN INTELLIGENCE</p><h1>One workspace.<br><em>Three networks.</em></h1><p>Live chain observations, linked records and charts. Select a network to change the whole workspace instantly.</p></div>
+      <div><p class="eyebrow"><span class="live-pip"></span> BLOCH SPACE / MULTICHAIN INTELLIGENCE</p><h1>Signals into <em>understanding.</em></h1><p>Three networks. Source-backed intelligence. Explore the data, test a model, follow the evidence.</p></div>
       <div class="workspace-orbit" aria-hidden="true"><span>₿</span><span>◇</span><span>✳</span></div>
     </section>
     <nav id="network-picker" class="workspace-networks" aria-label="Select blockchain">
@@ -34,19 +38,19 @@
       <aside class="workspace-sidebar" aria-label="Data pages">
         <div class="workspace-sidebar-heading"><span>DATA ATLAS</span><strong id="sidebar-network">Bitcoin</strong></div>
         <nav id="view-picker" class="workspace-side-nav" aria-label="Network data pages"></nav>
-        <div class="workspace-sidebar-bottom"><span>INSPECT A RECORD</span><form id="workspace-search" role="search"><label for="workspace-query">Block, transaction or address</label><input id="workspace-query" type="search" autocomplete="off" spellcheck="false" required placeholder="Search an identifier"><button type="submit">Open in explorer ↗</button></form><p>Exact records open in the unified explorer.</p></div>
+        <div class="workspace-sidebar-bottom"><a class="research-account" href="/account/">◈ BI-PoRB workspace ↗</a><span>INSPECT A RECORD</span><form id="workspace-search" role="search"><label for="workspace-query">Block, transaction or address</label><input id="workspace-query" type="search" autocomplete="off" spellcheck="false" required placeholder="Search an identifier"><button type="submit">Open in explorer ↗</button></form><p>Exact records open in the unified explorer.</p></div>
       </aside>
       <section class="workspace-console" aria-labelledby="workspace-title">
       <div class="workspace-console-head"><div><p id="network-strap" class="eyebrow"></p><h2 id="workspace-title"></h2><p id="network-description"></p></div><div class="workspace-actions"><span id="workspace-status" role="status" aria-live="polite">Connecting…</span><button id="workspace-refresh" type="button">Refresh ↻</button></div></div>
       <div class="workspace-viewbar"><span id="workspace-context" class="workspace-context">LIVE SOURCE VIEW</span><div id="range-picker" class="workspace-ranges" aria-label="Select analytics window"></div></div>
       <div id="workspace-stats" class="workspace-stats" aria-live="polite"></div>
-      <div id="workspace-charts" class="workspace-charts"></div>
       <div id="workspace-feature"></div>
+      <div id="workspace-charts" class="workspace-charts"></div>
       <section class="workspace-ledger"><div class="workspace-section-head"><div><p class="eyebrow">SOURCE RECORDS</p><h3 id="workspace-table-title">Every point, inspectable.</h3></div><button id="workspace-csv" type="button" disabled>Download CSV ↓</button></div><p id="workspace-coverage"></p><div class="workspace-table-scroll"><table id="workspace-table"></table></div></section>
       <section class="workspace-evidence"><div><p class="eyebrow">ORIGIN AND BOUNDARY</p><h3>See where each number came from.</h3></div><div id="workspace-source"></div><details><summary>Full API response</summary><pre id="workspace-json"></pre></details></section>
       </section>
     </div>
   </main>
-  <footer><span>© 2026 Bloch Inc · Bloch Space</span><span>Source windows and finality differ by network.</span><a href="/">Open record explorer ↗</a></footer>
+  <footer><span>© 2026 Bloch Inc · Bloch Space</span><span>Source windows and finality differ by network.</span><a href="/?network=bloch">Open record explorer ↗</a><a href="/downloads/">Download for macOS ↓</a></footer>
 </body>
 </html>

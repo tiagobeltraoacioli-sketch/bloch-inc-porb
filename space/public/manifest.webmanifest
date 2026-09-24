@@ -1,0 +1,23 @@
+{
+  "id": "/app/",
+  "name": "Bloch Space — Multichain Intelligence",
+  "short_name": "Bloch Space",
+  "description": "Bloch, Ethereum and Bitcoin observations, data science and BI-PoRB research.",
+  "start_url": "/app/?network=bloch&view=overview",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070d0b",
+  "theme_color": "#070d0b",
+  "lang": "en",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {"src":"/assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ],
+  "shortcuts": [
+    {"name":"Bloch research","url":"/app/?network=bloch&view=science&range=24h"},
+    {"name":"Ethereum models","url":"/app/?network=ethereum&view=ml&range=48"},
+    {"name":"Bitcoin analytics","url":"/app/?network=bitcoin&view=science&range=30"},
+    {"name":"BI-PoRB workspace","url":"/account/"}
+  ]
+}

@@ -1,4 +1,6 @@
 import {handleExplore} from '../../chain/explorer.js';
+import {graphusSnapshot} from '../../chain/graphus.js';
+import {handleAccount} from '../../chain/accounts.js';
 
 const windowMs = 60_000;
 const visitors = new Map();
@@ -17,7 +19,10 @@ function available(request) {
   return true;
 }
 
-export async function onRequest({request, env}) {
+export async function onRequest(context) {
+  const {request,env}=context;
+  const path=new URL(request.url).pathname;
+  if(path.startsWith('/api/account/')||path.startsWith('/api/porb/'))return handleAccount({...context,waitUntil:context.waitUntil?.bind(context)});
   if (request.method !== 'GET') return new Response(JSON.stringify({error:'read_only'}), {
     status:405, headers:{'content-type':'application/json; charset=utf-8',allow:'GET'},
   });
@@ -26,7 +31,8 @@ export async function onRequest({request, env}) {
   });
   const url = new URL(request.url);
   let result;
-  if (url.pathname === '/api/intelligence' && url.searchParams.size === 1 && url.searchParams.get('network') === 'bitcoin') {
+  if(url.pathname==='/api/graphus'&&url.searchParams.size===1)result=await graphusSnapshot(url.searchParams.get('network'));
+  else if (url.pathname === '/api/intelligence' && url.searchParams.size === 1 && url.searchParams.get('network') === 'bitcoin') {
     const now = Date.now();
     if (!bitcoinIntelligenceCache || bitcoinIntelligenceCache.until <= now) {
       const entry = {until:now + 30_000, promise:handleExplore(url, {env})};

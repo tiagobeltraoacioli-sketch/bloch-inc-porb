@@ -4,3 +4,9 @@ pages_build_output_dir = "public"
 
 [vars]
 GRAPHUS_ETHEREUM_RPC_URL = "https://ethereum-rpc.publicnode.com"
+
+[[d1_databases]]
+binding = "SPACE_DB"
+database_name = "bloch-space-accounts"
+database_id = "3b7e68dd-f8ff-40a7-b6f0-17938a309824"
+migrations_dir = "migrations"
