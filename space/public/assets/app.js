@@ -60,6 +60,7 @@ function renderBitcoinMempool(mempool,recent) {
   if(!Number.isSafeInteger(total)||total<=0)return;
   panel.hidden=false;
   const header=element('div','mempool-head');header.append(element('strong','',`MEMPOOL FEE DEPTH / ${count(bins.length)} SOURCE BINS`),element('span','',`${(total/1e6).toFixed(2)}M vB in histogram`));panel.append(header);
+  panel.append(element('p','mempool-range',`Higher fee bins first · ${bins[0][0].toFixed(2)} to ${bins.at(-1)[0].toFixed(2)} sat/vB`));
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 720 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Cumulative mempool virtual bytes ordered from higher to lower fee-rate bins.');
   const ns='http://www.w3.org/2000/svg';const svgEl=(tag,attrs,text)=>{const node=document.createElementNS(ns,tag);for(const [key,value] of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=String(text);return node;};
   const left=32,right=690,top=22,bottom=182;
