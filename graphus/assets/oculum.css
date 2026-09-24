@@ -65,6 +65,8 @@
 #oculum-detail dt { color: #a8b9a0; font: .62rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
 #oculum-detail dd { margin: .35rem 0 0; color: var(--white); }
 #oculum-detail a { color: var(--brand-lime); overflow-wrap: anywhere; }
+.oculum-graph-link { display: inline-block; margin: 1rem 0 .3rem; padding: .65rem .8rem; border: 1px solid #526648; background: #1b2a18; font: 700 .7rem var(--body); text-decoration: none; }
+.oculum-graph-link:hover, .oculum-graph-link:focus-visible { border-color: var(--brand-lime); background: #263c20; }
 #oculum-detail h4 { margin: 1.3rem 0 .45rem; color: var(--brand-lime); font-size: .82rem; }
 #oculum-detail ul { margin: 0; padding-left: 1.15rem; color: #b9c8b2; }
 #oculum-detail li { margin: .4rem 0; }

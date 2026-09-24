@@ -24,6 +24,10 @@ person, or independently replay the indexer's state. The reported chain tip
 can change during a reorganization. A manual Bloch script lookup returns to a
 queried sample, so snapshots at different anchors are never presented as one
 indexed ranking.
+Each selected identifier links to the source-aware Constellation. The link
+selects the same asset and loads its bounded live address or script-hash query
+automatically. The Constellation's default generated-wallet view remains
+separate from this linked public-chain observation.
 
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change

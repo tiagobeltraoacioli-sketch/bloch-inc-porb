@@ -135,6 +135,14 @@ function renderDetail(record){
     ?'This ranks positive script hashes in the Bloch source index at one reported chain tip. A script hash does not identify an owner or all holdings controlled by one wallet. Graphus has not independently replayed the source state.'
     :'An address or script hash does not identify an owner or all holdings controlled by one wallet. Retrieval times and block anchors can differ. This queried sample is not a network-wide holder ranking.';
   detail.append(title,dl,caveat);
+  const graphUrl=new URL('/constellation',location.origin);
+  graphUrl.searchParams.set('asset',record.asset.toLowerCase());
+  graphUrl.searchParams.set('address',record.address);
+  const graphLink=document.createElement('a');
+  graphLink.className='oculum-graph-link';
+  graphLink.href=graphUrl.pathname+graphUrl.search;
+  graphLink.textContent='Open this identifier in the source constellation ↗';
+  detail.append(graphLink);
   if(record.limitations.length){
     const heading=document.createElement('h4');heading.textContent='Source limitations';
     const notes=document.createElement('ul');

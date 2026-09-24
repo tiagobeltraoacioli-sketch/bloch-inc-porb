@@ -776,7 +776,12 @@ function renderFlows(wallet){
 function updateSearchUrl() {
   const url=new URL(window.location.href);
   url.searchParams.delete('address');url.searchParams.delete('wallet');
-  if(search)url.searchParams.set('wallet',selectedWallet?.id||search);
+  const entered=document.getElementById('record-search').value.trim();
+  const liveAsset=assetForLiveAddress(entered);
+  if(liveAsset){
+    url.searchParams.set('asset',liveAsset.toLowerCase());
+    url.searchParams.set('address',entered);
+  }else if(search)url.searchParams.set('wallet',selectedWallet?.id||search);
   window.history.replaceState(null,'',url);
 }
 function renderSearchStatus() {
@@ -938,7 +943,14 @@ const pauseButton=document.getElementById('pause-constellation');
 pauseButton.addEventListener('click',()=>{paused=!paused;pauseButton.setAttribute('aria-pressed',String(paused));pauseButton.textContent=paused?'Resume motion':'Pause motion';draw();});
 if(paused){pauseButton.setAttribute('aria-pressed','true');pauseButton.textContent='Resume motion';}
 new ResizeObserver(resize).observe(canvas);
-const initialWallet=new URL(window.location.href).searchParams.get('wallet')||new URL(window.location.href).searchParams.get('address');
+const initialUrl=new URL(window.location.href);
+const initialAsset=initialUrl.searchParams.get('asset')?.toLowerCase();
+const initialAddress=initialUrl.searchParams.get('address');
+const initialWallet=initialUrl.searchParams.get('wallet')||initialAddress;
+if(initialAsset&&['btc','eth','usdt','usdc','blch'].includes(initialAsset)){
+  document.querySelector(`[data-constellation-asset="${initialAsset}"]`).click();
+}
 if(initialWallet){const input=document.getElementById('record-search');input.value=initialWallet;input.dispatchEvent(new Event('input',{bubbles:true}));}
 renderList();renderSearchStatus();resize();requestAnimationFrame(frame);
 renderNetworkEvidence();
+if(initialAddress&&assetForLiveAddress(initialAddress))loadLiveAddress();
