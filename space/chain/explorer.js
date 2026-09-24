@@ -5,6 +5,7 @@ import {queryEthereumActivity} from '../../graphus/chain/ethereum-activity.js';
 import {queryBlochHistoryPage} from '../../graphus/chain/bloch-chain.js';
 
 const BTC = 'https://blockstream.info/api';
+const MEMPOOL = 'https://mempool.space/api';
 const BLOCH = 'https://blochl1.com';
 const HEX64 = /^(?:0x)?[0-9a-fA-F]{64}$/;
 const ETH_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -147,6 +148,52 @@ async function bitcoinSeries(fetcher,range,now){
   }
   return {...source('bitcoin','Blockstream Esplora',now(),'Consecutive source-reported best-chain blocks; later requests may observe a reorganization.'),
     requested,returned:blocks.length,partial:partial||blocks.length<requested,blocks};
+}
+
+async function bitcoinIntelligence(fetcher,now){
+  const paths={projection:`${MEMPOOL}/v1/fees/mempool-blocks`,recommended:`${MEMPOOL}/v1/fees/recommended`,
+    difficulty:`${MEMPOOL}/v1/difficulty-adjustment`,hashrate:`${MEMPOOL}/v1/mining/hashrate/1m`,
+    pools:`${MEMPOOL}/v1/mining/pools/24h`,mempool:`${MEMPOOL}/mempool`,blockstream:`${BTC}/mempool`};
+  const entries=await Promise.all(Object.entries(paths).map(async ([key,url])=>{try{return [key,{data:await json(fetcher,url),at:now()}];}catch{return [key,{data:null,at:null}];}}));
+  const samples=Object.fromEntries(entries),raw=Object.fromEntries(entries.map(([key,value])=>[key,value.data]));
+  const nonnegative=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
+  const safe=value=>Number.isSafeInteger(value)&&value>=0;
+  const projection=Array.isArray(raw.projection)&&raw.projection.length<=8&&raw.projection.every(row=>
+    nonnegative(row?.blockSize)&&nonnegative(row.blockVSize)&&safe(row.nTx)&&nonnegative(row.totalFees)&&nonnegative(row.medianFee))?
+    raw.projection.map((row,index)=>({position:index+1,block_size_bytes:row.blockSize,virtual_bytes:row.blockVSize,
+      transactions:row.nTx,total_fees_sat:row.totalFees,median_fee_sat_vbyte:row.medianFee})):null;
+  const feeKeys=['fastestFee','halfHourFee','hourFee','economyFee','minimumFee'];
+  const recommended=raw.recommended&&feeKeys.every(key=>nonnegative(raw.recommended[key]))?
+    Object.fromEntries(feeKeys.map(key=>[key,raw.recommended[key]])):null;
+  const d=raw.difficulty;
+  const difficulty=d&&nonnegative(d.progressPercent)&&d.progressPercent<=100&&typeof d.difficultyChange==='number'&&Number.isFinite(d.difficultyChange)&&
+    safe(d.estimatedRetargetDate)&&safe(d.remainingBlocks)&&safe(d.remainingTime)&&safe(d.nextRetargetHeight)&&nonnegative(d.timeAvg)?
+    {progress_percent:d.progressPercent,estimated_change_percent:d.difficultyChange,estimated_retarget_at:d.estimatedRetargetDate,
+      remaining_blocks:d.remainingBlocks,remaining_time_ms:d.remainingTime,next_retarget_height:d.nextRetargetHeight,average_block_time_ms:d.timeAvg}:null;
+  const h=raw.hashrate;
+  const hashrate=h&&Array.isArray(h.hashrates)&&h.hashrates.length<=100&&h.hashrates.every((row,index)=>
+    safe(row?.timestamp)&&nonnegative(row.avgHashrate)&&(index===0||row.timestamp>h.hashrates[index-1].timestamp))&&
+    nonnegative(h.currentHashrate)&&nonnegative(h.currentDifficulty)?
+    {current_eh_s:h.currentHashrate/1e18,current_difficulty:h.currentDifficulty,
+      points:h.hashrates.map(row=>({timestamp:row.timestamp,eh_s:row.avgHashrate/1e18}))}:null;
+  const p=raw.pools;
+  const pools=p&&safe(p.blockCount)&&Array.isArray(p.pools)&&p.pools.length<=256&&p.pools.every(row=>
+    typeof row?.name==='string'&&row.name.length<=80&&safe(row.blockCount)&&safe(row.rank))?
+    {window:'24h',block_count:p.blockCount,items:p.pools.slice(0,20).map(row=>({name:row.name,blocks:row.blockCount,rank:row.rank,
+      empty_blocks:safe(row.emptyBlocks)?row.emptyBlocks:null}))}:null;
+  const shapeMempool=value=>value&&safe(value.count)&&safe(value.vsize)&&safe(value.total_fee)?
+    {count:value.count,virtual_bytes:value.vsize,total_fee_sat:value.total_fee}:null;
+  const mempool=shapeMempool(raw.mempool),blockstream=shapeMempool(raw.blockstream);
+  if(![projection,recommended,difficulty,hashrate,pools,mempool,blockstream].some(Boolean))throw new Error('source_unavailable');
+  const hasMempoolSource=[projection,recommended,difficulty,hashrate,pools,mempool].some(Boolean);
+  const sourceName=hasMempoolSource&&blockstream?'Mempool Open Source Project and Blockstream Esplora':
+    hasMempoolSource?'Mempool Open Source Project':'Blockstream Esplora';
+  return {...source('bitcoin',sourceName,now(),
+    'Projections and recommendations are model outputs. Mempool counts are separate node snapshots; pool attribution is source-reported. Hashrate is an estimate.'),
+    projection,recommended_fees_sat_vbyte:recommended,difficulty_adjustment:difficulty,hashrate,pools,
+    mempool_comparison:{mempool_space:mempool?{...mempool,retrieved_at:samples.mempool.at}:null,
+      blockstream:blockstream?{...blockstream,retrieved_at:samples.blockstream.at}:null},
+    available_sources:Object.entries({projection,recommended,difficulty,hashrate,pools,mempool,blockstream}).filter(([,value])=>value!=null).map(([key])=>key)};
 }
 
 async function ethereumSeries(fetcher,env,range,now){
@@ -523,8 +570,13 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   if (cursor != null && (route !== 'history' || !/^[a-zA-Z0-9_-]{1,160}$/.test(cursor))) return bad('invalid_cursor');
   if (offsetRaw != null && (!['block','validators'].includes(route) || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset)||route==='validators'&&(offset%32!==0||offset>4096))) return bad('invalid_offset');
   if (route !== 'address' && url.searchParams.has('asset')) return bad('invalid_parameters');
-  if (['overview','validators','series'].includes(route) && query) return bad('invalid_parameters');
-  if (!['overview','validators','series'].includes(route) && (!query || query.length > 100)) return bad('invalid_query');
+  if (['overview','validators','series','intelligence'].includes(route) && query) return bad('invalid_parameters');
+  if (!['overview','validators','series','intelligence'].includes(route) && (!query || query.length > 100)) return bad('invalid_query');
+  if(route==='intelligence'){
+    if(network!=='bitcoin'||range!=null||offsetRaw!=null||cursor!=null)return bad('invalid_parameters');
+    try{return reply(200,await bitcoinIntelligence(fetcher,now));}
+    catch{return bad('source_unavailable',503);}
+  }
   if(route==='series'){
     if(!(network==='bitcoin'&&['10','30'].includes(range)||network==='ethereum'&&['12','48'].includes(range)||network==='bloch'&&['6h','24h','7d'].includes(range)))return bad('invalid_range');
     try{return reply(200,await (network==='bitcoin'?bitcoinSeries(fetcher,range,now):network==='ethereum'?ethereumSeries(fetcher,env,range,now):blochPeerSeries(fetcher,range,now)));}

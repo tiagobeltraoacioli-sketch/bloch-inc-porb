@@ -19,7 +19,7 @@ network. The network tabs lower on the home page still switch the unified
 record explorer's active query network.
 The app's persistent desktop sidebar (horizontal scroll rail on narrow screens)
 selects source-backed subpages. Bitcoin has Overview, Blocks, Mempool & Fees,
-Transactions, Analytics, and Sources. Ethereum has Overview, Blocks, Gas &
+Block Forecast, Mining, Transactions, Analytics, and Sources. Ethereum has Overview, Blocks, Gas &
 Finality, Transactions, Analytics, and Sources. Bloch adds Transactions, Fees &
 Stake, Holders, Validators, Analytics, and Sources. Each sidebar selection
 changes the app view and URL in place. Tables in each view can be downloaded as
@@ -29,6 +29,23 @@ explicit. A source response is reused for up to 45 seconds when moving between
 subpages that read the same endpoint; Refresh forces a new request. The
 retrieval time remains visible. Source provenance and raw responses remain
 visible in every view.
+All three sidebars also offer Compare Networks. It uses the three existing
+overview APIs, reusing recent responses when possible, and displays their
+head, queue and finality observations side by side. Its charts retain their
+own network units and never imply that Bitcoin confirmation, Ethereum
+finalization and Bloch finality have identical semantics.
+Bitcoin Forecast and Mining use a separate bounded `/api/intelligence` response
+from the Mempool Open Source Project and Blockstream Esplora. It includes up to
+eight modeled mempool blocks, fee recommendations, difficulty-adjustment
+estimates, a one-month hashrate sample, up to 20 source-attributed pools and
+two node mempool snapshots. Each optional source may be unavailable. The
+forecast is not a mined block or guaranteed confirmation; the two mempool
+snapshots cannot establish a unique global transaction count. Hashrate and
+difficulty change are estimates. The app does not label this third-party data
+as produced by a Bloch-operated Bitcoin node.
+The Pages function shares successful intelligence responses for 30 seconds
+within one Worker isolate to reduce repeated upstream calls. This is not a
+global cache; every response still shows its original retrieval time.
 Dedicated legacy data pages remain at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
 They share the read-only `/api/overview` response and link each shown record
 back to the unified explorer. The Bitcoin page charts recent block transaction
@@ -75,6 +92,8 @@ best-effort across isolates; durable quotas require a shared governor.
 `GET /api/overview?network=bitcoin|ethereum|bloch`
 
 `GET /api/series?network=bitcoin|ethereum|bloch&range=<10|30, 12|48, or 6h|24h|7d by network>`
+
+`GET /api/intelligence?network=bitcoin`
 
 `GET /api/block?network=...&query=<height, slot, or block hash>&offset=<optional transaction offset>`
 

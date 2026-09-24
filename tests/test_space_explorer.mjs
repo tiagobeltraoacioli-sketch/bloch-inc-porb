@@ -20,7 +20,31 @@ test('Bloch Space refuses unknown networks, writes, and unbounded parameters', a
   assert.equal((await handleExplore(url('validators','network=bitcoin'))).status,400);
   assert.equal((await handleExplore(url('validators','network=bloch&offset=1'))).status,400);
   assert.equal((await handleExplore(url('series','network=bitcoin&range=48'))).status,400);
+  assert.equal((await handleExplore(url('intelligence','network=ethereum'))).status,400);
+  assert.equal((await handleExplore(url('intelligence','network=bitcoin&range=30'))).status,400);
   assert.equal((await handleExplore(url('overview','network=bloch&range=7d'))).status,400);
+});
+
+test('Bitcoin intelligence bounds source projections and keeps independent node snapshots separate', async () => {
+  const fetcher=async input=>{const path=new URL(input).pathname;
+    const values={
+      '/api/v1/fees/mempool-blocks':[{blockSize:1500000,blockVSize:900000,nTx:2300,totalFees:500000,medianFee:1.5}],
+      '/api/v1/fees/recommended':{fastestFee:3,halfHourFee:2,hourFee:2,economyFee:1,minimumFee:1},
+      '/api/v1/difficulty-adjustment':{progressPercent:30,difficultyChange:-2.5,estimatedRetargetDate:1791000000000,remainingBlocks:1400,remainingTime:800000000,nextRetargetHeight:969696,timeAvg:600000},
+      '/api/v1/mining/hashrate/1m':{currentHashrate:900e18,currentDifficulty:130e12,hashrates:[{timestamp:1790000000,avgHashrate:850e18}]},
+      '/api/v1/mining/pools/24h':{blockCount:130,pools:[{name:'Example pool',rank:1,blockCount:40,emptyBlocks:0,link:'https://private.example'}]},
+      '/api/mempool':{count:1000,vsize:900000,total_fee:100000},
+    };
+    if(input==='https://blockstream.info/api/mempool')return answer({count:1050,vsize:950000,total_fee:120000});
+    assert.ok(Object.hasOwn(values,path),path);return answer(values[path]);
+  };
+  const response=await handleExplore(url('intelligence','network=bitcoin'),{fetcher});
+  assert.equal(response.status,200);
+  assert.equal(response.body.projection.length,1);
+  assert.equal(response.body.hashrate.points[0].eh_s,850);
+  assert.equal(response.body.mempool_comparison.mempool_space.count,1000);
+  assert.equal(response.body.mempool_comparison.blockstream.count,1050);
+  assert.equal(JSON.stringify(response.body).includes('private.example'),false);
 });
 
 test('Bitcoin analytics reads a bounded linked block window', async () => {

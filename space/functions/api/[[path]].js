@@ -4,6 +4,7 @@ const windowMs = 60_000;
 const visitors = new Map();
 let globalWindow = 0;
 let globalCount = 0;
+let bitcoinIntelligenceCache = null;
 
 function available(request) {
   const now = Date.now();
@@ -23,7 +24,18 @@ export async function onRequest({request, env}) {
   if (!available(request)) return new Response(JSON.stringify({error:'read_budget_exceeded'}), {
     status:429, headers:{'content-type':'application/json; charset=utf-8','retry-after':'60'},
   });
-  const result = await handleExplore(new URL(request.url), {env});
+  const url = new URL(request.url);
+  let result;
+  if (url.pathname === '/api/intelligence' && url.searchParams.size === 1 && url.searchParams.get('network') === 'bitcoin') {
+    const now = Date.now();
+    if (!bitcoinIntelligenceCache || bitcoinIntelligenceCache.until <= now) {
+      const entry = {until:now + 30_000, promise:handleExplore(url, {env})};
+      bitcoinIntelligenceCache = entry;
+      entry.promise.then(value => { if (value.status !== 200 && bitcoinIntelligenceCache === entry) bitcoinIntelligenceCache = null; },
+        () => { if (bitcoinIntelligenceCache === entry) bitcoinIntelligenceCache = null; });
+    }
+    result = await bitcoinIntelligenceCache.promise;
+  } else result = await handleExplore(url, {env});
   return new Response(JSON.stringify(result.body), {
     status:result.status,
     headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'},
