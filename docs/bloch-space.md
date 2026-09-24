@@ -10,6 +10,9 @@ header plate. A header button restores the dark palette and remembers the
 choice in the browser.
 
 Dedicated data pages are served at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
+The home page places direct links to all three immediately below the main
+header, above the hero, including on narrow screens. The network tabs lower
+on the page still switch the unified explorer's active query network.
 They share the read-only `/api/overview` response and link each shown record
 back to the unified explorer. The Bitcoin page charts recent block transaction
 count and size plus the highest source mempool fee bins. The Ethereum page
