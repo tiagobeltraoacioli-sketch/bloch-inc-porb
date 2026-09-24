@@ -96,3 +96,11 @@ Production browser checks collected and compared two real source pages for each 
 Each check verified unique event IDs, exact amount filters, baseline/current digests, comparison counts, subset lineage and mobile overflow. The completed USDC browser run also verified the filtered packet's production Analytics handoff. These observations came from separate requests and represent bounded samples, not synchronized chain totals.
 
 Temporary HTTP 502 responses interrupted the initial Ethereum capture and a later USDC historical page. Targeted reruns succeeded with real responses. The failed USDC continuation retained its first completed page and displayed the failure explicitly. No synthetic replacement was used. Missing token/Bloch timestamps remain absent in the exported records. This release deploys the public Graphus workbench; the existing private portal remains a separate service.
+
+### Responsive panel repair — 2026-09-24
+
+Graphus release `0d02b8d5` publishes commit `677431b`. The reported clipping was reproduced against the prior production release: its fixed 1,020 px SVG hid eight modules at a 1,280 px viewport and 30 modules at 390 px. Selection also reset zoom, and compact layouts placed the inspector beneath the map.
+
+All 23 contract/evidence/collection tests passed locally. Local and production WebKit panel checks passed at 1,440, 1,280, 1,024 and 390 px: all 44 modules fit, no horizontal canvas overflow, actual clicks reached the last column, selection preserved zoom, focus enlarged the selected module, and filters, dependencies, dialogs, Escape and expanded view worked. Desktop and phone screenshots were inspected for toolbar contrast and readable details. No browser page errors were reported.
+
+The production source-module action closed both nested dialogs, restored the workspace and captured 58 real BTC records from one bounded page at `2026-09-24T22:43:56.413Z`. This check does not measure the other source adapters or continuous availability.
