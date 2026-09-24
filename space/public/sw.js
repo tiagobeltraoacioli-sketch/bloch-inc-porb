@@ -1,5 +1,5 @@
-const CACHE='bloch-space-shell-v1';
-const SHELL=['/app/','/account/','/assets/site.css','/assets/light.css','/assets/workspace.css','/assets/research.css',
+const CACHE='bloch-space-shell-v3';
+const SHELL=['/app/','/account/','/graph/','/assets/graph-lab.js','/assets/graph-lab.css','/assets/graph-core.js','/assets/graph-worker.js','/assets/site.css','/assets/light.css','/assets/workspace.css','/assets/research.css',
   '/assets/account.css','/assets/account.js','/assets/workspace.js','/assets/research.js','/assets/science.js','/assets/pwa.js',
   '/assets/favicon.png','/assets/bloch-inc-logo-dark.png','/assets/icon-192.png','/assets/icon-512.png','/manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL))));
@@ -14,7 +14,7 @@ self.addEventListener('fetch',event=>{
   }
   if(request.method!=='GET')return;
   if(request.mode==='navigate'){
-    event.respondWith(fetch(request).catch(async()=>await caches.match(url.pathname.startsWith('/account')?'/account/':'/app/')));return;
+    event.respondWith(fetch(request).catch(async()=>await caches.match(url.pathname.startsWith('/account')?'/account/':url.pathname.startsWith('/graph')?'/graph/':'/app/')));return;
   }
   if(SHELL.includes(url.pathname))event.respondWith(caches.match(url.pathname).then(cached=>cached||fetch(request)));
 });

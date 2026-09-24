@@ -1,6 +1,7 @@
 import {handleExplore} from '../../chain/explorer.js';
 import {graphusSnapshot} from '../../chain/graphus.js';
 import {handleAccount} from '../../chain/accounts.js';
+import {handleGraph} from '../../chain/graph.js';
 
 const windowMs = 60_000;
 const visitors = new Map();
@@ -31,7 +32,8 @@ export async function onRequest(context) {
   });
   const url = new URL(request.url);
   let result;
-  if(url.pathname==='/api/graphus'&&url.searchParams.size===1)result=await graphusSnapshot(url.searchParams.get('network'));
+  if(url.pathname==='/api/graph')result=await handleGraph(url,{env});
+  else if(url.pathname==='/api/graphus'&&url.searchParams.size===1)result=await graphusSnapshot(url.searchParams.get('network'));
   else if (url.pathname === '/api/intelligence' && url.searchParams.size === 1 && url.searchParams.get('network') === 'bitcoin') {
     const now = Date.now();
     if (!bitcoinIntelligenceCache || bitcoinIntelligenceCache.until <= now) {

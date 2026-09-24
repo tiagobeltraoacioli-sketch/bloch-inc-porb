@@ -21,6 +21,6 @@ lipo -create "$BUILD_DIR/BlochSpace-x86_64" "$BUILD_DIR/BlochSpace-arm64" -outpu
 cp "$TASK_ROOT/desktop/BlochSpace/Info.plist" "$APP/Contents/Info.plist"
 cp "$TASK_ROOT/desktop/BlochSpace/offline.html" "$APP/Contents/Resources/offline.html"
 codesign --force --deep --sign - "$APP"
-ditto -c -k --keepParent "$APP" "$BUILD_DIR/Bloch-Space-1.0.0-macOS-universal.zip"
-shasum -a 256 "$BUILD_DIR/Bloch-Space-1.0.0-macOS-universal.zip" > "$BUILD_DIR/Bloch-Space-1.0.0-macOS-universal.zip.sha256"
+ditto -c -k --keepParent "$APP" "$BUILD_DIR/Bloch-Space-1.1.0-macOS-universal.zip"
+shasum -a 256 "$BUILD_DIR/Bloch-Space-1.1.0-macOS-universal.zip" > "$BUILD_DIR/Bloch-Space-1.1.0-macOS-universal.zip.sha256"
 printf 'Built %s\n' "$APP"

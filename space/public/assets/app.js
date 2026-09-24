@@ -66,6 +66,7 @@ function rawResponse(data,route,network,query,asset,offset=0,cursor=null){
   const endpoint=new URL(`/api/${route}?${apiParams(route,network,query,asset,offset,cursor)}`,'https://bloch.space').href;
   const link=element('a','raw-endpoint',endpoint);link.href=endpoint;link.target='_blank';link.rel='noopener noreferrer';body.append(link);
   const actions=element('div','raw-actions');
+  if(['tx','address'].includes(route)){const graph=element('a','raw-endpoint','Open in Graph Lab ↗');graph.href='/graph/?'+new URLSearchParams({asset:route==='address'&&asset?asset:{bitcoin:'BTC',ethereum:'ETH',bloch:'BLCH'}[network],kind:route,query});actions.append(graph);}
   const copyUrl=element('button','','Copy API URL');copyUrl.type='button';copyUrl.setAttribute('aria-live','polite');copyUrl.addEventListener('click',()=>copyRecordText(endpoint,copyUrl));
   const copyJson=element('button','','Copy full JSON');copyJson.type='button';copyJson.setAttribute('aria-live','polite');
   const download=element('button','','Download JSON');download.type='button';

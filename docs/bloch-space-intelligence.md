@@ -5,6 +5,10 @@ record explorer is preserved at `/?network=bloch` (and the other networks).
 Existing block, transaction, address, validator, fee, mining, analytics, and
 comparison pages continue using their bounded source adapters.
 
+The subsequent [Graph Lab release](bloch-space-graph-lab.md) adds `/graph/`:
+progressive public-evidence expansion, ordered paths, nine graph-analysis panels,
+source-preserving imports/exports and a macOS 1.1 Command-5 shortcut.
+
 ## Research workspace
 
 Data Science and Machine Learning consume the same validated `/api/series`

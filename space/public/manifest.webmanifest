@@ -15,6 +15,7 @@
     {"src":"/assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
   ],
   "shortcuts": [
+    {"name":"Graph Lab","url":"/graph/"},
     {"name":"Bloch research","url":"/app/?network=bloch&view=science&range=24h"},
     {"name":"Ethereum models","url":"/app/?network=ethereum&view=ml&range=48"},
     {"name":"Bitcoin analytics","url":"/app/?network=bitcoin&view=science&range=30"},

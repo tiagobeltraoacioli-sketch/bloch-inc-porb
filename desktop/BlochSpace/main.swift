@@ -35,9 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     @objc func back() { if web.canGoBack { web.goBack() } }
     @objc func forward() { if web.canGoForward { web.goForward() } }
     @objc func account() { load("/account/") }
+    @objc func graphLab() { load("/graph/") }
     @objc func network(_ item: NSMenuItem) { load(item.representedObject as? String ?? "/app/") }
     @objc func openBrowser() { let url = web.url; if let url, url.scheme == "https", url.host == "bloch.space" { NSWorkspace.shared.open(url) } }
-    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Bloch Space", .applicationVersion: "1.0.0", .credits: NSAttributedString(string: "Bloch Inc · Multichain Intelligence\nBloch · Ethereum · Bitcoin\nLive sources and private features require an Internet connection.")]) }
+    @objc func about() { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Bloch Space", .applicationVersion: "1.1.0", .credits: NSAttributedString(string: "Bloch Inc · Multichain Intelligence\nBloch · Ethereum · Bitcoin\nLive sources and private features require an Internet connection.")]) }
 
     func item(_ title: String, _ action: Selector?, _ key: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -67,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             view.addItem(entry)
         }
         view.addItem(item("BI-PoRB Account", #selector(account), "4"))
+        view.addItem(item("Graph Lab", #selector(graphLab), "5"))
         viewItem.submenu = view; bar.addItem(viewItem)
         let windowMenu = NSMenu(title: "Window"), windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         windowMenu.addItem(NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
