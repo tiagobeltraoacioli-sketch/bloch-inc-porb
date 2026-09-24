@@ -78,6 +78,13 @@ filters the log list and brings its point and returned links into view. This
 is a bounded address-level observation, not a person, owner, balance, or AML
 score. The same peer breakdown is included in the JSON export.
 
+If the separate token activity request fails, the source-reported balance stays
+visible as a balance-only observation. A `Retry Transfer logs` control repeats
+only the bounded log request for that same queried address. Any later result
+must still match the asset, network, contract, and address and pass the finalized
+anchor checks before the map uses it. A retry can have a newer finalized head;
+the panel identifies the two source snapshots separately.
+
 Any source-reported Constellation query can be downloaded as a versioned
 `graphus_public_chain_observation` JSON file. The browser builds it from the
 currently loaded bounded response. It includes the queried identifier, exact

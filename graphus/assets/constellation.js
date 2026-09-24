@@ -2,6 +2,7 @@ const canvas = document.getElementById('evidence-constellation');
 const context = canvas.getContext('2d');
 let realObservation=null;
 let realRequest=0;
+let tokenActivityInFlightFor=null;
 let realAddressTargets=[];
 let realTransactionTargets=[];
 let selectedRealTransactionId=null;
@@ -360,6 +361,46 @@ function combineTokenActivity(wallet,activity){
     edges:activity.edges,tokenActivity:activity.activity,tokenActivityContract:activity.contract,
     tokenObservation:activity.observation,tokenAnchorComparison:anchors};
 }
+async function loadTokenActivity(wallet,requestId){
+  if(tokenActivityInFlightFor===requestId)return;
+  tokenActivityInFlightFor=requestId;
+  const list=document.getElementById('transaction-list');
+  const loading=document.createElement('p');loading.className='live-source-record';
+  loading.textContent='Loading bounded Transfer logs from the configured source…';
+  list.prepend(loading);
+  try{
+    const activityQuery=new URLSearchParams({asset:wallet.asset,address:wallet.address});
+    const response=await fetch(`/api/chain/activity?${activityQuery}`,{headers:{Accept:'application/json'}});
+    let activityData;
+    try{activityData=await response.json();}
+    catch{throw new Error(`HTTP ${response.status}`);}
+    if(requestId!==realRequest)return;
+    if(!response.ok)throw new Error(activityData.error||`HTTP ${response.status}`);
+    realObservation=combineTokenActivity(wallet,activityData);
+    renderLiveSourceRecords(realObservation);
+    const anchors=realObservation.tokenAnchorComparison;
+    const anchorNote=anchors.status==='same_source_anchor'
+      ?`Balance and logs share source-reported block ${anchors.balance.height} (${anchors.balance.hash}). This does not reconcile the balance with the bounded logs.`
+      :`Balance at source-reported block ${anchors.balance.height}; log window ends at separate source-reported block ${anchors.logs.height}. Do not reconcile their amounts.`;
+    setDataMode('source-reported',`${wallet.asset} balance retrieved ${wallet.observation?.retrieved_at||'time unavailable'}; ${activityData.activity.event_count} separate Transfer logs in finalized blocks ${activityData.observation.block_window.from}–${activityData.observation.block_window.to}. ${anchorNote} No independent Graphus verification or owner inference.`);
+    draw();
+  }catch(error){
+    if(requestId!==realRequest)return;
+    realObservation=wallet;
+    renderLiveSourceRecords(wallet);
+    const note=document.createElement('p');note.className='live-source-record';
+    note.textContent=`Bounded Transfer logs unavailable: ${error.message}. The source-reported balance remains available.`;
+    const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
+    retry.textContent='Retry Transfer logs';
+    retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId));
+    list.prepend(note,retry);
+    setDataMode('source-reported',`${wallet.asset} balance remains available from ${wallet.observation?.source_id||'the configured source'}. Bounded Transfer logs are unavailable; retry the separate activity request.`);
+    draw();
+  }finally{
+    if(tokenActivityInFlightFor===requestId)tokenActivityInFlightFor=null;
+    loading.remove();
+  }
+}
 async function loadLiveAddress(){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
@@ -411,28 +452,7 @@ async function loadLiveAddress(){
         :'Select returned Transfer logs in the source-record list when available.';
     canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. ${canvasInstruction}`);
     draw();
-    if(data.asset==='USDT'||data.asset==='USDC'){
-      try{
-        const activityQuery=new URLSearchParams({asset:data.asset,address:data.address});
-        const activityResponse=await fetch(`/api/chain/activity?${activityQuery}`,{headers:{Accept:'application/json'}});
-        const activityData=await activityResponse.json();
-        if(requestId!==realRequest)return;
-        if(!activityResponse.ok)throw new Error(activityData.error||`HTTP ${activityResponse.status}`);
-        realObservation=combineTokenActivity(data,activityData);
-        renderLiveSourceRecords(realObservation);
-        const anchors=realObservation.tokenAnchorComparison;
-        const anchorNote=anchors.status==='same_source_anchor'
-          ?`Balance and logs share source-reported block ${anchors.balance.height} (${anchors.balance.hash}). This does not reconcile the balance with the bounded logs.`
-          :`Balance at source-reported block ${anchors.balance.height}; log window ends at separate source-reported block ${anchors.logs.height}. Do not reconcile their amounts.`;
-        setDataMode('source-reported',`${data.asset} balance retrieved ${data.observation?.retrieved_at||'time unavailable'}; ${activityData.activity.event_count} separate Transfer logs in finalized blocks ${activityData.observation.block_window.from}–${activityData.observation.block_window.to}. ${anchorNote} No independent Graphus verification or owner inference.`);
-        draw();
-      }catch(activityError){
-        if(requestId!==realRequest)return;
-        const note=document.createElement('p');note.className='live-source-record';
-        note.textContent=`Bounded Transfer logs unavailable: ${activityError.message}. The source-reported balance remains available.`;
-        document.getElementById('transaction-list').prepend(note);
-      }
-    }
+    if(data.asset==='USDT'||data.asset==='USDC')await loadTokenActivity(data,requestId);
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
