@@ -19,6 +19,41 @@ test('Bloch Space refuses unknown networks, writes, and unbounded parameters', a
   assert.equal((await handleExplore(url('address',`network=bloch&query=${hash}&cursor=abc`))).status,400);
   assert.equal((await handleExplore(url('validators','network=bitcoin'))).status,400);
   assert.equal((await handleExplore(url('validators','network=bloch&offset=1'))).status,400);
+  assert.equal((await handleExplore(url('series','network=bitcoin&range=48'))).status,400);
+  assert.equal((await handleExplore(url('overview','network=bloch&range=7d'))).status,400);
+});
+
+test('Bitcoin analytics reads a bounded linked block window', async () => {
+  const id=n=>n.toString(16).padStart(64,'0');
+  const fetcher=async input=>{
+    const path=new URL(input).pathname;
+    const top=path==='/api/blocks'?99:Number(path.split('/').at(-1));
+    return answer(Array.from({length:10},(_,index)=>{const height=top-index;return {id:id(height),previousblockhash:id(height-1),height,timestamp:1790240000-index*600,tx_count:100+index,size:1000000,weight:4000000};}));
+  };
+  const response=await handleExplore(url('series','network=bitcoin&range=30'),{fetcher});
+  assert.equal(response.status,200);
+  assert.equal(response.body.returned,30);
+  assert.equal(response.body.partial,false);
+  assert.equal(response.body.blocks.at(-1).height,70);
+});
+
+test('Ethereum analytics anchors bounded fee history to the requested head height', async () => {
+  const fetcher=async (_input,init)=>{const request=JSON.parse(init.body);
+    const result=request.method==='eth_chainId'?'0x1':request.method==='eth_getBlockByNumber'?{hash:`0x${hash}`,number:'0x30'}:
+      {oldestBlock:'0x25',gasUsedRatio:Array(12).fill(.5),baseFeePerGas:Array(13).fill('0x3b9aca00')};
+    return answer({jsonrpc:'2.0',id:1,result});};
+  const response=await handleExplore(url('series','network=ethereum&range=12'),{fetcher,env:{GRAPHUS_ETHEREUM_RPC_URL:'https://ethereum-rpc.publicnode.com'}});
+  assert.equal(response.status,200);
+  assert.equal(response.body.returned,12);
+  assert.equal(response.body.head.height,'48');
+});
+
+test('Bloch analytics preserves monitored connection gaps and coverage', async () => {
+  const fetcher=async()=>answer({data:{period:'6h',points:[{at:1000,connections:10,reporting_nodes:2},{at:2000,connections:null,reporting_nodes:null},{at:3000,connections:12,reporting_nodes:3}]}});
+  const response=await handleExplore(url('series','network=bloch&range=6h'),{fetcher});
+  assert.equal(response.status,200);
+  assert.equal(response.body.valid_points,2);
+  assert.equal(response.body.points[1].connections,null);
 });
 
 test('Bloch validator pages keep source gaps and omit aggregator host details', async () => {

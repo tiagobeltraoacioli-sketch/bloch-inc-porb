@@ -32,6 +32,14 @@ pages, keeping missing indices visible. It shows own and effective stake per
 record and a chart limited to the current page. The API omits the aggregator's
 upstream host details and never fans out validator reads from a viewer's
 browser to consensus nodes.
+Each network also has an `/analytics/` page. Bitcoin offers 10 or 30 linked
+best-chain blocks; Ethereum offers 12 or 48 JSON-RPC fee-history blocks
+anchored to a requested execution height; Bloch offers 6-hour, 24-hour and
+7-day monitored-connection windows. Charts keep a table of every returned
+point, a CSV download, a visible source boundary, and the full read-only API
+response. Bloch charts preserve missing samples and interrupt connection lines
+when the reporting-node count changes. These bounded observations do not
+establish unique peers, sender ownership, complete chain history or finality.
 
 ## Live read surfaces
 
@@ -48,6 +56,8 @@ function applies a short-lived per-isolate request budget. This budget is
 best-effort across isolates; durable quotas require a shared governor.
 
 `GET /api/overview?network=bitcoin|ethereum|bloch`
+
+`GET /api/series?network=bitcoin|ethereum|bloch&range=<10|30, 12|48, or 6h|24h|7d by network>`
 
 `GET /api/block?network=...&query=<height, slot, or block hash>&offset=<optional transaction offset>`
 

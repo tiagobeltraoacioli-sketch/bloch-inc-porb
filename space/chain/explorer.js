@@ -113,14 +113,62 @@ async function ethereumOverview(fetcher, env, now) {
   };
 }
 
-export function ethereumFeeHistoryFacts(history) {
+export function ethereumFeeHistoryFacts(history,maxCount=12) {
   const ratios=history?.gasUsedRatio, fees=history?.baseFeePerGas;
-  if(!Array.isArray(ratios)||!ratios.length||ratios.length>12||!Array.isArray(fees)||fees.length!==ratios.length+1)throw new Error('invalid_source_response');
+  if(!Array.isArray(ratios)||!ratios.length||ratios.length>maxCount||!Array.isArray(fees)||fees.length!==ratios.length+1)throw new Error('invalid_source_response');
   if(!ratios.every(value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1))throw new Error('invalid_source_response');
   const oldest=quantity(history.oldestBlock);
   if(oldest+BigInt(ratios.length)>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('invalid_source_response');
   return {oldest_height:oldest.toString(),gas_used_ratio:ratios,base_fee_wei:fees.slice(0,-1).map(value=>quantity(value).toString()),
     next_base_fee_wei:quantity(fees.at(-1)).toString()};
+}
+
+async function bitcoinSeries(fetcher,range,now){
+  const requested=Number(range),blocks=[];
+  let nextUrl=`${BTC}/blocks`,partial=false;
+  while(blocks.length<requested){
+    let page;
+    try{page=await json(fetcher,nextUrl);}catch(error){if(!blocks.length)throw error;partial=true;break;}
+    if(!Array.isArray(page)||!page.length||page.length>10){if(!blocks.length)throw new Error('invalid_source_response');partial=true;break;}
+    for(const block of page){
+      const previous=blocks.at(-1);
+      if(!isHex64(block?.id)||!isHex64(block?.previousblockhash)||!Number.isSafeInteger(block.height)||block.height<0||
+        !Number.isSafeInteger(block.timestamp)||block.timestamp<0||!Number.isSafeInteger(block.tx_count)||block.tx_count<0||
+        !Number.isSafeInteger(block.size)||block.size<0||!Number.isSafeInteger(block.weight)||block.weight<0||
+        previous&&(block.height!==previous.height-1||previous.previousblockhash.toLowerCase()!==block.id.toLowerCase())){
+        if(!blocks.length)throw new Error('invalid_source_response');partial=true;break;
+      }
+      blocks.push({id:block.id,height:block.height,previousblockhash:block.previousblockhash,timestamp:block.timestamp,
+        tx_count:block.tx_count,size:block.size,weight:block.weight});
+      if(blocks.length===requested)break;
+    }
+    if(partial||blocks.length===requested||page.length<10||blocks.at(-1).height===0)break;
+    nextUrl=`${BTC}/blocks/${blocks.at(-1).height-1}`;
+  }
+  return {...source('bitcoin','Blockstream Esplora',now(),'Consecutive source-reported best-chain blocks; later requests may observe a reorganization.'),
+    requested,returned:blocks.length,partial:partial||blocks.length<requested,blocks};
+}
+
+async function ethereumSeries(fetcher,env,range,now){
+  const endpoint=ethereumEndpoint(env),requested=Number(range);
+  const [chainId,head]=await Promise.all([rpc(fetcher,endpoint,'eth_chainId',[]),rpc(fetcher,endpoint,'eth_getBlockByNumber',['latest',false])]);
+  if(quantity(chainId)!==1n||!isHex64(head?.hash))throw new Error('ethereum_network_mismatch');
+  const height=quantity(head.number),raw=await rpc(fetcher,endpoint,'eth_feeHistory',[`0x${requested.toString(16)}`,head.number,[]]);
+  const history=ethereumFeeHistoryFacts(raw,requested);
+  if(BigInt(history.oldest_height)+BigInt(history.gas_used_ratio.length)-1n!==height)throw new Error('invalid_source_response');
+  return {...source('ethereum','configured Ethereum JSON-RPC',now(),'Fee history is source-reported and anchored to one requested execution height; finalized status is a separate observation.'),
+    requested,returned:history.gas_used_ratio.length,head:{height:height.toString(),hash:head.hash},fee_history:history};
+}
+
+async function blochPeerSeries(fetcher,range,now){
+  const response=await json(fetcher,`${BLOCH}/api/v1/observability/peer-history?period=${range}`),data=response?.data;
+  const points=data?.points,limit={"6h":75,"24h":99,"7d":171}[range];
+  if(data?.period!==range||!Array.isArray(points)||points.length>limit||points.some((point,index)=>
+    !Number.isSafeInteger(point?.at)||point.at<0||index>0&&point.at<=points[index-1].at||
+    point.connections!=null&&(!Number.isSafeInteger(point.connections)||point.connections<0)||
+    point.reporting_nodes!=null&&(!Number.isSafeInteger(point.reporting_nodes)||point.reporting_nodes<0)))throw new Error('invalid_source_response');
+  return {...source('bloch','Bloch monitored-node observability',now(),'Aggregate socket connections across monitored nodes; changing coverage and gaps are retained. This is not a unique-peer count.'),
+    period:range,points,returned:points.length,valid_points:points.filter(point=>point.connections!=null&&point.reporting_nodes!=null).length};
 }
 
 async function blochOverview(fetcher, now) {
@@ -468,13 +516,20 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   const offsetRaw = url.searchParams.get('offset');
   const offset = offsetRaw == null ? 0 : Number(offsetRaw);
   const cursor = url.searchParams.get('cursor');
+  const range = url.searchParams.get('range');
   const asset = (url.searchParams.get('asset') || {bitcoin:'BTC', ethereum:'ETH', bloch:'BLCH'}[network]).toUpperCase();
-  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset', 'cursor'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset', 'cursor','range'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if(range!=null&&route!=='series')return bad('invalid_range');
   if (cursor != null && (route !== 'history' || !/^[a-zA-Z0-9_-]{1,160}$/.test(cursor))) return bad('invalid_cursor');
   if (offsetRaw != null && (!['block','validators'].includes(route) || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset)||route==='validators'&&(offset%32!==0||offset>4096))) return bad('invalid_offset');
   if (route !== 'address' && url.searchParams.has('asset')) return bad('invalid_parameters');
-  if (['overview','validators'].includes(route) && query) return bad('invalid_parameters');
-  if (!['overview','validators'].includes(route) && (!query || query.length > 100)) return bad('invalid_query');
+  if (['overview','validators','series'].includes(route) && query) return bad('invalid_parameters');
+  if (!['overview','validators','series'].includes(route) && (!query || query.length > 100)) return bad('invalid_query');
+  if(route==='series'){
+    if(!(network==='bitcoin'&&['10','30'].includes(range)||network==='ethereum'&&['12','48'].includes(range)||network==='bloch'&&['6h','24h','7d'].includes(range)))return bad('invalid_range');
+    try{return reply(200,await (network==='bitcoin'?bitcoinSeries(fetcher,range,now):network==='ethereum'?ethereumSeries(fetcher,env,range,now):blochPeerSeries(fetcher,range,now)));}
+    catch{return bad('source_unavailable',503);}
+  }
   if (route === 'validators') {
     if(network!=='bloch')return bad('invalid_network');
     try{return reply(200,await blochValidators(fetcher,offset,now));}

@@ -12,6 +12,7 @@ const themeKey='bloch-space-theme';
 try{if(localStorage.getItem(themeKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
 function theme(){const dark=document.documentElement.dataset.theme==='dark';$('#theme-toggle').setAttribute('aria-label',`Switch to ${dark?'light':'dark'} theme`);$('.theme-toggle-label').textContent=dark?'Light':'Dark';$('meta[name="theme-color"]').content=dark?'#050706':'#f8faf4';}
 theme();$('#theme-toggle').addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem(themeKey,document.documentElement.dataset.theme);}catch{}theme();});
+const analyticsLink=make('a','chain-analytics-link','Open advanced analytics ↗');analyticsLink.href=`/${network}/analytics/`;$('.chain-hero').append(analyticsLink);
 $('#chain-search').addEventListener('submit',event=>{event.preventDefault();const query=$('#chain-query').value.trim();if(query)location.href=record('auto',query);});
 
 function metric(label,value,detail){const box=make('div','chain-metric');box.append(make('span','',label),make('strong','',value),make('small','',detail));return box;}
