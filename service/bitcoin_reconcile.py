@@ -43,8 +43,8 @@ def reconcile(pilot_path, *, get=fetch_secondary):
     """Compare a verified schema-v2 sample with a second public operator."""
     source = inspect_bitcoin_pilot(pilot_path)
     sample = json.loads(Path(pilot_path).read_bytes())
-    if sample.get("schema_version") != 2:
-        raise ValueError("schema-v2 Bitcoin pilot required for second-source reconciliation")
+    if sample.get("schema_version") not in (2, 3):
+        raise ValueError("schema-v2 or v3 Bitcoin pilot required for second-source reconciliation")
     height = sample["block_height"]
     block_hash = sample["block_hash"]
     merkle_root = sample["block_merkle_root_source_reported"]

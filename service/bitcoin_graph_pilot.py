@@ -29,8 +29,8 @@ def build_report(pilot_path):
     if hashlib.sha256(raw).hexdigest() != evidence["sample_digest"]:
         raise ValueError("Bitcoin graph pilot changed after validation")
     sample = json.loads(raw)
-    if sample["schema_version"] != 2 or not evidence["merkle_inclusion_locally_verified"]:
-        raise ValueError("Bitcoin graph requires verified schema-v2 pilot")
+    if sample["schema_version"] not in (2, 3) or not evidence["merkle_inclusion_locally_verified"]:
+        raise ValueError("Bitcoin graph requires verified schema-v2 or v3 pilot")
 
     created = {}
     spends = []
@@ -110,7 +110,7 @@ def build_report(pilot_path):
         },
         "header_hash_locally_verified": True,
         "sampled_transaction_merkle_inclusion_locally_verified": True,
-        "transaction_bodies_locally_verified_against_txids": False,
+        "transaction_bodies_locally_verified_against_txids": evidence["transaction_bodies_locally_verified_against_txids"],
         "consensus_or_best_chain_independently_verified": False,
         "chain_history_complete": False,
         "wallet_ownership_inferred": False,

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .ethereum import ADDRESS, TOKEN_CONTRACTS
 from .bitcoin_pilot import SOURCE_ID as BITCOIN_PRIMARY_SOURCE_ID, verify_header, verify_merkle_proof
+from .bitcoin_body import verify_transaction_body
 from .normalization import Movement
 
 
@@ -256,7 +257,7 @@ def inspect_bitcoin_pilot(pilot_path):
     sample = json.loads(raw)
     schema_version = sample.get("schema_version")
     if (sample.get("kind") != "bounded_private_bitcoin_block_pilot"
-            or schema_version not in (1, 2) or type(schema_version) is not int
+            or schema_version not in (1, 2, 3) or type(schema_version) is not int
             or sample.get("chain") != "bitcoin" or sample.get("network") != "mainnet"
             or sample.get("source_id") != BITCOIN_PRIMARY_SOURCE_ID
             or not HEX64.fullmatch(sample.get("block_hash", ""))
@@ -270,7 +271,7 @@ def inspect_bitcoin_pilot(pilot_path):
             or sample.get("sender_ownership_inferred") is not False
             or sample.get("aml_scores_computed") != 0):
         raise ValueError("invalid Bitcoin pilot provenance")
-    if schema_version == 2:
+    if schema_version >= 2:
         if (sample.get("header_hash_locally_verified") is not True
                 or sample.get("merkle_inclusion_locally_verified") is not True
                 or not HEX64.fullmatch(sample.get("block_merkle_root_source_reported", ""))):
@@ -279,6 +280,12 @@ def inspect_bitcoin_pilot(pilot_path):
                       sample["block_merkle_root_source_reported"])
     elif sample.get("merkle_inclusion_locally_verified") is True:
         raise ValueError("legacy Bitcoin pilot cannot assert verified inclusion")
+    if schema_version == 3:
+        if (sample.get("transaction_bodies_locally_verified_against_txids") is not True
+                or sample.get("source_reported_addresses_locally_verified") is not False):
+            raise ValueError("invalid Bitcoin body verification provenance")
+    elif sample.get("transaction_bodies_locally_verified_against_txids") is True:
+        raise ValueError("legacy Bitcoin pilot cannot assert verified bodies")
     transactions = sample.get("transactions")
     if (not isinstance(transactions, list) or not 1 <= len(transactions) <= 5
             or len(transactions) != sample.get("sampled_transactions")
@@ -296,13 +303,15 @@ def inspect_bitcoin_pilot(pilot_path):
                 or not isinstance(tx.get("outputs"), list)):
             raise ValueError("invalid Bitcoin pilot transaction")
         seen.add(txid)
-        if schema_version == 2:
+        if schema_version >= 2:
             if tx.get("merkle_position") != index or type(tx.get("merkle_position")) is not int:
                 raise ValueError("Bitcoin pilot Merkle position mismatch")
             verify_merkle_proof(txid, index, sample["block_height"],
                                 {"block_height": sample["block_height"], "pos": index,
                                  "merkle": tx.get("merkle_branch")},
                                 sample["block_merkle_root_source_reported"])
+        if schema_version == 3:
+            verify_transaction_body(tx)
         coinbase = 0
         for entry in tx["inputs"]:
             if entry.get("kind") == "coinbase_input" and entry.get("spent_outpoint") is None:
@@ -338,8 +347,9 @@ def inspect_bitcoin_pilot(pilot_path):
         "confirmations_source_reported": sample["confirmations_source_reported"],
         "sampled_transactions": len(transactions), "sampled_outputs": outputs,
         "sampled_spent_outpoint_references": references,
-        "header_hash_locally_verified": schema_version == 2,
-        "merkle_inclusion_locally_verified": schema_version == 2,
+        "header_hash_locally_verified": schema_version >= 2,
+        "merkle_inclusion_locally_verified": schema_version >= 2,
+        "transaction_bodies_locally_verified_against_txids": schema_version == 3,
         "chain_history_complete": False, "independent_node_reconciliation": False,
         "quality_gate": "pass",
         "caveat": "one source-reported best-chain block; probabilistic confirmations, no history or ownership claim",

@@ -50,7 +50,7 @@ def fetch(path):
     if len(raw) > MAX_RESPONSE_BYTES:
         raise ValueError("Esplora response exceeds bound")
     if (path == "/blocks/tip/height" or path.startswith("/block-height/")
-            or "/txid/" in path or path.endswith("/header")):
+            or "/txid/" in path or path.endswith("/header") or path.endswith("/hex")):
         if "text/plain" not in content_type:
             raise ValueError("unexpected Esplora text content type")
         return raw.decode("ascii").strip()

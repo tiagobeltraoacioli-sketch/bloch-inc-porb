@@ -47,8 +47,8 @@ def build_index(pilot_path, index_path):
     if hashlib.sha256(raw).hexdigest() != evidence["sample_digest"]:
         raise ValueError("Bitcoin pilot changed after validation")
     sample = json.loads(raw)
-    if sample["schema_version"] != 2 or not evidence["merkle_inclusion_locally_verified"]:
-        raise ValueError("Bitcoin query index requires verified schema-v2 pilot")
+    if sample["schema_version"] not in (2, 3) or not evidence["merkle_inclusion_locally_verified"]:
+        raise ValueError("Bitcoin query index requires verified schema-v2 or v3 pilot")
     if index_path.resolve() == pilot_path.resolve():
         raise ValueError("index path must differ from pilot path")
 
@@ -108,6 +108,7 @@ def build_index(pilot_path, index_path):
                 "sampled_input_outpoint_references": evidence["sampled_spent_outpoint_references"],
                 "header_hash_locally_verified": True,
                 "merkle_inclusion_locally_verified": True,
+                "transaction_bodies_locally_verified_against_txids": evidence["transaction_bodies_locally_verified_against_txids"],
                 "independent_node_reconciliation": False,
                 "chain_history_complete": False,
                 "sender_ownership_inferred": False,

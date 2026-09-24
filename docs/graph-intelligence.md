@@ -47,7 +47,7 @@ The private response now also includes an `observed_direct_edges` list. Each row
 
 ### Private UTXO transaction summaries
 
-`service.bloch_graph_pilot` and `service.bitcoin_graph_pilot` compute bounded transaction-level summaries from private samples. They link only a spent outpoint that names a creation present in the same sample, then report aggregate component sizes and observation distributions. They do not create account-style wallet-to-wallet edges, infer ownership, or expose the private identifiers to the public Graphus preview. The Bloch report retains the indexer's unverified finality claim; the Bitcoin report separates locally checked header/Merkle inclusion from unverified transaction bodies and independent consensus. See `docs/bloch-graph-pilot.md` and `docs/bitcoin-graph-pilot.md` for the exact pilots and limitations.
+`service.bloch_graph_pilot` and `service.bitcoin_graph_pilot` compute bounded transaction-level summaries from private samples. They link only a spent outpoint that names a creation present in the same sample, then report aggregate component sizes and observation distributions. They do not create account-style wallet-to-wallet edges, infer ownership, or expose the private identifiers to the public Graphus preview. The Bloch report retains the indexer's unverified finality claim; Bitcoin schema v3 adds locally checked transaction bodies to header/Merkle inclusion while independent consensus remains unverified. See `docs/bloch-graph-pilot.md` and `docs/bitcoin-graph-pilot.md` for the exact pilots and limitations.
 
 ### Normalized observation adapter
 
