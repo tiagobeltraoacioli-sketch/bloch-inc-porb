@@ -182,12 +182,28 @@ export function bitcoinTransactionFacts(tx, headHeight = null) {
   };
 }
 
-export function ethereumReceiptFacts(receipt) {
-  if (!receipt) return {gas_fee_wei:null, token_transfers:[], token_transfer_count:0};
+export function ethereumReceiptFacts(receipt, transactionType = null) {
+  if (!receipt) return {gas_fee_wei:null, blob_fee_wei:null, total_fee_wei:null, blob_fee_status:'unavailable', blob_gas_used:null, blob_gas_price_wei:null, token_transfers:[], token_transfer_count:0};
   let gasFee = null;
   try {
     if (receipt.gasUsed != null && receipt.effectiveGasPrice != null) gasFee = (quantity(receipt.gasUsed) * quantity(receipt.effectiveGasPrice)).toString();
   } catch { /* Preserve the raw receipt without an invented fee. */ }
+  const hasBlobField = receipt.blobGasUsed != null || receipt.blobGasPrice != null;
+  let isBlobType = false;
+  try { isBlobType = (receipt.type ?? transactionType) != null && quantity(receipt.type ?? transactionType) === 3n; }
+  catch { /* An invalid type does not justify a zero blob fee. */ isBlobType = true; }
+  let blobFee = null, blobGasUsed = null, blobGasPrice = null;
+  let blobFeeStatus = hasBlobField || isBlobType ? 'incomplete' : 'not_applicable';
+  if (receipt.blobGasUsed != null && receipt.blobGasPrice != null) {
+    try {
+      blobGasUsed = quantity(receipt.blobGasUsed).toString();
+      blobGasPrice = quantity(receipt.blobGasPrice).toString();
+      blobFee = (BigInt(blobGasUsed) * BigInt(blobGasPrice)).toString();
+      blobFeeStatus = 'available';
+    } catch { /* Partial or malformed blob fields cannot establish a total. */ }
+  }
+  const totalFee = gasFee == null || blobFeeStatus === 'incomplete' ? null :
+    (BigInt(gasFee) + BigInt(blobFee ?? '0')).toString();
   const transfers = [];
   if (receipt.status === '0x1' && Array.isArray(receipt.logs)) {
     for (const log of receipt.logs) {
@@ -202,7 +218,9 @@ export function ethereumReceiptFacts(receipt) {
         kind:from === ZERO_ADDRESS ? 'mint' : to === ZERO_ADDRESS ? 'burn' : 'transfer', log_index:log.logIndex ?? null});
     }
   }
-  return {gas_fee_wei:gasFee, token_transfers:transfers.slice(0,64), token_transfer_count:transfers.length};
+  return {gas_fee_wei:gasFee, blob_fee_wei:blobFee, total_fee_wei:totalFee,
+    blob_fee_status:blobFeeStatus, blob_gas_used:blobGasUsed, blob_gas_price_wei:blobGasPrice,
+    token_transfers:transfers.slice(0,64), token_transfer_count:transfers.length};
 }
 
 async function ethereumBlock(fetcher, env, query, now, offset = 0) {
@@ -239,7 +257,7 @@ async function ethereumTx(fetcher, env, query, now) {
   return {
     ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Receipt availability, execution status and finality are separate. Latest and finalized heights are separate source snapshots.'),
     transaction, receipt, receipt_status:receiptStatus, position, finalized_height:position.finalized_height,
-    ...ethereumReceiptFacts(receiptStatus === 'available' ? receipt : null),
+    ...ethereumReceiptFacts(receiptStatus === 'available' ? receipt : null, transaction.type),
   };
 }
 

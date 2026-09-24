@@ -53,6 +53,10 @@ for network in ("bitcoin", "ethereum", "bloch"):
         assert receipt["transactionHash"].lower() == transaction["transaction"]["hash"].lower()
         assert receipt["blockHash"].lower() == transaction["transaction"]["blockHash"].lower()
         assert transaction["gas_fee_wei"] == str(int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16))
+        if transaction["blob_fee_status"] == "available":
+            assert transaction["blob_fee_wei"] == str(int(receipt["blobGasUsed"], 16) * int(receipt["blobGasPrice"], 16))
+        if transaction["blob_fee_status"] != "incomplete":
+            assert transaction["total_fee_wei"] == str(int(transaction["gas_fee_wei"]) + int(transaction["blob_fee_wei"] or 0))
         assert transaction["position"]["confirmations"] is not None
     if network == "bloch":
         position = transaction["position"]

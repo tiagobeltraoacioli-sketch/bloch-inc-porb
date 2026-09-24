@@ -69,6 +69,7 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
   assert.equal(response.body.finalized_height,16);
   assert.equal(response.body.position.confirmations,2);
   assert.equal(response.body.position.finality_relation,'above_reported_checkpoint');
+  assert.equal(response.body.total_fee_wei,null);
   assert.deepEqual(methods.sort(),['eth_blockNumber','eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
 });
 
@@ -123,10 +124,23 @@ test('Ethereum receipt decodes only successful allowlisted Transfer logs and pre
     {...good,address:'0x'+'3'.repeat(40)}, {...good,topics:[good.topics[0],topic(from),`0x${'f'.repeat(64)}`]}]};
   const facts=ethereumReceiptFacts(receipt);
   assert.equal(facts.gas_fee_wei,'21000000000000');
+  assert.equal(facts.total_fee_wei,'21000000000000');
+  assert.equal(facts.blob_fee_status,'not_applicable');
   assert.equal(facts.token_transfer_count,1);
   assert.deepEqual(facts.token_transfers[0],{asset:'USDT',from:`0x${from}`,to:`0x${to}`,
     amount_base_units:'10',kind:'transfer',log_index:'0x2'});
   assert.equal(ethereumReceiptFacts({...receipt,status:'0x0'}).token_transfer_count,0);
+});
+
+test('Ethereum blob receipts include blob gas and leave partial fee data unknown', () => {
+  const receipt={type:'0x3',status:'0x0',gasUsed:'0x5208',effectiveGasPrice:'0x3b9aca00',blobGasUsed:'0x20000',blobGasPrice:'0x3e8',logs:[]};
+  const facts=ethereumReceiptFacts(receipt);
+  assert.equal(facts.gas_fee_wei,'21000000000000');
+  assert.equal(facts.blob_fee_wei,'131072000');
+  assert.equal(facts.total_fee_wei,'21000131072000');
+  assert.equal(facts.blob_fee_status,'available');
+  assert.equal(ethereumReceiptFacts({...receipt,blobGasPrice:undefined}).total_fee_wei,null);
+  assert.equal(ethereumReceiptFacts({...receipt,type:undefined,blobGasUsed:undefined,blobGasPrice:undefined},'0x3').blob_fee_status,'incomplete');
 });
 
 test('Bloch overview keeps head, indexer and holder snapshots separate', async () => {
