@@ -112,6 +112,7 @@ def build_index(sample_dir, index_path):
                 "retrieved_at": evidence["retrieved_at"],
                 "source_reported_finalized_block_number": evidence["source_reported_finalized_block_number"],
                 "source_reported_finalized_block_hash": manifest["source_reported_finalized_block_hash"],
+                "source_reported_block_time": evidence["source_reported_block_time"],
                 "sampled_transactions": evidence["sampled_transactions"],
                 "movement_counts": evidence["movement_counts"],
                 "chain_history_complete": False,

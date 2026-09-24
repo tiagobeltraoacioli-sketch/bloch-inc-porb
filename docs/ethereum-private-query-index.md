@@ -4,6 +4,8 @@
 
 The index contains only normalized, successful direct ETH movements and allowlisted USDT/USDC ERC-20 `Transfer` events already present in the pilot. It can search a protocol address by **one asset** and direction, or a transaction hash, with a maximum page size of 100. Amounts are returned as exact decimal strings in base units. Each result includes the event key, source line, block reference, and source-reported finalized-block provenance. An account's presence in an event does not identify its owner; a transaction `from` address is a protocol sender, not a person. The source-reported finality is not independently verified, and this tiny first-hashes sample says nothing about chain coverage or AML risk.
 
+For newly collected pilots, index metadata also preserves the source-reported block time. Older validated pilots have `null` for that field; retrieval time is never substituted as event time.
+
 Run only on the private data host. Query output includes addresses and transaction hashes, so it must stay in a restricted shell or file:
 
 ```sh

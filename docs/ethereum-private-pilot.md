@@ -25,4 +25,16 @@ sudo -u porb python3 -m service.data_quality \
 
 The pilot writes a digest-linked manifest and JSONL observations as 0600 files in a 0700 directory. The ledger rechecks the digest, counts, source, event keys, block identity, exact integer units, allowlisted assets, and successful sampled receipts; it exports only aggregates. A source endpoint's hostname is recorded without URL credentials or path. The current ledger marks all five initial assets as bounded private samples after the separate [Bitcoin block pilot](bitcoin-private-pilot.md). `production_ready` remains false.
 
+New pilot manifests also record the block's **source-reported timestamp** as `source_reported_block_time`, distinct from retrieval time. The private `GraphAnalytics.from_ethereum_pilot` adapter validates the sample and uses only this block time as event time. It refuses older pilot artifacts that lack the field; those artifacts remain valid as bounded quality and query-index samples. Neither a timestamp nor one finalized-block sample establishes full history, independent consensus finality, or continuous coverage.
+
+The second-source reconciliation checks that timestamp at the selected height, by block hash, and on a repeat fetch. Timestamped pilots receive a schema-v2 report; the evidence ledger rejects a schema-v1 report for them. The comparison still relies on two public RPC hostnames and does not validate consensus independently.
+
+`service.ethereum_graph_pilot` writes a 0600 aggregate graph summary from a timestamped pilot. It reports event and distinct protocol-reference counts by ETH, USDT, and USDC without exporting addresses or transaction IDs:
+
+```sh
+sudo -u porb python3 -m service.ethereum_graph_pilot \
+  --sample-dir /var/lib/bi-porb/private/ethereum-pilot-v4-blocktime \
+  --output /var/lib/bi-porb/private/ethereum-pilot-v4-blocktime/graph-summary.json
+```
+
 Before broader Ethereum ingestion, add source-independent finalized-block reconciliation, canonical block/receipt replay, complete transaction and log counts, reorg handling, bounded checkpoints, provider rights and rate limits, storage/egress measurements, and a versioned token metadata registry. Never infer a person or AML conclusion from a transaction's `from` field.

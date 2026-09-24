@@ -115,6 +115,12 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
     by_hash = get("eth_getBlockByHash", [block_hash, False])
     _block_matches(by_hash, expected_hash=block_hash, expected_number=height,
                    expected_count=count, selected=selected)
+    block_time = evidence["source_reported_block_time"]
+    expected_timestamp = (int(datetime.fromisoformat(block_time.replace("Z", "+00:00")).timestamp())
+                          if block_time is not None else None)
+    if expected_timestamp is not None and any(
+            _quantity(block.get("timestamp")) != expected_timestamp for block in (at_height, by_hash)):
+        raise ValueError("secondary Ethereum block timestamp differs")
     secondary_movements = []
     for row in sampled:
         txid = row["tx_id"]
@@ -153,8 +159,10 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
         raise ValueError("secondary Ethereum finalized head regressed during comparison")
     _block_matches(at_height_again, expected_hash=block_hash, expected_number=height,
                    expected_count=count, selected=selected)
-    return {
-        "schema_version": 1,
+    if expected_timestamp is not None and _quantity(at_height_again.get("timestamp")) != expected_timestamp:
+        raise ValueError("secondary Ethereum block timestamp differs on repeat")
+    report = {
+        "schema_version": 2 if expected_timestamp is not None else 1,
         "kind": "bounded_ethereum_second_source_reconciliation",
         "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "primary_source_host": primary_host,
@@ -179,6 +187,9 @@ def reconcile(pilot_dir, *, fetch=rpc, rpc_url=SECONDARY_RPC):
         "aml_scores_computed": 0,
         "caveat": "two public RPC hostnames agree on a bounded sample; no independent node or complete receipt replay",
     }
+    if expected_timestamp is not None:
+        report["block_timestamp_agree"] = True
+    return report
 
 
 def write_private(report, output_path):

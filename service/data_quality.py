@@ -171,6 +171,17 @@ def inspect_ethereum_pilot(sample_dir):
             or not ETH_HEX64.fullmatch(manifest.get("source_reported_finalized_block_hash", ""))
             or type(manifest.get("source_reported_finalized_block_number")) is not int):
         raise ValueError("invalid Ethereum pilot provenance")
+    block_time = manifest.get("source_reported_block_time")
+    if block_time is not None:
+        if not isinstance(block_time, str) or not block_time.endswith("Z"):
+            raise ValueError("invalid Ethereum source-reported block time")
+        try:
+            parsed_block_time = datetime.fromisoformat(block_time.replace("Z", "+00:00"))
+        except (AttributeError, ValueError) as error:
+            raise ValueError("invalid Ethereum source-reported block time") from error
+        if (parsed_block_time.tzinfo is None or parsed_block_time.utcoffset().total_seconds() != 0
+                or parsed_block_time.microsecond or parsed_block_time.timestamp() <= 0):
+            raise ValueError("invalid Ethereum source-reported block time")
     finalized_head = manifest.get("finalized_head_number_at_collection")
     if finalized_head is not None and (type(finalized_head) is not int
                                        or finalized_head < manifest["source_reported_finalized_block_number"]):
@@ -225,6 +236,8 @@ def inspect_ethereum_pilot(sample_dir):
         "source_host": manifest.get("source_host"),
         "sample_digest": digest,
         "source_reported_finalized_block_number": manifest["source_reported_finalized_block_number"],
+        "source_reported_finalized_block_hash": manifest["source_reported_finalized_block_hash"],
+        "source_reported_block_time": block_time,
         "block_transaction_count": manifest["block_transaction_count"],
         "sampled_transactions": len(transactions),
         "normalized_movements": len(events),
@@ -417,12 +430,15 @@ def inspect_ethereum_reconciliation(report_path, ethereum_sample, *, sample_dir,
         "operator_independence_verified", "full_receipt_payload_reconciled", "full_history_coverage",
         "aml_scores_computed", "caveat",
     }
+    timestamped = ethereum_sample["source_reported_block_time"] is not None
+    if timestamped:
+        expected_fields.add("block_timestamp_agree")
     if not isinstance(report, dict) or set(report) != expected_fields:
         raise ValueError("invalid Ethereum reconciliation report fields")
     manifest_digest = hashlib.sha256(
         (Path(sample_dir) / "ethereum-pilot-manifest.json").read_bytes()).hexdigest()
     count = ethereum_sample["sampled_transactions"]
-    if (type(report["schema_version"]) is not int or report["schema_version"] != 1
+    if (type(report["schema_version"]) is not int or report["schema_version"] != (2 if timestamped else 1)
             or report["kind"] != "bounded_ethereum_second_source_reconciliation"
             or report["primary_source_host"] != ethereum_sample["source_host"]
             or not isinstance(report["secondary_source_host"], str)
@@ -437,6 +453,7 @@ def inspect_ethereum_reconciliation(report_path, ethereum_sample, *, sample_dir,
             or report["block_hash_count_positions_agree"] is not True
             or report["sampled_transaction_receipt_identity_status_agree"] is not True
             or report["normalized_eth_usdt_usdc_movements_agree"] is not True
+            or (timestamped and report["block_timestamp_agree"] is not True)
             or type(report["normalized_movements_compared"]) is not int
             or report["normalized_movements_compared"] != ethereum_sample["normalized_movements"]
             or report["secondary_finalized_head_and_height_checked_twice"] is not True
@@ -475,6 +492,7 @@ def inspect_ethereum_reconciliation(report_path, ethereum_sample, *, sample_dir,
         "sampled_transactions_compared": count,
         "normalized_movements_compared": report["normalized_movements_compared"],
         "source_reported_finality_agree": True,
+        "source_reported_block_time_agree": True if timestamped else None,
         "normalized_eth_usdt_usdc_movements_agree": True,
         "consensus_independently_validated": False,
         "operator_independence_verified": False,
@@ -553,6 +571,7 @@ def build_ledger(*, bloch_sample_dir=None, ethereum_pilot_dir=None, bitcoin_pilo
                 "kind": source["kind"], "sample_digest": source["sample_digest"],
                 "sampled_transactions": source["sampled_transactions"],
                 "sampled_asset_movements": source["movement_counts"][symbol],
+                "source_reported_block_time": source["source_reported_block_time"],
                 "sample_selection": source["sample_selection"],
                 "quality_gate": source["quality_gate"], "caveat": source["caveat"],
             }

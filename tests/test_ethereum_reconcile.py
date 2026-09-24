@@ -17,9 +17,9 @@ def source(url, method, params):
     if method == "eth_chainId":
         return "0x1"
     if method == "eth_getBlockByNumber":
-        return {"hash": BLOCK, "number": "0x2a", "transactions": [TX]}
+        return {"hash": BLOCK, "number": "0x2a", "timestamp": hex(1767225600), "transactions": [TX]}
     if method == "eth_getBlockByHash":
-        return {"hash": BLOCK, "number": "0x2a", "transactions": [TX]}
+        return {"hash": BLOCK, "number": "0x2a", "timestamp": hex(1767225600), "transactions": [TX]}
     if method == "eth_getTransactionByHash":
         return {"hash": TX, "blockHash": BLOCK, "blockNumber": "0x2a", "transactionIndex": "0x0",
                 "from": "0x" + "1" * 40, "to": "0x" + "2" * 40, "value": "0x0"}
@@ -45,6 +45,8 @@ class EthereumReconcileTest(unittest.TestCase):
             return source(url, method, params)
 
         report = reconcile(self.pilot, fetch=fetch, rpc_url="https://other.example/rpc")
+        self.assertEqual(report["schema_version"], 2)
+        self.assertTrue(report["block_timestamp_agree"])
         self.assertEqual(report["sampled_transactions_compared"], 1)
         self.assertEqual(report["rpc_calls"], 8)
         self.assertEqual(calls.count("eth_getBlockByNumber"), 4)
@@ -58,6 +60,15 @@ class EthereumReconcileTest(unittest.TestCase):
         self.assertEqual(len(digest), 64)
         self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
         self.assertEqual(json.loads(destination.read_text())["sampled_transactions_compared"], 1)
+
+    def test_legacy_pilot_remains_schema_one_without_timestamp_claim(self):
+        manifest_path = self.pilot / "ethereum-pilot-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        del manifest["source_reported_block_time"]
+        manifest_path.write_text(json.dumps(manifest))
+        report = reconcile(self.pilot, fetch=source, rpc_url="https://other.example")
+        self.assertEqual(report["schema_version"], 1)
+        self.assertNotIn("block_timestamp_agree", report)
 
     def test_mismatched_block_or_receipt_fails_closed(self):
         def wrong_block(url, method, params):
@@ -75,6 +86,15 @@ class EthereumReconcileTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "receipt differs"):
             reconcile(self.pilot, fetch=wrong_receipt, rpc_url="https://other.example")
+
+        def wrong_timestamp(url, method, params):
+            result = source(url, method, params)
+            if method == "eth_getBlockByHash":
+                return {**result, "timestamp": hex(1767225601)}
+            return result
+
+        with self.assertRaisesRegex(ValueError, "block timestamp differs"):
+            reconcile(self.pilot, fetch=wrong_timestamp, rpc_url="https://other.example")
 
     def test_same_host_and_tampered_pilot_rejected(self):
         with self.assertRaisesRegex(ValueError, "distinct HTTPS"):

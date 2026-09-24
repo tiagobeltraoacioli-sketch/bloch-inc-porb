@@ -91,6 +91,13 @@ def collect(*, limit=5, block_number=None, fetch=rpc, rpc_url=ETH_RPC):
         raise ValueError("invalid finalized block response")
     block_hash = block["hash"].lower()
     block_number = int(block["number"], 16)
+    block_timestamp = _quantity(block.get("timestamp"))
+    if block_timestamp <= 0:
+        raise ValueError("source-reported Ethereum block timestamp required")
+    try:
+        block_time = datetime.fromtimestamp(block_timestamp, timezone.utc).isoformat().replace("+00:00", "Z")
+    except (OverflowError, OSError, ValueError) as error:
+        raise ValueError("invalid source-reported Ethereum block timestamp") from error
     if requested_block_number is not None and block_number != requested_block_number:
         raise ValueError("selected block height differs from request")
     if block_number > finalized_head_number:
@@ -145,6 +152,7 @@ def collect(*, limit=5, block_number=None, fetch=rpc, rpc_url=ETH_RPC):
         "source_id": "ethereum-mainnet-rpc", "source_host": urlsplit(rpc_url).hostname, "chain_id": 1,
         "source_reported_finalized_block_number": block_number,
         "source_reported_finalized_block_hash": block_hash,
+        "source_reported_block_time": block_time,
         "finalized_head_number_at_collection": finalized_head_number,
         "block_transaction_count": len(block["transactions"]),
         "sampled_transactions": len(selected), "sample_selection": "first_transaction_hashes_in_source_reported_finalized_block",

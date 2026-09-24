@@ -4,7 +4,10 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 from math import sqrt
+from pathlib import Path
 
 from .normalization import Movement
 
@@ -103,6 +106,28 @@ class GraphAnalytics:
         """Build a bounded private observation graph from normalized movements."""
         return cls(events_from_movements(movements, block_times=block_times,
                                          max_events=max_events), max_events=max_events)
+
+    @classmethod
+    def from_ethereum_pilot(cls, sample_dir):
+        """Load one verified private pilot with a source-reported block time."""
+        from .data_quality import inspect_ethereum_pilot
+
+        sample_dir = Path(sample_dir)
+        raw_path = sample_dir / "ethereum-pilot.jsonl"
+        if raw_path.stat().st_size > 32_000_000:
+            raise ValueError("Ethereum graph pilot exceeds byte bound")
+        evidence = inspect_ethereum_pilot(sample_dir)
+        block_time = evidence["source_reported_block_time"]
+        if block_time is None:
+            raise ValueError("source-reported block time required for temporal graph")
+        raw = raw_path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != evidence["sample_digest"]:
+            raise ValueError("Ethereum graph pilot changed after validation")
+        records = [json.loads(line) for line in raw.splitlines()]
+        movements = [Movement(**{name: row[name] for name in Movement.__dataclass_fields__})
+                     for row in records if row["record_type"] == "normalized_movement"]
+        block_times = {("ethereum", "mainnet", evidence["source_reported_finalized_block_hash"]): block_time}
+        return cls.from_movements(movements, block_times=block_times, max_events=5000)
 
     def _window(self, chain, network, asset_id, start, end):
         lower, upper = timestamp(start), timestamp(end)
