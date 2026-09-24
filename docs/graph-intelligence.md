@@ -45,6 +45,10 @@ The separate private `wallet_neighborhood` method expands only directly observed
 
 The private response now also includes an `observed_direct_edges` list. Each row preserves the event ID, graph step, sender and destination references, base-unit amount, observation time, source ID, and finality. It is a view over the same selected event nodes, not an inferred entity or flow-through edge. Unknown-sender events remain event nodes without a direct edge row.
 
+### Private UTXO transaction summaries
+
+`service.bloch_graph_pilot` and `service.bitcoin_graph_pilot` compute bounded transaction-level summaries from private samples. They link only a spent outpoint that names a creation present in the same sample, then report aggregate component sizes and observation distributions. They do not create account-style wallet-to-wallet edges, infer ownership, or expose the private identifiers to the public Graphus preview. The Bloch report retains the indexer's unverified finality claim; the Bitcoin report separates locally checked header/Merkle inclusion from unverified transaction bodies and independent consensus. See `docs/bloch-graph-pilot.md` and `docs/bitcoin-graph-pilot.md` for the exact pilots and limitations.
+
 ### Normalized observation adapter
 
 `GraphAnalytics.from_movements(movements, block_times=...)` converts a bounded sequence of canonical `Movement` records to the same event-centered graph. The timestamp map is keyed by `(chain, network, block_ref)` and must contain a timezone-aware **source-provided block time** for every movement. The caller must validate those timestamps and the private sample manifest against its source; the adapter does not fetch or verify either. It refuses an absent block time, an observed but unconfirmed movement, heuristic sender attribution, duplicate event keys, and direct Bitcoin/Bloch sender attribution. It never uses collection time as event time.
