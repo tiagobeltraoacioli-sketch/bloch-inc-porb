@@ -17,10 +17,11 @@ sudo docker run -d \
   --volume /var/lib/graphus/ethereum:/var/lib/erigon \
   erigontech/erigon@sha256:8cd3fbcbb35d8b16768225ff7494a0672b7b06c9bf13d466850aabb920ac0de7 \
   --chain=mainnet \
+  --prune.mode=archive \
   --datadir=/var/lib/erigon \
   --http \
   --http.addr=127.0.0.1 \
-  --http.api=eth,net,web3 \
+  --http.api=eth,debug,net,web3 \
   --authrpc.addr=127.0.0.1 \
   --private.api.addr=127.0.0.1:9090 \
   --torrent.download.rate=64mb

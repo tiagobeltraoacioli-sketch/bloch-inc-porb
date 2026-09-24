@@ -13,6 +13,15 @@ set, which can be exported after initial block download completes. RPC accepts
 only loopback connections and the `graphusbtc` user owns its data directory.
 The BI-PoRB timers remain separate.
 
+`graphus-bitcoin-ranking.timer` retries the private snapshot job hourly. It
+does no export while initial block download is active. Once validated, the job
+checks at least 500 GB free, verifies the pinned official converter, writes a
+`dumptxoutset latest` snapshot, checks its block is still canonical, converts
+all coins to SQLite, aggregates exact script balances, and writes a mode 0600
+JSON result under `/var/lib/graphus-bitcoin/rankings`. Intermediate snapshot
+and SQLite files are removed after the result is written. It builds only once;
+refresh and publication need a separate reviewed process.
+
 Check progress without exposing the RPC cookie:
 
 ```sh

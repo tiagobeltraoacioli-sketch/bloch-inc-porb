@@ -1,0 +1,6 @@
+[Unit]
+Description=Stop Graphus Erigon before disk reserve is exhausted
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/graphus-erigon-disk-guard

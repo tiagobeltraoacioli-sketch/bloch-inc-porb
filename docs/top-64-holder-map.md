@@ -20,3 +20,9 @@ partial conversion. The rank unit is an exact output script, with an address
 only where Bitcoin Core defines one; it is not a ranking of persons or all
 addresses controlled by a wallet. The other four assets still need complete
 indexing and same-anchor balance validation before a global top-64 view.
+
+An Ethereum archive node and private `Transfer` candidate scanner are now
+provisioned for USDT and USDC. The scanner is resumable and fixes a finalized
+target block, but its output is only a contract-event participant set. It
+cannot alone establish every current token holder; token `balanceOf` reads and
+coverage review remain necessary.

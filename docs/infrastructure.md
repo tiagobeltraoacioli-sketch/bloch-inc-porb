@@ -13,16 +13,26 @@ requested holder index. On `bloch-dex`, the verified official Bitcoin Core 31.1
 binary runs as `graphusbtc` through `graphus-bitcoind.service`, limited to eight
 CPU cores and 32 GB RAM. Its 100 GB prune target retains current UTXO state.
 Its RPC listens only on `127.0.0.1:8332`; BI-PoRB timers remained active after
-deployment. On `bloch-bridge`, the pinned Erigon v3.6.1 image runs with embedded
-Caplin, limited to 16 CPU cores and 48 GB RAM. Its RPC and private interfaces
+deployment. On `bloch-bridge`, the pinned Erigon v3.6.1 image runs in archive
+mode with embedded Caplin, limited to 16 CPU cores and 48 GB RAM. Its RPC and private interfaces
 listen only on loopback. Both nodes were in initial sync at last inspection;
-neither is yet a source for a complete holder ranking. See `ops/bitcoin` and
+neither is yet a source for a complete holder ranking. The Erigon initial full
+mode was replaced during early sync because it cannot serve old token logs;
+only its 1.9 MB `chaindata` was reset while snapshots were retained. See `ops/bitcoin` and
 `ops/ethereum` for the deployed configuration and progress checks.
+
+Private timers now gate further work on node readiness. The Bitcoin snapshot
+job checks `initialblockdownload=false` before exporting and wrote no ranking
+while validation was in progress. On the bridge, USDT and USDC Transfer-event
+scanners wait for Erigon archive sync, then resume from persisted block cursors;
+same-block `balanceOf` collectors wait for those scans. A separate disk guard
+checks the bridge volume every ten minutes and stops Erigon at 85% use.
+Neither candidate sets nor rankings are connected to the public site.
 
 The previous planning allocation below predates this deployment. Actual disk
 usage and bandwidth must be measured during sync and before reserving space for
-Bloch state, token-event indexes, or ML data. Do not treat either full node as
-an archive node, a full holder index, or a public API. Node completion,
+Bloch state, token-event indexes, or ML data. The Ethereum archive node is
+not itself a complete holder index or a public API. Node completion,
 snapshot anchoring, complete candidate discovery, and ranking validation are
 separate milestones.
 
@@ -36,7 +46,7 @@ Next data stages require separate go/no-go gates: chain-specific ingestion curso
 
 ## Capacity planning
 
-These 3 TB volumes are insufficient for a promise of complete archival history across the initial networks. Allocate bounded, measurable windows first and alert before 70% disk use. Initial planning ceilings on the data host: 1.2 TB Bloch, 0.55 TB Bitcoin, 0.8 TB Ethereum native and USDT/USDC derived events, 0.15 TB official/source snapshots, leaving at least 0.3 TB for OS, indexes, and headroom. These are **planning limits**, not preallocated quotas or evidence of stored history. Final storage policy must be benchmarked and revised from actual ingestion rates. Use each chain's public RPC or a rights-reviewed data source for bounded windows; a full Ethereum archive is a separate infrastructure project. Solana is deferred.
+These 3 TB volumes are insufficient for a promise of complete archival history across all initial networks. The earlier provisional ceilings on the data host are superseded by the actual deployment: Bitcoin state is on `bloch-dex`, while the Ethereum archive is on `bloch-bridge`. Erigon currently estimates about 2.03 TB of Ethereum archive data and recommends a 4 TB disk. The 3 TB bridge volume therefore needs active free-space monitoring and a stop threshold before the remaining reserve is exhausted. Bloch state, token-event indexes, graph data, and ML storage still need measured allocations. Solana is deferred.
 
 ## ML and zero knowledge
 

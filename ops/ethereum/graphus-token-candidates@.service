@@ -1,0 +1,20 @@
+[Unit]
+Description=Private Graphus %i Transfer participant index
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=graphusidx
+Group=graphusidx
+WorkingDirectory=/opt/graphus-indexer
+ExecStart=/usr/bin/python3 -m service.ethereum_token_candidates --asset %i --index /var/lib/graphus-token-index/%i.sqlite --rpc-url http://127.0.0.1:8545 --max-ranges 1000 --window 500
+CPUQuota=400%
+MemoryMax=8G
+IOWeight=100
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/graphus-token-index
+TimeoutStartSec=infinity

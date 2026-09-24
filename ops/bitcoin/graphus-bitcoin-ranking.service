@@ -1,0 +1,20 @@
+[Unit]
+Description=Build private Bitcoin top 64 UTXO script ranking after validation
+After=graphus-bitcoind.service
+Requires=graphus-bitcoind.service
+
+[Service]
+Type=oneshot
+User=graphusbtc
+Group=graphusbtc
+WorkingDirectory=/opt/graphus-indexer
+ExecStart=/usr/bin/python3 -m service.bitcoin_snapshot_job --workdir /var/lib/graphus-bitcoin/rankings --bitcoin-cli /opt/graphus-bitcoin/31.1/bin/bitcoin-cli --bitcoin-conf /etc/graphus-bitcoin/bitcoin.conf --bitcoin-datadir /var/lib/graphus-bitcoin --converter /opt/graphus-bitcoin/31.1/share/utxo_to_sqlite.py
+CPUQuota=400%
+MemoryMax=16G
+IOWeight=100
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/graphus-bitcoin
+TimeoutStartSec=infinity

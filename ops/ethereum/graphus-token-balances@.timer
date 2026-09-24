@@ -1,0 +1,10 @@
+[Unit]
+Description=Resume private Graphus %i balance reads every ten minutes
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
