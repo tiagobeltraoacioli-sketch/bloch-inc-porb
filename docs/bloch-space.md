@@ -31,6 +31,9 @@ The browser pages block transaction IDs in groups of 32, bounds graph edges,
 and shows up to 32 UTXOs for Bitcoin and Bloch identifiers when those separate
 source queries respond. It retains
 exact base-unit strings in source responses; decimal rendering is a view only.
+Observed graph points can open their source address, Bloch script reference, or
+transaction with a pointer or keyboard. A point is interactive only when the
+source supplied a valid identifier for that network.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source
