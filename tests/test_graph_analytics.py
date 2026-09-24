@@ -50,6 +50,49 @@ class GraphAnalyticsTest(unittest.TestCase):
         self.assertEqual(reverse.temporal_paths(chain="ethereum", network="mainnet", asset_id="eth", source_wallet="a", target_wallet="c",
                                                 start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z"), [])
 
+    def test_temporal_motifs_keep_evidence_and_reject_value_continuity_claim(self):
+        arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+                         start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        report = self.graph.wallet_temporal_motifs(**arguments, max_gap_hours=24)
+        self.assertEqual(report["observed_events"], 3)
+        self.assertEqual(report["direct_inbound_events"], 1)
+        self.assertEqual(report["direct_outbound_events"], 2)
+        self.assertEqual(report["distinct_direct_inbound_peers"], 1)
+        self.assertEqual(report["distinct_direct_outbound_peers"], 2)
+        self.assertEqual(report["ordered_inbound_outbound_pairs"], [{
+            "inbound_event_id": "e1", "outbound_event_id": "e2", "elapsed_seconds": 86400,
+            "source_ids": ["synthetic-fixture"], "value_continuity_proven": False,
+        }])
+        self.assertEqual(report, GraphAnalytics(reversed(self.graph.events)).wallet_temporal_motifs(
+            **arguments, max_gap_hours=24))
+        self.assertNotIn("aml_score", str(report))
+
+    def test_temporal_motifs_do_not_assign_utxo_senders_or_order_ties(self):
+        btc = self.graph.wallet_temporal_motifs(
+            chain="bitcoin", network="mainnet", asset_id="btc", wallet="b",
+            start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        self.assertEqual(btc["unknown_sender_events"], 1)
+        self.assertEqual(btc["distinct_direct_inbound_peers"], 0)
+        self.assertEqual(btc["ordered_inbound_outbound_pairs"], [])
+        tied = GraphAnalytics([
+            event("in", "a", "b", 10, 1), event("out", "b", "c", 10, 1),
+        ]).wallet_temporal_motifs(
+            chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+            start="2026-09-01T00:00:00Z", end="2026-09-02T00:00:00Z")
+        self.assertEqual(tied["ordered_inbound_outbound_pairs"], [])
+
+    def test_temporal_motifs_fail_closed_when_pair_count_exceeds_bound(self):
+        graph = GraphAnalytics([
+            event("in1", "a", "b", 10, 1), event("in2", "c", "b", 20, 1),
+            event("out1", "b", "d", 10, 2), event("out2", "b", "e", 20, 2),
+        ])
+        arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+                         start="2026-09-01T00:00:00Z", end="2026-09-03T00:00:00Z")
+        with self.assertRaisesRegex(ValueError, "pair bound exceeded"):
+            graph.wallet_temporal_motifs(**arguments, max_pairs=3)
+        with self.assertRaisesRegex(ValueError, "event bound exceeded"):
+            graph.wallet_temporal_motifs(**arguments, max_events=3)
+
     def test_duplicate_events_and_heuristic_sender_are_rejected(self):
         with self.assertRaises(ValueError):
             GraphAnalytics([event("same", "a", "b", 1, 1), event("same", "a", "c", 1, 1)])

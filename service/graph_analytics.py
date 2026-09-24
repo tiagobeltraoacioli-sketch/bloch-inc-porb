@@ -240,6 +240,70 @@ class GraphAnalytics:
             ],
         }
 
+    def wallet_temporal_motifs(self, *, chain, network, asset_id, wallet, start, end,
+                               max_gap_hours=48, max_events=500, max_pairs=100):
+        """Describe direct-peer diversity and ordered events without tracing value."""
+        if not isinstance(wallet, str) or not wallet:
+            raise ValueError("wallet reference required")
+        if (type(max_gap_hours) is not int or not 1 <= max_gap_hours <= 168
+                or type(max_events) is not int or not 1 <= max_events <= 500
+                or type(max_pairs) is not int or not 1 <= max_pairs <= 100):
+            raise ValueError("temporal motif bounds exceeded")
+        related = sorted(
+            (item for item in self._window(chain, network, asset_id, start, end)
+             if item.destination == wallet or item.sender == wallet),
+            key=lambda item: (timestamp(item.observed_at), item.event_id),
+        )
+        if len(related) > max_events:
+            raise ValueError("temporal motif event bound exceeded; narrow the window")
+        inbound = [item for item in related if item.destination == wallet
+                   and item.sender_attribution == "direct" and item.sender != wallet]
+        outbound = [item for item in related if item.sender == wallet
+                    and item.sender_attribution == "direct" and item.destination != wallet]
+        unknown = [item for item in related if item.destination == wallet
+                   and item.sender_attribution == "unknown"]
+        gap_bound = timedelta(hours=max_gap_hours)
+        pairs = []
+        for incoming in inbound:
+            incoming_time = timestamp(incoming.observed_at)
+            for outgoing in outbound:
+                gap = timestamp(outgoing.observed_at) - incoming_time
+                if not timedelta(0) < gap <= gap_bound:
+                    continue
+                pairs.append({
+                    "inbound_event_id": incoming.event_id,
+                    "outbound_event_id": outgoing.event_id,
+                    "elapsed_seconds": int(gap.total_seconds()),
+                    "source_ids": sorted({incoming.source_id, outgoing.source_id}),
+                    "value_continuity_proven": False,
+                })
+                if len(pairs) > max_pairs:
+                    raise ValueError("temporal motif pair bound exceeded; narrow the window")
+        pairs.sort(key=lambda item: (item["elapsed_seconds"], item["inbound_event_id"],
+                                     item["outbound_event_id"]))
+        return {
+            "classification": "descriptive_temporal_observations_not_score",
+            "chain": chain, "network": network, "asset_id": asset_id,
+            "wallet_reference": wallet,
+            "window": {"start": start, "end_exclusive": end,
+                       "max_gap_hours": max_gap_hours},
+            "observed_events": len(related),
+            "direct_inbound_events": len(inbound),
+            "direct_outbound_events": len(outbound),
+            "unknown_sender_events": len(unknown),
+            "distinct_direct_inbound_peers": len({item.sender for item in inbound}),
+            "distinct_direct_outbound_peers": len({item.destination for item in outbound}),
+            "ordered_inbound_outbound_pairs": pairs,
+            "source_ids": sorted({item.source_id for item in related}),
+            "evidence_event_ids": [item.event_id for item in related],
+            "caveats": [
+                "temporal_proximity_does_not_prove_value_continuity_or_intent",
+                "direct_protocol_references_do_not_identify_people_or_owners",
+                "UTXO_and_eUTXO_inputs_do_not_identify_direct_senders",
+                "bounded_observations_do_not_establish_chain_coverage",
+            ],
+        }
+
     def temporal_paths(self, *, chain, network, asset_id, source_wallet, target_wallet, start, end, max_hops=3, max_paths=20):
         """Trace time-ordered direct observations; paths are associations only."""
         if not (1 <= max_hops <= 4 and 1 <= max_paths <= 100):

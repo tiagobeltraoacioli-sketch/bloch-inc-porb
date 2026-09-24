@@ -324,6 +324,69 @@ function renderPathExplorer(wallet){
 }
 pathTarget.addEventListener('change',updatePathResults);
 pathHops.addEventListener('change',updatePathResults);
+const motifPanel=document.createElement('article');
+motifPanel.className='motif-panel';
+motifPanel.innerHTML=`<div class="motif-heading"><span>05 / OBSERVED SHAPES</span><h3>Read the activity pattern</h3><p>Direct peer counts and ordered event pairs describe this synthetic fixture. A close succession of events does not prove the same funds moved, shared ownership, or suspicious intent.</p></div>
+  <div class="motif-toolbar"><label for="motif-gap">Pair window</label><select id="motif-gap"><option value="1">1 day</option><option value="2" selected>2 days</option><option value="3">3 days</option></select><span>Only different days can establish sequence in this fixture.</span></div>
+  <div id="motif-metrics" class="motif-metrics"></div><p id="motif-summary" class="motif-summary" role="status" aria-live="polite">Select a synthetic wallet point.</p><div id="motif-pairs" class="motif-pairs"></div>`;
+pathPanel.after(motifPanel);
+const motifGap=document.getElementById('motif-gap');
+const motifMetrics=document.getElementById('motif-metrics');
+const motifSummary=document.getElementById('motif-summary');
+const motifPairs=document.getElementById('motif-pairs');
+function motifMetric(label,value,note){
+  const card=document.createElement('div');
+  const heading=document.createElement('span');heading.textContent=label;
+  const number=document.createElement('strong');number.textContent=value;
+  const detail=document.createElement('small');detail.textContent=note;
+  card.append(heading,number,detail);motifMetrics.append(card);
+}
+function renderMotifs(wallet){
+  motifMetrics.replaceChildren();motifPairs.replaceChildren();
+  const account=['eth','usdt','usdc'].includes(wallet.asset);
+  motifMetric('OBSERVED EVENTS',String(wallet.transactions.length),'synthetic fixture');
+  if(!account){
+    motifMetric('DIRECT INBOUND PEERS','Unknown','input outpoints do not identify senders');
+    motifMetric('DIRECT OUTBOUND PEERS','Unknown','no account-style sender assertion');
+    motifMetric('ORDERED EVENT PAIRS','—','not computed for UTXO / eUTXO');
+    motifSummary.textContent='BTC and BLCH show observed outputs and input references, but these synthetic arrows cannot support direct peer or pass-through claims.';
+    motifGap.disabled=true;return;
+  }
+  motifGap.disabled=false;
+  const inbound=wallet.transactions.filter(tx=>tx.direction==='IN');
+  const outbound=wallet.transactions.filter(tx=>tx.direction==='OUT');
+  const inboundPeers=new Set(inbound.map(tx=>tx.counterparty));
+  const outboundPeers=new Set(outbound.map(tx=>tx.counterparty));
+  const maxDays=Number(motifGap.value);
+  const pairs=[];
+  for(const incoming of inbound){
+    for(const outgoing of outbound){
+      const days=Math.round((Date.parse(outgoing.observed+'T00:00:00Z')-Date.parse(incoming.observed+'T00:00:00Z'))/86400000);
+      if(days>0&&days<=maxDays)pairs.push({incoming,outgoing,days});
+    }
+  }
+  pairs.sort((a,b)=>a.days-b.days||a.incoming.id.localeCompare(b.incoming.id)||a.outgoing.id.localeCompare(b.outgoing.id));
+  motifMetric('DIRECT INBOUND PEERS',String(inboundPeers.size),`${inbound.length} inbound events`);
+  motifMetric('DIRECT OUTBOUND PEERS',String(outboundPeers.size),`${outbound.length} outbound events`);
+  motifMetric('ORDERED EVENT PAIRS',String(pairs.length),`within ${maxDays} ${maxDays===1?'day':'days'}`);
+  motifSummary.textContent=pairs.length
+    ?`${pairs.length} ordered synthetic event ${pairs.length===1?'pair':'pairs'} · ${sourceNames[wallet.asset]} · value continuity unproven`
+    :`No ordered event pair within ${maxDays} ${maxDays===1?'day':'days'} for this synthetic point.`;
+  pairs.forEach(({incoming,outgoing,days})=>{
+    const row=document.createElement('div');row.className='motif-pair';
+    const label=document.createElement('strong');label.textContent=`${days}-day interval · ${incoming.counterparty} → ${wallet.id} → ${outgoing.counterparty}`;
+    const details=document.createElement('span');
+    details.textContent=`IN ${incoming.id} · ${incoming.amount.toLocaleString('en-US')} ${units[wallet.asset]}  /  OUT ${outgoing.id} · ${outgoing.amount.toLocaleString('en-US')} ${units[wallet.asset]}`;
+    const actions=document.createElement('div');
+    for(const [caption,tx] of [['Inspect inbound',incoming],['Inspect outbound',outgoing]]){
+      const button=document.createElement('button');button.type='button';button.textContent=caption;
+      button.addEventListener('click',()=>selectTransaction(wallet,tx));actions.append(button);
+    }
+    row.append(label,details,actions);motifPairs.append(row);
+  });
+}
+motifGap.addEventListener('change',()=>{if(selectedWallet)renderMotifs(selectedWallet);});
+motifGap.disabled=true;
 for(const [label,id,caption] of [['DAILY VOLUME SLOPE','analysis-slope','synthetic units per day'],['LINEAR FIT R²','analysis-fit','descriptive, not a risk signal']]){
   const card=document.createElement('article');
   const heading=document.createElement('span');heading.textContent=label;
@@ -427,6 +490,7 @@ function clearWallet() {
   document.getElementById('path-source').textContent='Select a wallet';
   pathTarget.replaceChildren();pathTarget.disabled=true;pathHops.disabled=true;pathResults.replaceChildren();
   pathSummary.textContent='Select a synthetic ETH, USDT or USDC point.';
+  motifMetrics.replaceChildren();motifPairs.replaceChildren();motifSummary.textContent='Select a synthetic wallet point.';motifGap.disabled=true;
 }
 function selectWallet(wallet,updateQuery=false) {
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
@@ -444,6 +508,7 @@ function selectWallet(wallet,updateQuery=false) {
   renderAnalytics(wallet);
   renderTemporal(wallet);
   renderPathExplorer(wallet);
+  renderMotifs(wallet);
   renderFlows(wallet);
   const list=document.getElementById('transaction-list');list.replaceChildren();
   wallet.transactions.forEach(tx=>{
