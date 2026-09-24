@@ -30,14 +30,22 @@
       <button type="button" data-network="ethereum" aria-pressed="false"><span class="workspace-network-icon">◇</span><span><strong>Ethereum</strong><small>Execution · finality</small></span><b aria-hidden="true">↗</b></button>
       <button type="button" data-network="bloch" aria-pressed="false"><span class="workspace-network-icon">✳</span><span><strong>Bloch</strong><small>Epochs · Genesis-4 PoS</small></span><b aria-hidden="true">↗</b></button>
     </nav>
-    <section class="workspace-console" aria-labelledby="workspace-title">
+    <div class="workspace-layout">
+      <aside class="workspace-sidebar" aria-label="Data pages">
+        <div class="workspace-sidebar-heading"><span>DATA ATLAS</span><strong id="sidebar-network">Bitcoin</strong></div>
+        <nav id="view-picker" class="workspace-side-nav" aria-label="Network data pages"></nav>
+        <div class="workspace-sidebar-bottom"><span>INSPECT A RECORD</span><form id="workspace-search" role="search"><label for="workspace-query">Block, transaction or address</label><input id="workspace-query" type="search" autocomplete="off" spellcheck="false" required placeholder="Search an identifier"><button type="submit">Open in explorer ↗</button></form><p>Exact records open in the unified explorer.</p></div>
+      </aside>
+      <section class="workspace-console" aria-labelledby="workspace-title">
       <div class="workspace-console-head"><div><p id="network-strap" class="eyebrow"></p><h2 id="workspace-title"></h2><p id="network-description"></p></div><div class="workspace-actions"><span id="workspace-status" role="status" aria-live="polite">Connecting…</span><button id="workspace-refresh" type="button">Refresh ↻</button></div></div>
-      <div class="workspace-viewbar"><div id="view-picker" class="workspace-views" aria-label="Select data view"><button type="button" data-view="overview" aria-pressed="false">Overview</button><button type="button" data-view="analytics" aria-pressed="false">Analytics</button></div><div id="range-picker" class="workspace-ranges" aria-label="Select analytics window"></div></div>
+      <div class="workspace-viewbar"><span id="workspace-context" class="workspace-context">LIVE SOURCE VIEW</span><div id="range-picker" class="workspace-ranges" aria-label="Select analytics window"></div></div>
       <div id="workspace-stats" class="workspace-stats" aria-live="polite"></div>
       <div id="workspace-charts" class="workspace-charts"></div>
+      <div id="workspace-feature"></div>
       <section class="workspace-ledger"><div class="workspace-section-head"><div><p class="eyebrow">SOURCE RECORDS</p><h3 id="workspace-table-title">Every point, inspectable.</h3></div><button id="workspace-csv" type="button" disabled>Download CSV ↓</button></div><p id="workspace-coverage"></p><div class="workspace-table-scroll"><table id="workspace-table"></table></div></section>
       <section class="workspace-evidence"><div><p class="eyebrow">ORIGIN AND BOUNDARY</p><h3>See where each number came from.</h3></div><div id="workspace-source"></div><details><summary>Full API response</summary><pre id="workspace-json"></pre></details></section>
-    </section>
+      </section>
+    </div>
   </main>
   <footer><span>© 2026 Bloch Inc · Bloch Space</span><span>Source windows and finality differ by network.</span><a href="/">Open record explorer ↗</a></footer>
 </body>

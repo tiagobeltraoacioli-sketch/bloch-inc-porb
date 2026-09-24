@@ -17,6 +17,15 @@ visible source window every 60 seconds and offers exact source rows and CSV
 for analytics windows. The home page links directly into the app for each
 network. The network tabs lower on the home page still switch the unified
 record explorer's active query network.
+The app's persistent desktop sidebar (horizontal scroll rail on narrow screens)
+selects source-backed subpages. Bitcoin has Overview, Blocks, Mempool & Fees,
+Transactions, Analytics, and Sources. Ethereum has Overview, Blocks, Gas &
+Finality, Transactions, Analytics, and Sources. Bloch adds Transactions, Fees &
+Stake, Holders, Validators, Analytics, and Sources. Each sidebar selection
+changes the app view and URL in place. Tables in each view can be downloaded as
+CSV; analytics CSV preserves raw numeric source fields. The Bloch validator
+view pages through 32 registry indices while keeping unavailable records
+explicit. Source provenance and raw responses remain visible in every view.
 Dedicated legacy data pages remain at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
 They share the read-only `/api/overview` response and link each shown record
 back to the unified explorer. The Bitcoin page charts recent block transaction
