@@ -196,11 +196,16 @@ function renderSourceMetrics(data){
     const note=document.createElement('p');
     note.textContent=`Page ${blochHistoryPageIndex+1}: ${history.events_returned} returned events as of source slot ${history.as_of_slot}. Each page replaces the graph and JSON export. The balance above was queried separately and is not recalculated from this page.`;
     const controls=document.createElement('div');controls.className='source-block-timeline-controls';
-    if(blochHistoryPageIndex>0){
+    if(blochHistoryPageIndex>0&&blochHistoryCursors[blochHistoryPageIndex-1]!==undefined){
       const newer=document.createElement('button');newer.type='button';newer.dataset.blochHistory='newer';
       newer.textContent='Newer script events';
       newer.addEventListener('click',()=>loadBlochHistoryPage(data,blochHistoryCursors[blochHistoryPageIndex-1],blochHistoryPageIndex-1));
       controls.append(newer);
+    }else if(blochHistoryPageIndex>0){
+      const latest=document.createElement('button');latest.type='button';latest.dataset.blochHistory='latest';
+      latest.textContent='Latest script events';
+      latest.addEventListener('click',()=>loadBlochHistoryPage(data,null,0));
+      controls.append(latest);
     }
     if(history.next_cursor){
       const older=document.createElement('button');older.type='button';older.dataset.blochHistory='older';
@@ -208,7 +213,18 @@ function renderSourceMetrics(data){
       older.addEventListener('click',()=>loadBlochHistoryPage(data,history.next_cursor,blochHistoryPageIndex+1));
       controls.append(older);
     }
-    navigation.append(title,note,controls);sourceMetricsPanel.append(navigation);
+    const pageUrl=new URL(window.location.href);
+    pageUrl.searchParams.set('asset','blch');
+    pageUrl.searchParams.set('address',data.address);
+    for(const key of ['wallet','to_block','expected_hash','history_cursor','history_page'])pageUrl.searchParams.delete(key);
+    if(history.requested_cursor){
+      pageUrl.searchParams.set('history_cursor',history.requested_cursor);
+      pageUrl.searchParams.set('history_page',String(blochHistoryPageIndex+1));
+    }
+    const pageLink=document.createElement('a');
+    pageLink.href=pageUrl.toString();pageLink.textContent='Open this history page ↗';
+    pageLink.target='_blank';pageLink.rel='noopener noreferrer';
+    navigation.append(title,note,controls,pageLink);sourceMetricsPanel.append(navigation);
   }
   if(metrics.kind==='erc20_transfer_logs'&&data.tokenObservation?.block_window){
     const window=data.tokenObservation.block_window;
@@ -658,16 +674,26 @@ async function loadBlochHistoryPage(current,cursor,pageIndex){
     if(!response.ok||page.status!=='source-reported')throw new Error(page.error||`HTTP ${response.status}`);
     if(page.asset!=='BLCH'||page.network!==current.network||page.address!==current.address
       ||!Array.isArray(page.nodes)||!Array.isArray(page.edges)||page.edges.length>64
-      ||page.observation?.history?.events_returned!==page.edges.length)
+      ||page.observation?.history?.events_returned!==page.edges.length
+      ||page.observation.history.requested_cursor!==cursor
+      ||page.observation.history.next_cursor===cursor
+      ||pageIndex>blochHistoryPageIndex&&page.observation.history.next_cursor!==null
+        &&blochHistoryCursors.includes(page.observation.history.next_cursor))
       throw new Error('inconsistent_bloch_history_page');
     const root=current.nodes.find(node=>node.address===current.address);
     const nodes=page.nodes.map(node=>node.address===current.address?{...node,balance:root?.balance}:node);
     const updated={...current,nodes,edges:page.edges,activity:page.activity,
       observation:{...current.observation,coverage:page.observation.coverage,
-        history:page.observation.history,history_page_retrieved_at:page.observation.retrieved_at}};
+        history:{...page.observation.history,page_number:pageIndex+1},
+        history_page_retrieved_at:page.observation.retrieved_at}};
     blochHistoryCursors[pageIndex]=cursor;
     blochHistoryCursors.length=pageIndex+1;
     blochHistoryPageIndex=pageIndex;
+    const pageUrl=new URL(window.location.href);
+    pageUrl.searchParams.set('asset','blch');pageUrl.searchParams.set('address',current.address);
+    for(const key of ['wallet','to_block','expected_hash','history_cursor','history_page'])pageUrl.searchParams.delete(key);
+    if(cursor!==null){pageUrl.searchParams.set('history_cursor',cursor);pageUrl.searchParams.set('history_page',String(pageIndex+1));}
+    window.history.replaceState(null,'',pageUrl);
     selectedUtxoBlockHeight=null;selectedRealTransactionId=null;liveTransactionDetail.hidden=true;
     realObservation=updated;
     renderLiveSourceRecords(updated);
@@ -686,7 +712,7 @@ async function loadBlochHistoryPage(current,cursor,pageIndex){
     loading.remove();
   }
 }
-async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
+async function loadLiveAddress({toBlock=null,expectedHash=null,historyCursor=null,historyPage=null}={}){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
   if(!asset){
@@ -715,6 +741,7 @@ async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
     if(!response.ok||data.status!=='source-reported')throw new Error(data.error||data.reason||`Source returned HTTP ${response.status}`);
     clearWallet();
     realObservation=data;
+    if(data.asset==='BLCH'&&data.observation?.history)data.observation.history.page_number=1;
     const unit=data.balance?.unit||'base units';
     const baseUnits=data.balance?.base_units;
     setDataMode('source-reported',`${data.asset} · ${data.observation?.source_id||'public-chain source'} · retrieved ${data.observation?.retrieved_at||'time unavailable'} · independently verified by Graphus: no. Control and ownership are unknown.`);
@@ -741,6 +768,9 @@ async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
     canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. ${canvasInstruction}`);
     draw();
     if(data.asset==='USDT'||data.asset==='USDC')await loadTokenActivity(data,requestId,toBlock,false,expectedHash);
+    if(data.asset==='BLCH'&&typeof historyCursor==='string'&&/^[a-zA-Z0-9_-]{1,160}$/.test(historyCursor)
+      &&typeof historyPage==='string'&&/^(?:[2-9]|[1-9][0-9]{1,4})$/.test(historyPage))
+      await loadBlochHistoryPage(data,historyCursor,Number(historyPage)-1);
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
@@ -1385,7 +1415,7 @@ function renderFlows(wallet){
 }
 function updateSearchUrl() {
   const url=new URL(window.location.href);
-  for(const key of ['address','wallet','to_block','expected_hash'])url.searchParams.delete(key);
+  for(const key of ['address','wallet','to_block','expected_hash','history_cursor','history_page'])url.searchParams.delete(key);
   const entered=document.getElementById('record-search').value.trim();
   const liveAsset=assetForLiveAddress(entered);
   if(liveAsset){
@@ -1581,4 +1611,5 @@ if(initialWallet){const input=document.getElementById('record-search');input.val
 renderList();renderSearchStatus();resize();requestAnimationFrame(frame);
 renderNetworkEvidence();
 if(initialAddress&&assetForLiveAddress(initialAddress))loadLiveAddress({
-  toBlock:initialUrl.searchParams.get('to_block'),expectedHash:initialUrl.searchParams.get('expected_hash')});
+  toBlock:initialUrl.searchParams.get('to_block'),expectedHash:initialUrl.searchParams.get('expected_hash'),
+  historyCursor:initialUrl.searchParams.get('history_cursor'),historyPage:initialUrl.searchParams.get('history_page')});

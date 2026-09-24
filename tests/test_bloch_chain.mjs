@@ -91,10 +91,14 @@ test('Bloch history cursor exposes a bounded 64-event page and rejects malformed
   const second=await queryBlochHistoryPage({address:hash,cursor,fetcher});
   assert.equal(second.body.edges.length,1);
   assert.equal(second.body.observation.history.as_of_slot,101);
+  assert.equal(second.body.observation.history.requested_cursor,cursor);
   assert.equal(second.body.observation.history.has_more,false);
   assert.equal(calls[1].includes('cursor=after_64'),true);
   assert.equal((await queryBlochHistoryPage({address:hash,cursor:'bad/cursor',fetcher})).status,400);
   const tooMany=await queryBlochHistoryPage({address:hash,
     fetcher:async()=>Response.json({script_hash:hash,events:[...first,event(64)],as_of_slot:100,total:65})});
   assert.equal(tooMany.status,502);
+  const circular=await queryBlochHistoryPage({address:hash,cursor,
+    fetcher:async()=>Response.json({script_hash:hash,events:[event(64)],as_of_slot:101,total:65,next_cursor:cursor})});
+  assert.equal(circular.status,502);
 });

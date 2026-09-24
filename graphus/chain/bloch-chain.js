@@ -97,7 +97,11 @@ async function fetchHistoryEvidence(scriptHash,cursor,fetcher){
   const query=new URLSearchParams({limit:String(HISTORY_LIMIT)});
   if(cursor!==null)query.set('cursor',cursor);
   const page=await sourceJson(fetcher,`${INDEXER_BASE}/history/${scriptHash}?${query}`);
-  return historyEvidence(scriptHash,page);
+  const evidence=historyEvidence(scriptHash,page);
+  if(cursor!==null&&evidence.history.next_cursor===cursor)
+    throw new Error('invalid_bloch_history');
+  evidence.history.requested_cursor=cursor;
+  return evidence;
 }
 
 export async function queryBlochHistoryPage({address,cursor=null,fetcher=fetch,now=()=>new Date()}){
