@@ -22,10 +22,11 @@ try{
       assert.equal(await page.locator('#graph-chart .graph-node.selected').getAttribute('data-node-id'),reference.id);
       await page.locator('#graph-ledger td:last-child button').first().click();assert.match(await page.locator('#graph-event-detail').innerText(),/amount_base_units/);
       const firstTx=run.graph.edges[0].txid;await page.fill('#graph-search',firstTx);await page.press('#graph-search','Enter');assert.ok((await page.locator('#graph-inspector').innerText()).includes(firstTx));
+      await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,asset+' mobile layout');await page.setViewportSize({width:1440,height:1000});
       console.log(JSON.stringify({asset,search_verified:true,transaction_verified:true,graph_references:run.graph.nodes.length}));
     }
   }
-  await page.click('[data-view=analyses]');const ethOption=await page.locator('#saved-analysis option').evaluateAll(options=>options.find(o=>o.textContent.startsWith('ETH ·')).value);await page.selectOption('#saved-analysis',ethOption);await page.waitForSelector('#analysis-result:not([hidden])');await page.waitForFunction(()=>document.querySelectorAll('#wallet-rows tr').length>=20);
+  await page.click('[data-view=analyses]');const ethOption=await page.locator('#saved-analysis option').evaluateAll(options=>options.find(o=>o.textContent.startsWith('ETH ·')).value);await page.selectOption('#saved-analysis',ethOption);await page.waitForFunction(()=>document.querySelector('#analysis-provenance').textContent.startsWith('ETH ·'));await page.waitForFunction(()=>document.querySelectorAll('#wallet-rows tr').length>=20);
   await mkdir(new URL('../.data/porb-browser/',import.meta.url),{recursive:true});await page.screenshot({path:new URL('../.data/porb-browser/live-ethereum.png',import.meta.url).pathname,fullPage:true});
   if(process.env.PORB_EXPAND_BLOCH==='1'){
     await page.selectOption('#collect-form [name=asset]','BLCH');await page.selectOption('#collect-form [name=pages]','4');const collected=page.waitForResponse(r=>r.url().endsWith('/api/porb/v1/analyses')&&r.request().method()==='POST',{timeout:180000});await page.click('#collect-form button');const response=await collected;assert.equal(response.status(),201);const result=await response.json();console.log(JSON.stringify({asset:result.asset,wallets:result.wallets,records:result.records,pages:result.pages,red_available:result.scores.ml.available}));
