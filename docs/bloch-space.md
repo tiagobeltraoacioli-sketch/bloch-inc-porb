@@ -9,6 +9,22 @@ surfaces, dark text, lime accents, and the original Bloch Inc logo on a black
 header plate. A header button restores the dark palette and remembers the
 choice in the browser.
 
+Dedicated data pages are served at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
+They share the read-only `/api/overview` response and link each shown record
+back to the unified explorer. The Bitcoin page charts recent block transaction
+count and size plus the highest source mempool fee bins. The Ethereum page
+charts bounded gas use and base fee history while keeping latest and finalized
+RPC reads distinct. The Bloch page shows the network head, verified indexer,
+validator and stake claims, recent transactions, funded script references,
+mempool, observer diagnostics and recorded chain-change signals, monitored
+connection distribution, and a six-hour connection series. Peer figures count reported sockets across
+monitored nodes, not unique peers. Each additional Bloch source is optional;
+its absence does not erase the validated head or indexer response. The Bloch
+`getsupply` RPC is not served by the current public implementation, so the
+page does not invent a live supply figure. These pages do not mirror every
+feature of blochl1.com; additional datasets require their own validated
+source boundaries.
+
 ## Live read surfaces
 
 | Network | Overview | Block and transaction | Public reference |

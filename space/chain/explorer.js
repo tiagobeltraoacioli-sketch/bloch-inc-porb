@@ -124,16 +124,39 @@ export function ethereumFeeHistoryFacts(history) {
 }
 
 async function blochOverview(fetcher, now) {
-  const [networkResult, healthResult, transactionsResult, holdersResult] = await Promise.allSettled([
+  const [networkResult, healthResult, transactionsResult, holdersResult, peersResult, historyResult, mempoolResult] = await Promise.allSettled([
     json(fetcher, `${BLOCH}/api/v1/network`),
     json(fetcher, `${BLOCH}/indexer/health`),
     json(fetcher, `${BLOCH}/indexer/transactions?limit=8`),
     json(fetcher, `${BLOCH}/indexer/holders?limit=64`),
+    json(fetcher, `${BLOCH}/api/v1/observability/peer-distribution`),
+    json(fetcher, `${BLOCH}/api/v1/observability/peer-history?period=6h`),
+    rpc(fetcher, `${BLOCH}/rpc`, 'getmempoolinfo', []),
   ]);
   const network = networkResult.status === 'fulfilled' && networkResult.value?.data?.head?.data ? networkResult.value : null;
   const health = healthResult.status === 'fulfilled' && healthResult.value?.ok ? healthResult.value : null;
   const transactions = transactionsResult.status === 'fulfilled' && Array.isArray(transactionsResult.value?.transactions) ? transactionsResult.value : null;
   const holders = holdersResult.status === 'fulfilled' && Array.isArray(holdersResult.value?.holders) ? holdersResult.value : null;
+  const peerSource=peersResult.status==='fulfilled'?peersResult.value?.data:null;
+  const peerBins=peerSource?.bins;
+  const peers=Array.isArray(peerBins)&&peerBins.length<=256&&Number.isSafeInteger(peerSource?.reporting_nodes)&&peerSource.reporting_nodes>=0&&
+    Number.isSafeInteger(peerSource?.peer_sampled_at)&&peerBins.every(bin=>Number.isSafeInteger(bin?.connections_per_node)&&bin.connections_per_node>=0&&Number.isSafeInteger(bin?.reporting_nodes)&&bin.reporting_nodes>0)&&
+    peerBins.reduce((sum,bin)=>sum+bin.reporting_nodes,0)===peerSource.reporting_nodes?
+    {bins:peerBins,reporting_nodes:peerSource.reporting_nodes,sampled_at:peerSource.peer_sampled_at,scope:'connection_counts_across_monitored_nodes'}:null;
+  const historySource=historyResult.status==='fulfilled'?historyResult.value?.data:null;
+  const historyPoints=historySource?.points;
+  const peerHistory=historySource?.period==='6h'&&Array.isArray(historyPoints)&&historyPoints.length<=75&&historyPoints.every((point,index)=>
+    Number.isSafeInteger(point?.at)&&point.at>=0&&(index===0||point.at>historyPoints[index-1].at)&&
+    (point.connections==null||Number.isSafeInteger(point.connections)&&point.connections>=0)&&
+    (point.reporting_nodes==null||Number.isSafeInteger(point.reporting_nodes)&&point.reporting_nodes>=0))?
+    {period:'6h',points:historyPoints,scope:'aggregate_connection_reports_across_monitored_nodes'}:null;
+  const mempoolSource=mempoolResult.status==='fulfilled'?mempoolResult.value:null;
+  const mempool=Number.isSafeInteger(mempoolSource?.size)&&mempoolSource.size>=0&&Number.isSafeInteger(mempoolSource?.max)&&mempoolSource.max>0&&
+    Number.isSafeInteger(mempoolSource?.bytes)&&mempoolSource.bytes>=0?{
+      size:mempoolSource.size,max:mempoolSource.max,bytes:mempoolSource.bytes,
+      next_base_fee_millisat_per_gas:/^[0-9]+$/.test(mempoolSource.next_base_fee_millisat_per_gas||'')?mempoolSource.next_base_fee_millisat_per_gas:null,
+      source_node:mempoolSource.corroboration?.source_node||null,
+    }:null;
   if (!network && !health) throw new Error('source_unavailable');
   const head = network?.data.head.data ?? {
     block_id: health.chain_tip,
@@ -145,7 +168,26 @@ async function blochOverview(fetcher, now) {
   return {
     ...source('bloch', network ? 'Bloch Explorer and verified historical indexer' : 'Bloch verified historical indexer', now(), network ? 'The indexer and network head are separate snapshots; unavailable supplemental panels are left empty.' : 'Network-head comparison unavailable; showing the verified indexer snapshot.'),
     head, corroboration: network ? network.data.head.corroboration ?? network.corroboration : {level:'indexer verified snapshot'},
-    health, recent_transactions: transactions?.transactions ?? [], holders,
+    health, recent_transactions: transactions?.transactions ?? [], holders, peers, peer_history:peerHistory, mempool_details:mempool,
+    network_diagnostics:network?{
+      sampled_at:network.data.sampled_at,
+      build:{version:network.data.build?.data?.build_version??null,commit:network.data.build?.data?.commit??null,tree_state:network.data.build?.data?.tree_state??null},
+      plane:network.data.plane??null,witness:network.data.witness??null,
+      nodes:Array.isArray(network.data.nodes)?network.data.nodes.slice(0,32).map(node=>({
+        id:typeof node.id==='string'?node.id:null,role:typeof node.role==='string'?node.role:null,
+        status:typeof node.status==='string'?node.status:null,
+        height:Number.isSafeInteger(node.chain?.height)?node.chain.height:null,
+        slot:Number.isSafeInteger(node.chain?.slot)?node.chain.slot:null,
+        latency_ms:Number.isSafeInteger(node.latency_ms)?node.latency_ms:null,
+      })):[],
+      reorg_events:Array.isArray(network.data.head?.corroboration?.reorg_events)?network.data.head.corroboration.reorg_events.slice(0,8).map(event=>({
+        signal:typeof event.signal==='string'?event.signal:null,
+        kind:typeof event.kind==='string'?event.kind:null,
+        at:Number.isSafeInteger(event.at)?event.at:null,
+        was:Number.isSafeInteger(event.was)?event.was:null,
+        now:Number.isSafeInteger(event.now)?event.now:null,
+      })):[],
+    }:null,
   };
 }
 

@@ -211,6 +211,9 @@ test('Bloch overview keeps head, indexer and holder snapshots separate', async (
     if(path.endsWith('/indexer/health'))return answer({ok:true,indexed_to_height:99,indexed_to_slot:127});
     if(path.endsWith('/indexer/transactions'))return answer({transactions:[]});
     if(path.endsWith('/indexer/holders'))return answer({holders:[],total_script_hashes_with_balance:0});
+    if(path.endsWith('/api/v1/observability/peer-distribution'))return answer({data:{reporting_nodes:3,peer_sampled_at:1790245035000,bins:[{connections_per_node:2,reporting_nodes:1},{connections_per_node:4,reporting_nodes:2}]}});
+    if(path.endsWith('/api/v1/observability/peer-history'))return answer({data:{period:'6h',points:[{at:1790245000000,connections:10,reporting_nodes:3},{at:1790245035000,connections:12,reporting_nodes:3}]}});
+    if(path.endsWith('/rpc'))return answer({jsonrpc:'2.0',id:1,result:{size:2,max:4096,bytes:500,next_base_fee_millisat_per_gas:'10',corroboration:{source_node:'archival-1'}}});
     throw new Error(`Unexpected request ${path}`);
   };
   const response=await handleExplore(url('overview','network=bloch'),{fetcher});
@@ -218,6 +221,9 @@ test('Bloch overview keeps head, indexer and holder snapshots separate', async (
   assert.equal(response.body.head.height,100);
   assert.equal(response.body.health.indexed_to_height,99);
   assert.equal(response.body.corroboration.level,'final');
+  assert.equal(response.body.peers.reporting_nodes,3);
+  assert.equal(response.body.peer_history.points.length,2);
+  assert.equal(response.body.mempool_details.size,2);
 });
 
 test('Bloch overview falls back to the verified indexer when the network head is unavailable', async () => {
