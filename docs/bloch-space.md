@@ -54,6 +54,12 @@ Successful searches, network changes, block transaction pages, and related
 record links create browser history entries. Back and Forward restore the
 network, record kind, asset, and block offset from the URL. Background overview
 refreshes do not create history entries.
+The selected network overview refreshes every 60 seconds while the page is
+visible, including when a record is open. Manual Refresh uses the same read-only
+request. The current charts and metrics remain visible during refresh; a failed
+refresh labels the last successful snapshot stale and retains its retrieval
+time. Returning to a visible tab refreshes data when the last success is older
+than 60 seconds.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source

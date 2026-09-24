@@ -78,6 +78,10 @@ html[data-theme="light"] .raw-actions button{border-color:#9fba8c;background:#ef
 html[data-theme="light"] .raw-actions button:hover{border-color:#4f7e18}
 html[data-theme="light"] .raw-note{color:#4b5d46}
 html[data-theme="light"] .raw-preview{border-color:#b6caa9;background:#fff;color:#20311a}
+html[data-theme="light"] .refresh-button{border-color:#9fb790;background:#eff8e7;color:#315900}
+html[data-theme="light"] .refresh-button:hover{border-color:#4f7e18}
+html[data-theme="light"] .status-pill[data-state=stale]{border-color:#aa854b;color:#704614}
+html[data-theme="light"] .status-pill[data-state=pending]{border-color:#a7b5a1;color:#4a5b45}
 html[data-theme="light"] .flow-legend,html[data-theme="light"] .flow-note{color:#41533d}
 html[data-theme="light"] .flow-legend strong{color:#315900}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}

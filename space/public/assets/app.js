@@ -11,7 +11,7 @@ function setTheme(theme,persist=false){
 }
 setTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
 $('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light',true));
-const state = {network:'bitcoin', overview:null, result:null, request:0, navigation:0};
+const state = {network:'bitcoin', overview:null, overviewAt:0, overviewRequest:0, overviewPending:false, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
 const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Choose ETH, USDT or USDC for addresses.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
 const assetDecimals = {BTC:8, ETH:18, USDT:6, USDC:6, BLCH:8};
@@ -389,11 +389,29 @@ async function search(kind,query,asset,offset=0,historyMode='push') {
   }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}
 }
 
+async function refreshOverview(){
+  if(state.overviewPending)return;
+  const network=state.network,sequence=++state.overviewRequest;
+  state.overviewPending=true;$('#refresh-overview').disabled=true;
+  $('#network-status').textContent=state.overview?'Refreshing':'Connecting';$('#network-status').dataset.state='pending';
+  try{
+    const data=await api('overview',network);
+    if(sequence!==state.overviewRequest||network!==state.network)return;
+    state.overviewAt=Date.now();renderOverview(data);
+  }catch(error){
+    if(sequence!==state.overviewRequest||network!==state.network)return;
+    if(state.overview){$('#network-status').textContent='Stale snapshot';$('#network-status').dataset.state='stale';$('#source-line').textContent=`Last successful retrieval ${time(state.overview.retrieved_at)} · ${state.overview.source} · Refresh unavailable: ${error.message}.`;
+    }else{$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry with Refresh.`;}
+  }finally{
+    if(sequence===state.overviewRequest){state.overviewPending=false;$('#refresh-overview').disabled=false;}
+  }
+}
+
 async function switchNetwork(network,historyMode='push') {
   if(!titles[network])return;
   if(historyMode==='push')state.navigation++;
-  state.network=network;const sequence=++state.request;
-  state.result=null;
+  state.network=network;++state.request;++state.overviewRequest;
+  state.result=null;state.overview=null;state.overviewAt=0;state.overviewPending=false;
   for(const tab of document.querySelectorAll('[data-network]'))tab.setAttribute('aria-selected',String(tab.dataset.network===network));
   $('#network-title').textContent=titles[network];$('#search-hint').textContent=hints[network];$('#search-input').placeholder=network==='bloch'?'Script hash, transaction ID, block ID or slot':network==='ethereum'?'Ethereum address, transaction, block hash or height':'Bitcoin address, transaction, block hash or height';
   $('#search-asset').style.display=network==='ethereum'?'block':'none';
@@ -405,10 +423,11 @@ async function switchNetwork(network,historyMode='push') {
   clear($('#overview-raw'));
   $('#result-section').hidden=true;message('');
   setHistory(new URLSearchParams({network}),historyMode);
-  try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}
+  await refreshOverview();
 }
 
 document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
+$('#refresh-overview').addEventListener('click',()=>refreshOverview());
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
 $('#clear-result').addEventListener('click',()=>{state.navigation++;state.request++;state.result=null;$('#result-section').hidden=true;message('');setHistory(new URLSearchParams({network:state.network}),'push');});
 async function restoreLocation(historyMode='none'){
@@ -426,4 +445,5 @@ async function restoreLocation(historyMode='none'){
 }
 window.addEventListener('popstate',()=>restoreLocation());
 restoreLocation('replace');
-setInterval(()=>{if(!document.hidden&&!state.result)switchNetwork(state.network,'none');},60000);
+setInterval(()=>{if(!document.hidden)refreshOverview();},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-state.overviewAt>=60000)refreshOverview();});
