@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from service.bloch_backfill import collect, write_private
+from service.bloch_backfill import collect, load_checkpoint, write_private
 
 
 TX1 = {
@@ -76,6 +76,59 @@ class BlochBackfillTest(unittest.TestCase):
         self.assertEqual(manifest["finalized_transactions"], 1)
         self.assertEqual(len(records), 2)
         self.assertEqual(calls, ["/health", "/transactions?limit=4", "/transactions?limit=2"])
+
+    def test_partial_checkpoint_resumes_without_repeating_first_page(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            first_dir = Path(temporary) / "first"
+            second_dir = Path(temporary) / "second"
+            first, first_records = collect(pages=1, page_size=1, fetch=source)
+            write_private(first, first_records, first_dir)
+            saved, rows = load_checkpoint(first_dir)
+            self.assertEqual(saved["next_cursor"], CURSOR)
+            self.assertEqual(len(saved["seen_transaction_fingerprints"]), 1)
+            self.assertEqual(len(rows), 2)
+
+            calls = []
+            def resume_source(path):
+                calls.append(path)
+                return source(path)
+
+            second, second_records = collect(pages=2, page_size=1, fetch=resume_source,
+                                             resume_dir=first_dir)
+            second = write_private(second, second_records, second_dir)
+            self.assertEqual(second["pages"], 2)
+            self.assertTrue(second["source_complete"])
+            self.assertEqual(second["finalized_transactions"], 1)
+            self.assertEqual(second["record_count"], 2)
+            self.assertEqual(calls, ["/health", "/transactions?limit=1&cursor=" + CURSOR])
+            self.assertEqual((first_dir / "bloch-sample.jsonl").read_bytes(),
+                             (second_dir / "bloch-sample.jsonl").read_bytes())
+
+            def duplicate(path):
+                if path.endswith("cursor=" + CURSOR):
+                    return {"as_of_height": 10, "as_of_slot": 21,
+                            "transactions": [TX1], "next_cursor": None}
+                return source(path)
+
+            with self.assertRaisesRegex(ValueError, "duplicate transaction"):
+                collect(pages=2, page_size=1, fetch=duplicate, resume_dir=first_dir)
+
+            def changed(path):
+                value = source(path)
+                return dict(value, as_of_slot=22) if path.endswith("cursor=" + CURSOR) else value
+
+            with self.assertRaisesRegex(ValueError, "snapshot changed"):
+                collect(pages=2, page_size=1, fetch=changed, resume_dir=first_dir)
+
+            def regressed(path):
+                return {"ok": True, "finalized_height": 8} if path == "/health" else source(path)
+
+            with self.assertRaisesRegex(ValueError, "finalized height regressed"):
+                collect(pages=2, page_size=1, fetch=regressed, resume_dir=first_dir)
+
+            (first_dir / "bloch-sample.jsonl").write_bytes(b"tampered\n")
+            with self.assertRaisesRegex(ValueError, "checkpoint"):
+                load_checkpoint(first_dir)
 
 
 if __name__ == "__main__":
