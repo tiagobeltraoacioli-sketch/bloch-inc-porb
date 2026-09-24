@@ -12,6 +12,7 @@ test('Bloch Space refuses unknown networks, writes, and unbounded parameters', a
   assert.equal((await handleExplore(url('tx',`network=bitcoin&query=${hash}&extra=1`))).status,400);
   assert.equal((await handleExplore(url('tx',`network=bitcoin&query=${hash}&query=${block}`))).status,400);
   assert.equal((await handleExplore(url('address',`network=ethereum&query=${hash}&asset=USDT`))).status,400);
+  assert.equal((await handleExplore(url('block','network=bitcoin&query=12&offset=-1'))).status,400);
 });
 
 test('Bitcoin block response bounds transaction IDs and preserves source status', async () => {
@@ -29,6 +30,11 @@ test('Bitcoin block response bounds transaction IDs and preserves source status'
   assert.equal(response.body.status.in_best_chain,true);
   assert.equal(response.body.total_transactions,40);
   assert.equal(response.body.transaction_ids.length,32);
+  assert.equal(response.body.next_offset,32);
+  const next=await handleExplore(url('block','network=bitcoin&query=12&offset=32'),{fetcher});
+  assert.equal(next.status,200);
+  assert.equal(next.body.transaction_ids.length,8);
+  assert.equal(next.body.next_offset,null);
 });
 
 test('Ethereum transaction preserves receipt status and a separate finalized checkpoint', async () => {

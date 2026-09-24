@@ -21,13 +21,15 @@ best-effort across isolates; durable quotas require a shared governor.
 
 `GET /api/overview?network=bitcoin|ethereum|bloch`
 
-`GET /api/block?network=...&query=<height, slot, or block hash>`
+`GET /api/block?network=...&query=<height, slot, or block hash>&offset=<optional transaction offset>`
 
 `GET /api/tx?network=...&query=<transaction hash>`
 
 `GET /api/address?network=...&asset=BTC|ETH|USDT|USDC|BLCH&query=<address or Bloch script hash>`
 
-The browser limits displayed block transaction IDs and graph edges. It retains
+The browser pages block transaction IDs in groups of 32, bounds graph edges,
+and shows up to 32 UTXOs for Bitcoin and Bloch identifiers when those separate
+source queries respond. It retains
 exact base-unit strings in source responses; decimal rendering is a view only.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus

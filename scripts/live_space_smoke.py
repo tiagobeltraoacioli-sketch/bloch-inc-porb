@@ -24,7 +24,7 @@ for network in ("bitcoin", "ethereum", "bloch"):
     elif network == "ethereum":
         block_query = str(int(overview["head"]["number"], 16))
         block = get("block", network=network, query=block_query)
-        txid = block["block"]["transactions"][0]
+        txid = block["transaction_ids"][0]
         address = "0x0000000000000000000000000000000000000000"
     else:
         block_query = str(overview["head"]["slot"])

@@ -125,7 +125,7 @@ async function blochOverview(fetcher, now) {
   };
 }
 
-async function bitcoinBlock(fetcher, query, now) {
+async function bitcoinBlock(fetcher, query, now, offset = 0) {
   let hash = query.replace(/^0x/, '').toLowerCase();
   if (DECIMAL.test(query)) {
     const response = await fetcher(`${BTC}/block-height/${query}`, {signal: AbortSignal.timeout(8500)});
@@ -139,7 +139,7 @@ async function bitcoinBlock(fetcher, query, now) {
     json(fetcher, `${BTC}/block/${hash}/status`),
   ]);
   if (block?.id !== hash || !Array.isArray(txids) || typeof status?.in_best_chain !== 'boolean') throw new Error('invalid_source_response');
-  return {...source('bitcoin', 'Blockstream Esplora', now(), 'The first 32 transaction IDs are shown; best-chain membership may change.'), block, status, transaction_ids: txids.slice(0, 32), total_transactions: txids.length};
+  return {...source('bitcoin', 'Blockstream Esplora', now(), 'Transaction IDs are paged in groups of 32; best-chain membership may change.'), block, status, transaction_ids: txids.slice(offset, offset + 32), total_transactions: txids.length, offset, next_offset:offset + 32 < txids.length ? offset + 32 : null};
 }
 
 async function bitcoinTx(fetcher, query, now) {
@@ -150,7 +150,7 @@ async function bitcoinTx(fetcher, query, now) {
   return {...source('bitcoin', 'Blockstream Esplora', now(), 'Inputs identify spent outpoints, not a single sender or owner.'), transaction, outspends};
 }
 
-async function ethereumBlock(fetcher, env, query, now) {
+async function ethereumBlock(fetcher, env, query, now, offset = 0) {
   const endpoint = ethereumEndpoint(env);
   const byHash = isHex64(query);
   const method = byHash ? 'eth_getBlockByHash' : 'eth_getBlockByNumber';
@@ -161,9 +161,10 @@ async function ethereumBlock(fetcher, env, query, now) {
   if (!isHex64(block?.hash) || !Array.isArray(block.transactions)) throw new Error('invalid_source_response');
   const finalized = await rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]);
   return {
-    ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Transaction IDs are bounded to the first 32. Finality is compared to the source-reported finalized checkpoint.'),
-    block: {...block, transactions: block.transactions.slice(0, 32)},
-    total_transactions: block.transactions.length, finalized_height: safeNumber(quantity(finalized.number)),
+    ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Transaction IDs are paged in groups of 32. Finality is compared to the source-reported finalized checkpoint.'),
+    block: {...block, transactions: []}, transaction_ids:block.transactions.slice(offset, offset + 32),
+    total_transactions: block.transactions.length, offset, next_offset:offset + 32 < block.transactions.length ? offset + 32 : null,
+    finalized_height: safeNumber(quantity(finalized.number)),
   };
 }
 
@@ -183,7 +184,7 @@ async function ethereumTx(fetcher, env, query, now) {
   };
 }
 
-async function blochBlock(fetcher, query, now) {
+async function blochBlock(fetcher, query, now, offset = 0) {
   const envelope = await json(fetcher, `${BLOCH}/api/v1/block/${query}`);
   if (!envelope?.data?.block_id || !envelope.corroboration) throw new Error('invalid_source_response');
   let transactions = null;
@@ -191,7 +192,8 @@ async function blochBlock(fetcher, query, now) {
     try { transactions = await json(fetcher, `${BLOCH}/indexer/block/${envelope.data.block_id}/transactions`); }
     catch { transactions = null; }
   }
-  return {...source('bloch', 'Bloch Explorer and verified historical indexer', now(), 'Slot is the primary PoS position; empty slots have no block.'), block: envelope.data, corroboration: envelope.corroboration, transactions};
+  const ids = transactions?.transactions?.map(row => row.txid) ?? [];
+  return {...source('bloch', 'Bloch Explorer and verified historical indexer', now(), 'Slot is the primary PoS position; empty slots have no block.'), block: envelope.data, corroboration: envelope.corroboration, transaction_ids:ids.slice(offset, offset + 32), total_transactions:ids.length || envelope.data.tx_count, offset, next_offset:offset + 32 < ids.length ? offset + 32 : null};
 }
 
 async function blochTx(fetcher, query, now) {
@@ -205,11 +207,24 @@ async function address(fetcher, env, network, asset, query, now) {
   const result = await queryChainWallet({network: chain, asset, address: query, env, fetcher});
   if (result.status !== 200) return reply(result.status, result.body);
   let activity = null;
+  let utxos = null;
   if (network === 'ethereum' && ['USDT', 'USDC'].includes(asset)) {
     const response = await queryEthereumActivity({asset, address: query, env, fetcher});
     if (response.status === 200) activity = response.body;
   }
-  return reply(200, {...source(network, 'Graphus public-chain adapter', now(), 'Graphus queries one identifier and a bounded observation window; it does not establish complete wallet ownership or history.'), wallet: result.body, token_activity: activity});
+  if (network === 'bitcoin') {
+    try {
+      const rows = await json(fetcher, `${BTC}/address/${encodeURIComponent(query)}/utxo`);
+      if (Array.isArray(rows)) utxos = {items:rows.slice(0,32),total:rows.length,coverage:'source_address_utxo_set_at_separate_retrieval'};
+    } catch { /* The Graphus balance remains independently usable. */ }
+  }
+  if (network === 'bloch') {
+    try {
+      const page = await json(fetcher, `${BLOCH}/indexer/utxos/${query.toLowerCase()}?limit=32`);
+      if (Array.isArray(page?.utxos)) utxos = {items:page.utxos,total:page.total,as_of_slot:page.as_of_slot,coverage:'first_32_indexed_unspent_outputs'};
+    } catch { /* The Graphus balance remains independently usable. */ }
+  }
+  return reply(200, {...source(network, 'Graphus public-chain adapter', now(), 'Graphus queries one identifier and a bounded observation window; UTXO details, when available, are a separate source snapshot.'), wallet: result.body, token_activity: activity, utxos});
 }
 
 export async function handleExplore(url, {env = {}, fetcher = fetch, now = () => new Date().toISOString()} = {}) {
@@ -218,8 +233,11 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   const network = url.searchParams.get('network');
   if (!['bitcoin', 'ethereum', 'bloch'].includes(network)) return bad('invalid_network');
   const query = url.searchParams.get('query')?.trim() ?? '';
+  const offsetRaw = url.searchParams.get('offset');
+  const offset = offsetRaw == null ? 0 : Number(offsetRaw);
   const asset = (url.searchParams.get('asset') || {bitcoin:'BTC', ethereum:'ETH', bloch:'BLCH'}[network]).toUpperCase();
-  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if (offsetRaw != null && (route !== 'block' || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset))) return bad('invalid_offset');
   if (route !== 'address' && url.searchParams.has('asset')) return bad('invalid_parameters');
   if (route === 'overview' && query) return bad('invalid_parameters');
   if (route !== 'overview' && (!query || query.length > 100)) return bad('invalid_query');
@@ -234,7 +252,7 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   try {
     if (route === 'address') return address(fetcher, env, network, asset, query, now);
     const body = route === 'overview' ? await ({bitcoin:bitcoinOverview, ethereum:(f,n) => ethereumOverview(f,env,n), bloch:blochOverview}[network])(fetcher, now)
-      : route === 'block' ? await ({bitcoin:bitcoinBlock, ethereum:(f,q,n) => ethereumBlock(f,env,q,n), bloch:blochBlock}[network])(fetcher, network === 'bloch' ? query.replace(/^0x/, '').toLowerCase() : query, now)
+      : route === 'block' ? await ({bitcoin:bitcoinBlock, ethereum:(f,q,n,o) => ethereumBlock(f,env,q,n,o), bloch:blochBlock}[network])(fetcher, network === 'bloch' ? query.replace(/^0x/, '').toLowerCase() : query, now, offset)
       : await ({bitcoin:bitcoinTx, ethereum:(f,q,n) => ethereumTx(f,env,`0x${q.replace(/^0x/, '')}`,n), bloch:blochTx}[network])(fetcher, query.replace(/^0x/, '').toLowerCase(), now);
     if (body?.error) return bad(body.error, body.error === 'source_not_found' ? 404 : 502);
     return reply(200, body);

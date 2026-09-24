@@ -13,10 +13,11 @@ const time = value => {const date=new Date(typeof value==='number'?value*1000:va
 const message = (text, error=false) => {const node=$('#message');node.hidden=!text;node.textContent=text;node.dataset.state=error?'error':'info';};
 const note = text => element('p','result-copy',text);
 
-async function api(route, network, query, asset) {
+async function api(route, network, query, asset, offset=0) {
   const params=new URLSearchParams({network});
   if(query)params.set('query',query);
   if(asset && route==='address')params.set('asset',asset);
+  if(route==='block'&&offset>0)params.set('offset',String(offset));
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
   try{
     const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
@@ -98,9 +99,10 @@ function renderAddress(data,query,asset) {
   left.append(element('div','record-id',wallet.address||query));
   fields(left,[['Source-reported balance',`${decimal(balance.base_units,assetDecimals[asset])} ${unit}`],['Exact base units',`${balance.base_units??'—'} ${balance.unit??''}`],['Balance scope',balance.scope],['Block height',balance.block?.height==null?'Not pinned':count(balance.block.height)],['Observed transactions',wallet.activity?.confirmed_tx_count??wallet.activity?.bounded_events??'Bounded or unavailable'],['Mempool transactions',wallet.activity?.mempool_tx_count??'—']]);
   left.append(element('h4','subhead','Observed relationships'),graph(wallet,data.token_activity));
+  if(data.utxos?.items?.length){left.append(element('h4','subhead',`Unspent outputs / showing ${data.utxos.items.length} of ${count(data.utxos.total)}`));const list=element('div','record-list');for(const output of data.utxos.items){const txid=output.txid;list.append(row(`${compact(txid)}:${output.vout}`,output.status?.confirmed?'Source confirmed':data.utxos.as_of_slot?`Indexed at slot ${count(data.utxos.as_of_slot)}`:'Source status unavailable',`${decimal(output.value??output.value_sat,8)} ${unit}`,()=>openRecord('tx',txid)));}left.append(list);}
   const activity=data.token_activity?.activity?.events||[];
   if(activity.length){left.append(element('h4','subhead',`${asset} Transfer logs / bounded window`));const list=element('div','record-list');for(const event of activity.slice(0,30))list.append(row(`${event.direction} · ${decimal(event.amount_base_units,6)} ${asset}`,`Block ${count(event.block_number)} · ${compact(event.transaction_hash)}`,compact(event.from===wallet.address?.toLowerCase()?event.to:event.from),()=>openRecord('tx',event.transaction_hash)));left.append(list);}
-  const aside=provenance(data,[['Graphus source',observed.source_id],['Coverage',observed.coverage],['Balance block',balance.block?.hash??'Moving source state'],['Limitations',(observed.limitations||[]).join(' ')]]);
+  const aside=provenance(data,[['Graphus source',observed.source_id],['Coverage',observed.coverage],['UTXO details',data.utxos?.coverage??'Unavailable or not applicable'],['Balance block',balance.block?.hash??'Moving source state'],['Limitations',(observed.limitations||[]).join(' ')]]);
   return [left,aside];
 }
 
@@ -114,8 +116,9 @@ function renderBlock(data,query) {
     :network==='ethereum'?[['Height',height],['Timestamp',time(Number(BigInt(block.timestamp)))],['Transactions',count(data.total_transactions)],['Finalized checkpoint',count(data.finalized_height)],['Gas used',hexNumber(block.gasUsed)],['Gas limit',hexNumber(block.gasLimit)],['Base fee',block.baseFeePerGas?`${decimal(BigInt(block.baseFeePerGas).toString(),9)} gwei`:'—'],['Parent hash',block.parentHash]]
     :[['Height',height],['Slot',count(block.slot)],['Epoch',count(block.epoch)],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Attestations',count(block.attestation_count)],['Finality',block.finality||'—'],['Proposer index',count(block.proposer_index)],['State root',block.state_root],['Parent',block.parent]];
   fields(left,values);
-  const ids=network==='bitcoin'?data.transaction_ids:network==='ethereum'?block.transactions:data.transactions?.transactions?.map(tx=>tx.txid);
-  if(ids?.length){left.append(element('h4','subhead',`Transactions / showing ${ids.length} of ${count(data.total_transactions??block.tx_count??ids.length)}`));const list=element('div','record-list');for(const tx of ids)list.append(row(compact(tx),'Open transaction','↗',()=>openRecord('tx',tx)));left.append(list);}
+  const ids=data.transaction_ids;
+  if(ids?.length){left.append(element('h4','subhead',`Transactions / ${count(data.offset+1)}–${count(data.offset+ids.length)} of ${count(data.total_transactions??block.tx_count??ids.length)}`));const list=element('div','record-list');for(const tx of ids)list.append(row(compact(tx),'Open transaction','↗',()=>openRecord('tx',tx)));left.append(list);}
+  if(data.offset>0||data.next_offset!=null){const pages=element('div','record-pages');if(data.offset>0){const previous=element('button','','← Previous 32');previous.type='button';previous.addEventListener('click',()=>search('block',query,null,Math.max(0,data.offset-32)));pages.append(previous);}if(data.next_offset!=null){const next=element('button','','Next 32 →');next.type='button';next.addEventListener('click',()=>search('block',query,null,data.next_offset));pages.append(next);}left.append(pages);}
   const aside=provenance(data,[['Block identity',id],['Finality / corroboration',network==='bloch'?`${block.finality||'unknown'} · ${data.corroboration?.level||'unknown'}`:network==='ethereum'?(BigInt(block.number)<=BigInt(data.finalized_height)?'At or below finalized checkpoint':'Above finalized checkpoint'):data.status?.in_best_chain?'Source best chain; reorganization possible':'Outside source best chain']]);
   return [left,aside];
 }
@@ -143,23 +146,23 @@ function showResult(kind,data,query,asset) {
 }
 
 function detect(query) {if(/^[0-9]+$/.test(query))return 'block';if(/^0x[0-9a-f]{40}$/i.test(query))return 'address';if(/^(bc1|[13])[a-z0-9]{20,90}$/i.test(query))return 'address';return 'tx';}
-async function search(kind,query,asset) {
+async function search(kind,query,asset,offset=0) {
   const network=state.network;const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
   message('Looking up the source record…');
   try{
     let resolved=requested;let data;
-    try{data=await api(resolved,network,query,asset);}catch(error){
+    try{data=await api(resolved,network,query,asset,offset);}catch(error){
       if(kind==='auto'&&/^(?:0x)?[0-9a-f]{64}$/i.test(query)&&resolved==='tx'&&error.message==='not_found'){
         resolved='block';
-        try{data=await api(resolved,network,query,asset);}catch(blockError){
+        try{data=await api(resolved,network,query,asset,offset);}catch(blockError){
           if(network==='bloch'&&blockError.message==='not_found'){resolved='address';data=await api(resolved,network,query,'BLCH');asset='BLCH';}
           else throw blockError;
         }
       }else throw error;
     }
     if(sequence!==state.request)return;
-    state.result={kind:resolved,query,asset};message('');showResult(resolved,data,query,asset);
-    const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);
+    state.result={kind:resolved,query,asset,offset};message('');showResult(resolved,data,query,asset);
+    const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);if(resolved==='block'&&offset>0)params.set('offset',String(offset));
     history.replaceState(null,'',`/?${params}`);
   }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}
 }
@@ -182,5 +185,5 @@ document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('c
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
 $('#clear-result').addEventListener('click',()=>{state.result=null;$('#result-section').hidden=true;message('');history.replaceState(null,'',`/?network=${state.network}`);});
 const initial=new URLSearchParams(location.search);const network=titles[initial.get('network')]?initial.get('network'):'bitcoin';
-switchNetwork(network,false).then(()=>{if(initial.get('query')){const kind=['auto','block','tx','address'].includes(initial.get('kind'))?initial.get('kind'):'auto';$('#search-kind').value=kind;$('#search-input').value=initial.get('query');if(['ETH','USDT','USDC'].includes(initial.get('asset')))$('#search-asset').value=initial.get('asset');search(kind,initial.get('query'),$('#search-asset').value);}});
+switchNetwork(network,false).then(()=>{if(initial.get('query')){const kind=['auto','block','tx','address'].includes(initial.get('kind'))?initial.get('kind'):'auto';$('#search-kind').value=kind;$('#search-input').value=initial.get('query');if(['ETH','USDT','USDC'].includes(initial.get('asset')))$('#search-asset').value=initial.get('asset');const offset=/^(0|[1-9][0-9]{0,5})$/.test(initial.get('offset')||'')?Number(initial.get('offset')):0;search(kind,initial.get('query'),$('#search-asset').value,offset);}});
 setInterval(()=>{if(!document.hidden&&!state.result)switchNetwork(state.network,false);},60000);
