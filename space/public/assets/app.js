@@ -296,12 +296,55 @@ function renderAddress(data,query,asset) {
   const left=card(`${state.network.toUpperCase()} / ${asset} / ADDRESS`,`Public reference`);
   left.append(recordIdentity(wallet.address||query));
   fields(left,[['Source-reported balance',`${decimal(balance.base_units,assetDecimals[asset])} ${unit}`],['Exact base units',`${balance.base_units??'—'} ${balance.unit??''}`],['Balance scope',balance.scope],['Block height',balance.block?.height==null?'Not pinned':count(balance.block.height)],['Observed transactions',wallet.activity?.confirmed_tx_count??wallet.activity?.bounded_events??'Bounded or unavailable'],['Mempool transactions',wallet.activity?.mempool_tx_count??'—']]);
+  left.append(addressTimeline(data,state.network,asset));
   left.append(element('h4','subhead','Observed relationships'),graph(wallet,data.token_activity,asset));
   if(data.utxos?.items?.length){left.append(element('h4','subhead',`Unspent outputs / showing ${data.utxos.items.length} of ${count(data.utxos.total)}`));const list=element('div','record-list');for(const output of data.utxos.items){const txid=output.txid;list.append(row(`${compact(txid)}:${output.vout}`,output.status?.confirmed?'Source confirmed':data.utxos.as_of_slot?`Indexed at slot ${count(data.utxos.as_of_slot)}`:'Source status unavailable',`${decimal(output.value??output.value_sat,8)} ${unit}`,()=>openRecord('tx',txid)));}left.append(list);}
-  const activity=data.token_activity?.activity?.events||[];
-  if(activity.length){left.append(element('h4','subhead',`${asset} Transfer logs / bounded window`));const list=element('div','record-list');for(const event of activity.slice(0,30))list.append(row(`${event.direction} · ${decimal(event.amount_base_units,6)} ${asset}`,`Block ${count(event.block_number)} · ${compact(event.transaction_hash)}`,compact(event.from===wallet.address?.toLowerCase()?event.to:event.from),()=>openRecord('tx',event.transaction_hash)));left.append(list);}
   const aside=provenance(data,[['Graphus source',observed.source_id],['Coverage',observed.coverage],['UTXO details',data.utxos?.coverage??'Unavailable or not applicable'],['Balance block',balance.block?.hash??'Moving source state'],['Limitations',(observed.limitations||[]).join(' ')]]);
   return [left,aside];
+}
+
+function addressTimeline(data,network,asset){
+  const wallet=data.wallet||{},observed=wallet.observation||{};
+  const section=element('section','address-timeline');
+  section.append(element('h4','subhead','Observed activity / newest first'));
+  const validTxid=value=>typeof value==='string'&&/^(?:0x)?[0-9a-f]{64}$/i.test(value);
+  let entries=[];
+  let scope='';
+  if(network==='bitcoin'){
+    entries=(wallet.nodes||[]).filter(node=>node.kind==='transaction'&&validTxid(node.txid)).map(node=>({
+      txid:node.txid,order:node.block?.height??-1,
+      label:`Transaction ${compact(node.txid)}`,
+      detail:`Block ${count(node.block?.height)} · ${node.block?.time?time(node.block.time):'Time unavailable'}`,
+      side:'Open ↗',
+    })).sort((a,b)=>b.order-a.order);
+    scope=observed.coverage==='unavailable'?'The optional confirmed transaction page is unavailable; a balance does not establish activity history.':
+      `First source page of confirmed transactions · ${count(entries.length)} shown of ${count(wallet.activity?.confirmed_tx_count)} source-reported total. Inputs and outputs do not establish ownership.`;
+  }else if(network==='bloch'){
+    entries=(wallet.edges||[]).filter(edge=>validTxid(edge.txid)&&['observed_created_output','observed_spent_outpoint_reference'].includes(edge.kind)).map(edge=>({
+      txid:edge.txid,order:edge.block?.slot??-1,
+      label:edge.kind==='observed_created_output'?'Created output':'Spent outpoint reference',
+      detail:`${compact(edge.txid)} · height ${count(edge.block?.height)} · slot ${count(edge.block?.slot)} · outpoint ${compact(edge.outpoint?.txid)}:${count(edge.outpoint?.vout)}`,
+      side:`${decimal(edge.amount_base_units,8)} BLCH`,
+    })).sort((a,b)=>b.order-a.order);
+    const history=observed.history;
+    scope=history?`First indexed script-hash page · ${count(entries.length)} events${history.total==null?'':` of ${count(history.total)} source-reported`}${history.has_more?' · further source pages exist':''}. Spent outpoint references do not identify a sender.`:
+      'Indexed history is unavailable for this balance lookup; no absence of activity is implied.';
+  }else if(asset==='ETH'){
+    scope='Native ETH balance lookup has no transaction index. Activity is unavailable in this view; no absence of transfers is implied.';
+  }else{
+    entries=(data.token_activity?.activity?.events||[]).filter(event=>validTxid(event.transaction_hash)).map(event=>({
+      txid:event.transaction_hash,order:[event.block_number,event.transaction_index,event.log_index],
+      label:`${event.direction} Transfer · ${decimal(event.amount_base_units,6)} ${asset}`,
+      detail:`${compact(event.transaction_hash)} · block ${count(event.block_number)} · log ${count(event.log_index)}`,
+      side:compact(event.direction==='outgoing'?event.to:event.from),
+    })).sort((a,b)=>b.order[0]-a.order[0]||b.order[1]-a.order[1]||b.order[2]-a.order[2]);
+    scope=data.token_activity?`${count(entries.length)} allowlisted ${asset} Transfer logs in the bounded finalized block window. This is not complete address history.`:
+      `${asset} Transfer-log lookup is unavailable. The balance response does not establish activity history.`;
+  }
+  section.append(element('p','activity-scope',scope));
+  if(entries.length)batchedRows(section,entries,entry=>row(entry.label,entry.detail,entry.side,()=>openRecord('tx',entry.txid)),30);
+  else section.append(element('p','activity-empty',network==='ethereum'&&asset!=='ETH'&&data.token_activity?'No matching Transfer logs in this bounded window.':'No transaction entries are available in this source view.'));
+  return section;
 }
 
 function renderBlock(data,query) {

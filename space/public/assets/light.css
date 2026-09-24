@@ -87,6 +87,7 @@ html[data-theme="light"] .flow-legend strong{color:#315900}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}
 html[data-theme="light"] .record-row{border-color:#d3dfce;background:#f7faf4}
 html[data-theme="light"] .record-row small,html[data-theme="light"] .record-row>span{color:#4d5c4a}
+html[data-theme="light"] .address-timeline{border-color:#c9dac0;background:#f1f7ed}html[data-theme="light"] .address-timeline .record-list{border-left-color:#8eae7a}html[data-theme="light"] .address-timeline .record-row{background:transparent;border-bottom-color:#d3dfce}html[data-theme="light"] .address-timeline .record-row:before{background:#dff5bd;border-color:#56802e;box-shadow:none}html[data-theme="light"] .activity-scope,html[data-theme="light"] .activity-empty{color:#4d5c4a}
 html[data-theme="light"] .record-pages button{border-color:#93ad87;background:#f0f8e9;color:#315900}
 html[data-theme="light"] .record-pages button:hover{border-color:#426c10}
 html[data-theme="light"] .graph-panel{border-color:#a4ba9a;background:radial-gradient(circle at 50% 50%,#e7f6d3,#f8faf5 68%)}

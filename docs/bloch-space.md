@@ -35,6 +35,15 @@ The browser pages block transaction IDs in groups of 32, bounds graph edges,
 and shows up to 32 UTXOs for Bitcoin and Bloch identifiers when those separate
 source queries respond. It retains
 exact base-unit strings in source responses; decimal rendering is a view only.
+Address results show a newest-first activity timeline with clickable transaction
+IDs. Bitcoin rows are the first source page of confirmed transaction IDs; they
+do not assign input ownership or calculate wallet net flow. Bloch rows are
+created-output or spent-outpoint-reference events from the first indexed
+script-hash history page, with exact base-unit values. USDT and USDC rows are
+allowlisted Transfer logs within the bounded finalized block window. ETH native
+balance lookups have no transaction index, so the page explicitly marks activity
+as unavailable. The timeline pages its returned sample locally and states the
+source boundary; it does not claim complete address history.
 Overview and record views include a collapsible raw API response. The rendered
 preview is limited to 120,000 characters to bound the page, while copy and
 download use the complete response. The panel links to the canonical read-only
