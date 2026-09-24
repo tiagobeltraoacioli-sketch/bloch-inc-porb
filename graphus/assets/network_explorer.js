@@ -28,7 +28,12 @@
     if(busy)return;const request=++requestId,asset=$('net-asset').value;busy=true;busyButtons();status(`Collecting ${older?'earlier':'latest'} real ${asset} records…`);
     try{
       const query=new URLSearchParams({asset});if(older&&cursor!==null)query.set('cursor',cursor);
-      const response=await fetch(`/api/chain/network?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+      let response;
+      for(let attempt=0;attempt<2;attempt++){
+        response=await fetch(`/api/chain/network?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+        if(![502,503,504].includes(response.status)||attempt===1)break;
+        status('The public source is temporarily unavailable. Retrying once…');await response.body?.cancel();await new Promise(resolve=>setTimeout(resolve,1200));if(request!==requestId)return;
+      }
       if(!response.ok)throw new Error(`Source unavailable (HTTP ${response.status}). Collected observations keep their original anchors.`);
       const raw=await response.text();if(raw.length>4000000)throw new Error('Source page exceeds the collection limit.');const result=JSON.parse(raw);
       if(request!==requestId)return;if(result.asset!==asset)throw new Error('Source asset mismatch.');

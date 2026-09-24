@@ -479,7 +479,12 @@ function renderCoverage(items){
   coverage.append(facts);
 }
 async function publicData(path){
-  const response=await fetch(path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+  let response;
+  for(let attempt=0;attempt<2;attempt++){
+    response=await fetch(path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+    if(![502,503,504].includes(response.status)||attempt===1)break;
+    setStatus('The public source is temporarily unavailable. Retrying this batch once…','loading');await response.body?.cancel();await new Promise(resolve=>setTimeout(resolve,1200));
+  }
   if(!response.ok)throw new Error(`Public source returned HTTP ${response.status}`);
   const raw=await response.text();if(raw.length>4000000)throw new Error('Source response exceeded the sample limit.');const data=JSON.parse(raw);if(data.status!=='source-reported')throw new Error('No source-reported data returned.');return data;
 }

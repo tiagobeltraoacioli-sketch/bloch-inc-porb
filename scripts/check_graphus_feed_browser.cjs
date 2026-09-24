@@ -21,7 +21,7 @@ const base=process.env.GRAPHUS_URL||'http://127.0.0.1:8097',adapterMode=process.
         await route.fulfill({status:result.status,contentType:'application/json',body:JSON.stringify(result.body)});
       });
     }
-    const waitNetwork=async()=>{await page.waitForFunction(()=>!document.querySelector('#net-refresh').disabled,{},{timeout:70000});assert.notEqual(await page.locator('#net-status').getAttribute('data-error'),'true',await page.locator('#net-status').innerText());};
+    const waitNetwork=async()=>{await page.waitForFunction(()=>!document.querySelector('#net-refresh').disabled,{},{timeout:120000});assert.notEqual(await page.locator('#net-status').getAttribute('data-error'),'true',await page.locator('#net-status').innerText());};
     const download=async selector=>{const promise=page.waitForEvent('download');await page.locator(selector).click();return JSON.parse(fs.readFileSync(await (await promise).path(),'utf8'));};
     for(const asset of process.env.GRAPHUS_CHECK_PART==='balances'?[]:['BLCH','BTC','ETH','USDT','USDC']){
       await page.goto(base+'/constellation.html?asset='+asset);await waitNetwork();await page.locator('#net-auto').uncheck();
