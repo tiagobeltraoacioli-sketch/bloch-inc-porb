@@ -29,10 +29,16 @@ function graph(asset,source,now){
         'Input references and created outputs are separate records, not additive transfer volume.']};},
   };
 }
-async function bitcoin(fetcher,now){
+async function bitcoin(fetcher,now,cursor){
   const blocks=await read(fetcher,`${BTC}/blocks`);check(Array.isArray(blocks)&&blocks.length>=3&&blocks.length<=10);
   for(let i=0;i<3;i++){const b=blocks[i];check(HASH.test(b?.id||'')&&integer(b.height)&&integer(b.timestamp)&&integer(b.tx_count));if(i)check(blocks[i-1].height===b.height+1&&blocks[i-1].previousblockhash===b.id);}
-  const block=blocks[2],rows=await read(fetcher,`${BTC}/block/${block.id}/txs/0`);
+  let block=blocks[2];
+  if(cursor!==null){
+    const height=Number(cursor);if(height>block.height||block.height-height>8192)throw new Error('cursor_out_of_range');
+    const older=await read(fetcher,`${BTC}/blocks/${height}`);check(Array.isArray(older)&&older[0]?.height===height);block=older[0];
+    check(HASH.test(block.id||'')&&integer(block.tx_count)&&integer(block.timestamp));
+  }
+  const rows=await read(fetcher,`${BTC}/block/${block.id}/txs/0`);
   check(Array.isArray(rows)&&rows.length===Math.min(25,block.tx_count));
   const g=graph('BTC','blockstream-esplora',now),seen=new Set();let omitted=0;
   for(const tx of rows.slice(0,20)){
@@ -54,15 +60,18 @@ async function bitcoin(fetcher,now){
     }
   }
   const status=await read(fetcher,`${BTC}/block/${block.id}/status`);check(status?.in_best_chain===true);
-  return g.result({height:block.height,hash:block.id,time:new Date(block.timestamp*1000).toISOString(),finality:'source-reported best chain; selected at three confirmations'},
+  const result=g.result({height:block.height,hash:block.id,time:new Date(block.timestamp*1000).toISOString(),finality:'source-reported best chain; at least three confirmations at selection'},
     {transactions_returned:seen.size,transactions_in_block:block.tx_count,endpoint_records_omitted:omitted,selection:'first 20 transactions; up to 24 input and output records each'},
     `${seen.size} transactions from block ${block.height} (${block.tx_count} in source block); ${omitted} endpoint records omitted, including coinbase or non-address scripts`);
+  return {...result,next_cursor:block.height>0&&blocks[2].height-block.height<8192?String(block.height-1):null};
 }
-async function bloch(fetcher,now){
-  const [page,health]=await Promise.all([read(fetcher,`${BLOCH}/transactions?limit=32`),read(fetcher,`${BLOCH}/health`).catch(()=>null)]);
+async function bloch(fetcher,now,cursor){
+  const [page,health]=await Promise.all([read(fetcher,`${BLOCH}/transactions?limit=32${cursor?'&cursor='+encodeURIComponent(cursor):''}`),read(fetcher,`${BLOCH}/health`).catch(()=>null)]);
   const finalized=health?.ok===true&&integer(health.finalized_height)?health.finalized_height:null;
   check(Array.isArray(page?.transactions)&&page.transactions.length<=32
     &&integer(page.as_of_height)&&integer(page.as_of_slot)&&HASH.test(page.chain_tip||'')&&page.verification==='consensus replay and state-root verification');
+  if(cursor){const [height,hash]=cursor.split('-');check(page.as_of_height===Number(height)&&page.chain_tip.toLowerCase()===hash.toLowerCase());}
+  if(page.next_cursor!=null)check(/^[0-9]{1,12}-[a-f0-9]{64}-[0-9]{1,12}$/i.test(page.next_cursor));
   const g=graph('BLCH','bloch-historical-indexer',now),seen=new Set(),blocks=new Map();let omitted=0,notFinalized=0;
   for(const tx of page.transactions){
     check(HASH.test(tx?.txid||'')&&!seen.has(tx.txid)&&HASH.test(tx.block_id||'')&&integer(tx.height)&&tx.height<=page.as_of_height&&integer(tx.slot)&&tx.slot<=page.as_of_slot&&tx.height<=tx.slot&&Array.isArray(tx.inputs)&&Array.isArray(tx.outputs));
@@ -83,16 +92,19 @@ async function bloch(fetcher,now){
       }
     }
   }
-  return g.result({height:page.as_of_height,hash:page.chain_tip,...(finalized!==null?{finalized_height:finalized}:{}),
+  const result=g.result({height:page.as_of_height,hash:page.chain_tip,...(finalized!==null?{finalized_height:finalized}:{}),
     finality:finalized!==null?'transaction heights compared with separately source-reported finalized height':'finality unavailable; indexed block references only'},
     {transactions_returned:seen.size-notFinalized,transactions_in_page:seen.size,finality_available:finalized!==null,not_finalized_omitted:notFinalized,endpoint_records_omitted:omitted,has_more:Boolean(page.next_cursor),selection:'latest 32 indexed transactions; up to 3000 endpoint records within a bounded reference set'},
     `${seen.size-notFinalized} recent indexed transactions${finalized!==null?' at or below reported finalized height '+finalized:'; finality status unavailable'}; ${omitted} endpoint records omitted`);
+  return {...result,next_cursor:page.next_cursor||null};
 }
 function endpoint(env){let url;try{url=new URL(env.GRAPHUS_ETHEREUM_RPC_URL);}catch{throw new Error('ethereum_rpc_not_configured');}if(url.protocol!=='https:'||url.username||url.password||url.hash)throw new Error('ethereum_rpc_not_configured');return url.href;}
-async function ethereum(asset,env,fetcher,now){
+async function ethereum(asset,env,fetcher,now,cursor){
   const url=endpoint(env);let id=0;
   async function rpc(method,params){const requestId=++id;const body=await read(fetcher,url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:requestId,method,params})});check(body?.jsonrpc==='2.0'&&body.id===requestId&&!body.error&&body.result!=null);return body.result;}
-  const [chain,head]=await Promise.all([rpc('eth_chainId',[]),rpc('eth_getBlockByNumber',['finalized',asset==='ETH'])]);
+  const [chain,finalized]=await Promise.all([rpc('eth_chainId',[]),rpc('eth_getBlockByNumber',['finalized',asset==='ETH'&&cursor===null])]);
+  let head=finalized;
+  if(cursor!==null){const height=Number(cursor),tip=number(finalized.number);if(height>tip||tip-height>8192)throw new Error('cursor_out_of_range');head=await rpc('eth_getBlockByNumber',[`0x${height.toString(16)}`,asset==='ETH']);check(number(head?.number)===height);}
   check(quantity(chain)===1n&&HEX.test(head?.hash||''));const height=number(head.number),timestamp=number(head.timestamp);
   const g=graph(asset,'configured-ethereum-mainnet-rpc',now),anchor={height,hash:head.hash.toLowerCase(),time:new Date(timestamp*1000).toISOString(),finality:'source-reported finalized block'};
   let scope,coverage;
@@ -131,10 +143,13 @@ async function ethereum(asset,env,fetcher,now){
     coverage=`${g.edges.length} of ${logs.length} source-returned ${asset} Transfer logs across finalized blocks ${first}–${height}${logs.length>512?'; capped sample':''}`;
   }
   const recheck=await rpc('eth_getBlockByNumber',[head.number,false]);check(recheck?.hash?.toLowerCase()===anchor.hash&&number(recheck.number)===height);
-  return g.result(anchor,scope,coverage);
+  const first=scope.from_block??height;
+  return {...g.result(anchor,scope,coverage),next_cursor:first>0&&number(finalized.number)-first<8192?String(first-1):null};
 }
-export async function queryNetworkGraph({asset,env={},fetcher=fetch,now=()=>new Date()}={}){
+export async function queryNetworkGraph({asset,cursor=null,env={},fetcher=fetch,now=()=>new Date()}={}){
   if(!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return {status:400,body:{error:'unsupported_asset'}};
-  try{return {status:200,body:await (asset==='BTC'?bitcoin(fetcher,now):asset==='BLCH'?bloch(fetcher,now):ethereum(asset,env,fetcher,now))};}
-  catch(error){const code=['ethereum_rpc_not_configured','source_response_too_large','inconsistent_source_response'].includes(error.message)?error.message:'chain_source_unavailable';return {status:code==='ethereum_rpc_not_configured'?503:502,body:{error:code}};}
+  if(cursor!==null&&(typeof cursor!=='string'||!(asset==='BLCH'?/^[0-9]{1,12}-[a-f0-9]{64}-[0-9]{1,12}$/i:/^(0|[1-9][0-9]{0,11})$/).test(cursor)))return {status:400,body:{error:'invalid_cursor'}};
+  try{return {status:200,body:await (asset==='BTC'?bitcoin(fetcher,now,cursor):asset==='BLCH'?bloch(fetcher,now,cursor):ethereum(asset,env,fetcher,now,cursor))};}
+  catch(error){const code=['ethereum_rpc_not_configured','source_response_too_large','inconsistent_source_response','cursor_out_of_range'].includes(error.message)?error.message:'chain_source_unavailable';return {status:code==='ethereum_rpc_not_configured'?503:code==='cursor_out_of_range'?400:502,body:{error:code}};}
 }
+export {read as readPublicJson, endpoint as ethereumEndpoint, quantity as rpcQuantity, number as rpcNumber, CONTRACTS};

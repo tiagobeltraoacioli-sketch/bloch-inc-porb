@@ -1,3 +1,7 @@
+(function(){
+const viewParams=new URLSearchParams(location.search);
+const demoMode=viewParams.get('mode')==='demo'||viewParams.has('wallet');
+if(!demoMode&&!viewParams.has('address'))return;
 const canvas = document.getElementById('evidence-constellation');
 const context = canvas.getContext('2d');
 let realObservation=null;
@@ -88,14 +92,15 @@ exportButton.addEventListener('click',()=>{
   }
 });
 function setDataMode(mode,detail){
+  if(mode==='synthetic'&&!demoMode){mode='empty';detail='No public-chain observation loaded. Enter a mainnet identifier and query its source.';}
   const status=document.getElementById('constellation-data-status');
   status.dataset.mode=mode;
   document.body.dataset.constellationMode=mode;
-  document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':'Synthetic preview';
+  document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':mode==='empty'?'No public-chain observation':'Synthetic preview';
   document.getElementById('constellation-data-detail').textContent=detail;
   exportButton.hidden=mode!=='source-reported';
   analyticsButton.hidden=mode!=='source-reported';
-  document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
+  document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):demoMode?'GRAPHUS / SYNTHETIC WALLETS':'GRAPHUS / PUBLIC SOURCE QUERY';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   document.getElementById('constellation-help').textContent=mode==='source-reported'
     ?(realObservation?.tokenActivity
@@ -792,7 +797,7 @@ async function loadLiveAddress({toBlock=null,expectedHash=null,historyCursor=nul
     realObservation=null;
     selectedRealTransactionId=null;selectedRealEventId=null;liveTransactionDetail.hidden=true;
     clearWallet();
-    setDataMode('synthetic',`Public-chain lookup unavailable: ${error.message}. The map remains a synthetic preview.`);
+    setDataMode('empty',`Public-chain lookup unavailable: ${error.message}. Retry the address query; no replacement records are generated.`);
     draw();
   }finally{if(requestId===realRequest)liveButton.disabled=false;}
 }
@@ -1037,6 +1042,7 @@ function draw() {
   gradient.addColorStop(0,'#1d301b');gradient.addColorStop(.55,'#0b150c');gradient.addColorStop(1,'#050806');
   context.fillStyle=gradient;context.fillRect(0,0,width,height);
   if(realObservation){drawRealObservation(realObservation);return;}
+  if(!demoMode)return;
   for (const [asset,[cx,cy]] of Object.entries(centers)) {
     if(search)continue;
     if (activeAsset !== 'all' && activeAsset !== asset) continue;
@@ -1442,6 +1448,7 @@ function updateSearchUrl() {
 }
 function renderSearchStatus() {
   const status=document.getElementById('wallet-search-status');
+  if(!demoMode){status.textContent='Enter a public address or script hash to inspect source-reported evidence.';return;}
   if(!search){status.textContent='Search a synthetic wallet ID or address to isolate its local constellation.';return;}
   const matches=wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
   if(!matches.length){status.textContent=`No synthetic wallet matches “${search}” in this asset filter.`;return;}
@@ -1454,11 +1461,11 @@ function clearWallet() {
   networkStepFilter=0;networkStepSelect.value='0';
   neighborhoodHops=1;neighborhoodLevels=new Map();neighborhoodSelect.value='1';neighborhoodSelect.disabled=true;
   setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
-  setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
+  setText('record-summary',search?(demoMode?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Query this public identifier to inspect source facts.'):(demoMode?'Open a wallet point to inspect its synthetic transactions and relationships.':'Enter a public identifier or return to the real network feed.'));
   for(const id of ['record-asset','record-holdings','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-held','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
-  setText('record-source','Synthetic fixture');setText('record-meaning','No trained or validated model.');
+  setText('record-source',demoMode?'Synthetic fixture':'No source observation loaded');setText('record-meaning','No trained or validated model.');
   for(const id of ['evidence-network','evidence-type','evidence-reference'])setText(id,'—');
-  setText('evidence-finality','Not applicable to synthetic data');setText('evidence-limit','Select a wallet to inspect the fixture.');
+  setText('evidence-finality',demoMode?'Not applicable to synthetic data':'No source observation loaded');setText('evidence-limit','Select a wallet to inspect the fixture.');
   document.getElementById('transaction-list').textContent='Select a wallet.';
   flowList.textContent='Select a wallet.';
   document.getElementById('activity-chart').replaceChildren();
@@ -1471,6 +1478,7 @@ function clearWallet() {
   renderNetworkEvidence();
 }
 function selectWallet(wallet,updateQuery=false) {
+  if(!demoMode)return;
   if(realObservation){realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; no public-chain address is loaded.');}
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
   selectedWallet=wallet;selectedTransaction=null;selectedNetworkEvent=null;
@@ -1520,6 +1528,7 @@ function selectTransaction(wallet,tx) {
 }
 function renderList() {
   const list=document.getElementById('accessible-records');list.replaceChildren();
+  if(!demoMode){list.textContent='Use the public identifier query above or return to the real network feed.';return;}
   const matches=search&&selectedWallet
     ?wallets.filter(displayed).sort((a,b)=>(neighborhoodLevels.get(a.id)??3)-(neighborhoodLevels.get(b.id)??3)||a.id.localeCompare(b.id))
     :wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
@@ -1626,6 +1635,16 @@ if(initialAsset&&['btc','eth','usdt','usdc','blch'].includes(initialAsset)){
 if(initialWallet){const input=document.getElementById('record-search');input.value=initialWallet;input.dispatchEvent(new Event('input',{bubbles:true}));}
 renderList();renderSearchStatus();resize();requestAnimationFrame(frame);
 renderNetworkEvidence();
+if(!demoMode){
+  document.querySelector('.analytics-section').hidden=true;
+  document.querySelector('.public-ml').hidden=true;
+  networkPanel.hidden=true;neighborhoodControl.hidden=true;flowPanel.hidden=true;
+  sourceStatus.querySelector('summary span:last-child').textContent='real public address lookup';
+  sourceStatus.querySelector('.source-status-body > p').textContent='Public identifier queries return source balances and bounded transaction records. No holder identities are assigned.';
+  setDataMode('empty','Enter a public mainnet identifier and query the source.');
+}
 if(initialAddress&&assetForLiveAddress(initialAddress))loadLiveAddress({
   toBlock:initialUrl.searchParams.get('to_block'),expectedHash:initialUrl.searchParams.get('expected_hash'),
   historyCursor:initialUrl.searchParams.get('history_cursor'),historyPage:initialUrl.searchParams.get('history_page')});
+
+})();

@@ -6,7 +6,7 @@ const require=createRequire(import.meta.url),A=require('../graphus/assets/analyt
 const hash=n=>n.toString(16).padStart(64,'0'),hex=n=>'0x'+hash(n),address=n=>'0x'+n.toString(16).padStart(40,'0');
 const now=()=>new Date('2026-09-24T13:00:00Z'),response=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
 function blochFixture(change=()=>{}){
-  const page={as_of_slot:120,as_of_height:100,chain_tip:hash(100),verification:'consensus replay and state-root verification',next_cursor:'next',
+  const page={as_of_slot:120,as_of_height:100,chain_tip:hash(100),verification:'consensus replay and state-root verification',next_cursor:`100-${hash(100)}-32`,
     transactions:[{txid:hash(1),block_id:hash(98),slot:115,height:98,
       inputs:[{txid:hash(2),vout:0,script_hash:hash(10),value_sat:'9007199254740993'}],
       outputs:[{txid:hash(1),vout:0,script_hash:hash(20),value_sat:'9007199254740992'}]}]};

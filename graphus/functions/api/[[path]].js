@@ -3,8 +3,9 @@ import {queryEthereumActivity,queryEthereumReceipt} from '../../chain/ethereum-a
 import {queryBlochHolders} from '../../chain/bloch-holders.js';
 import {queryBlochHistoryPage} from '../../chain/bloch-chain.js';
 import {queryNetworkGraph} from '../../chain/network-graph.js';
+import {queryBalanceSample} from '../../chain/balance-sample.js';
 
-// At most five shared source requests per isolate per 30-second cache window.
+// Bounded recent and cursor-page cache; failed responses are never retained.
 const networkGraphCache=new Map();
 
 const COOKIE = 'graphus_session';
@@ -89,14 +90,21 @@ export async function onRequest({request,env}) {
   const method=request.method;
   const secure=url.protocol==='https:';
   if(path==='chain/network'&&method==='GET'){
-    const asset=url.searchParams.get('asset');
-    if(url.searchParams.size!==1||!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return error('unsupported_asset',400);
-    let entry=networkGraphCache.get(asset);
+    const asset=url.searchParams.get('asset'),cursor=url.searchParams.get('cursor');
+    if(url.searchParams.size!==(cursor===null?1:2)||[...url.searchParams.keys()].some(k=>!['asset','cursor'].includes(k))||!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return error('unsupported_asset',400);
+    const key=`${asset}:${cursor??'latest'}`;
+    let entry=networkGraphCache.get(key);
     if(!entry||entry.until<=Date.now()){
-      entry={until:Date.now()+30000,promise:queryNetworkGraph({asset,env})};networkGraphCache.set(asset,entry);
-      entry.promise.then(result=>{if(result.status!==200&&networkGraphCache.get(asset)===entry)networkGraphCache.delete(asset);});
+      if(networkGraphCache.size>=32)networkGraphCache.delete(networkGraphCache.keys().next().value);
+      entry={until:Date.now()+30000,promise:queryNetworkGraph({asset,cursor,env})};networkGraphCache.set(key,entry);
+      entry.promise.then(result=>{if(result.status!==200&&networkGraphCache.get(key)===entry)networkGraphCache.delete(key);});
     }
     const result=await entry.promise;return json(result.body,result.status);
+  }
+  if(path==='chain/balances'&&method==='GET'){
+    if(url.searchParams.size!==2||[...url.searchParams.keys()].some(k=>!['asset','addresses'].includes(k)))return error('invalid_balance_sample',400);
+    const result=await queryBalanceSample({asset:url.searchParams.get('asset'),addresses:url.searchParams.get('addresses')?.split(','),env});
+    return json(result.body,result.status);
   }
   if(path==='chain/wallet'&&method==='GET') {
     const result=await queryChainWallet({
@@ -136,9 +144,10 @@ export async function onRequest({request,env}) {
     transaction_coverage:'bounded-on-demand-public-chain-samples',
     initial_assets:INITIAL_ASSETS,
     query_capabilities:{
-      recent_network_graph:{endpoint:'/api/chain/network',assets:['BTC','ETH','USDT','USDC','BLCH'],scope:'bounded-source-reported-samples',independently_verified:false},
+      recent_network_graph:{endpoint:'/api/chain/network',assets:['BTC','ETH','USDT','USDC','BLCH'],scope:'bounded-source-reported-samples',pagination:'next_cursor',independently_verified:false},
+      observed_balance_sample:{endpoint:'/api/chain/balances',assets:['BTC','ETH','USDT','USDC'],limit:16,ethereum_anchor:'one-source-finalized-block-per-batch',bitcoin_anchor:'unpinned-confirmed-aggregates',holder_identity:false},
       address_search:'synthetic-browser-fixture-and-bounded-source-reported-query',
-      local_constellation:'synthetic-browser-fixture',production_chain_query:false,
+      local_constellation:'real-bounded-session-collection-with-optional-synthetic-demo',production_chain_query:false,
       bounded_public_chain_address_lookup:{
         endpoint:'/api/chain/wallet',bitcoin:'public-esplora-address-aggregate-and-bounded-transactions',
         ethereum:'requires-GRAPHUS_ETHEREUM_RPC_URL',bloch:'source-reported-archival-script-hash-balance',independently_verified:false,

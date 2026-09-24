@@ -24,6 +24,9 @@ assert.equal(canonicalView('javascript:alert(1)',base),null);
 assert.equal(canonicalView('/constellation?wallet=SIM-ETH-001',base),
              'constellation.html?wallet=SIM-ETH-001');
 assert.equal(labelFor(`oculum.html?asset=eth&address=${eth}`),`Oculum / ETH / ${eth}`);
+assert.equal(canonicalView('/constellation?asset=USDC',base),'constellation.html?asset=usdc');
+assert.equal(canonicalView('/constellation?mode=demo',base),null);
+assert.equal(labelFor('constellation.html?asset=usdc'),'Constellation / USDC / real network sample');
 
 const storage={getItem(){return JSON.stringify([
   {url:`oculum.html?asset=eth&address=${eth}`,saved_at:'2026-09-24T00:00:00Z'},

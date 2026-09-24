@@ -242,7 +242,7 @@
   $('lab-demo').addEventListener('click',()=>{requestId++;$('lab-holders').disabled=false;setGraph(A.fixture($('lab-asset').value));});
   $('lab-import').addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;const request=++requestId;$('lab-holders').disabled=false;
-    try{if(file.size>2000000)throw new Error('The observation file exceeds 2 MB.');const data=A.fromBundle(JSON.parse(await file.text()));if(request===requestId){setGraph(data);message('Observation imported locally. The file was not uploaded; provenance claims remain unverified.');}}
+    try{if(file.size>6000000)throw new Error('The collection file exceeds 6 MB.');const bundle=JSON.parse(await file.text());if(bundle.kind!=='graphus_network_collection'&&file.size>2000000)throw new Error('The observation file exceeds 2 MB.');const data=bundle.kind==='graphus_network_collection'?A.fromCollection(bundle):A.fromBundle(bundle);if(request===requestId){setGraph(data);message('Observation imported locally. The file was not uploaded; provenance claims remain unverified.');}}
     catch(error){if(request===requestId)message(error.message,true);}finally{e.target.value='';}
   });
   $('lab-apply').addEventListener('click',applyFilters);$('lab-reset').addEventListener('click',resetFilters);
@@ -266,7 +266,10 @@
   const params=new URLSearchParams(location.search),asset=params.get('asset')?.toUpperCase();
   $('lab-asset').value=Object.hasOwn(A.DECIMALS,asset)?asset:'BLCH';
   $('lab-graph-workspace').hidden=true;
-  if(params.get('import')==='observation'){
+  if(params.get('import')==='network'){
+    try{const serialized=sessionStorage.getItem('graphus.analytics.network.v1');sessionStorage.removeItem('graphus.analytics.network.v1');if(!serialized||serialized.length>6000000)throw new Error('No bounded network collection is available in this tab.');const bundle=JSON.parse(serialized);setGraph(A.fromCollection(bundle),'Locally collected public-chain observations · '+bundle.dataset.coverage,'collection');$('lab-badge').textContent='REAL NETWORK COLLECTION · SOURCE-REPORTED';message('Network collection opened locally with exact source records.');}
+    catch(error){message(error.message,true);}
+  }else if(params.get('import')==='observation'){
     try{const serialized=sessionStorage.getItem('graphus.analytics.observation.v1');sessionStorage.removeItem('graphus.analytics.observation.v1');if(!serialized||serialized.length>2000000)throw new Error('No observation is available in this tab. Import a Constellation JSON export.');setGraph(A.fromBundle(JSON.parse(serialized)));message('Constellation observation opened locally; no file was uploaded.');}
     catch(error){message(error.message,true);}
   }else if(params.get('address')){$('lab-address').value=params.get('address');$('lab-lookup').requestSubmit();}

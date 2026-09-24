@@ -61,7 +61,12 @@
       coverage:text(data.coverage,1000)?data.coverage:'Bounded records only',
       ...(data.anchor?{anchor:Object.fromEntries(['height','hash','time','finality','finalized_height'].filter(k=>typeof data.anchor[k]==='string'||Number.isSafeInteger(data.anchor[k])).map(k=>[k,data.anchor[k]]))}:{}),
       ...(data.scope?{scope:Object.fromEntries(Object.entries(data.scope).filter(([key,v])=>/^[a-z_]{1,60}$/.test(key)&&(typeof v==='string'&&v.length<=500||typeof v==='boolean'||Number.isSafeInteger(v))))}:{}),
+      ...(Array.isArray(data.snapshots)&&data.snapshots.length<=32?{snapshots:data.snapshots.map(s=>({source:text(s.source,300)?s.source:'Unspecified source',retrieved_at:text(s.retrieved_at,100)?s.retrieved_at:null,coverage:text(s.coverage,1000)?s.coverage:'Bounded source page',anchor:s.anchor&&Number.isSafeInteger(s.anchor.height)&&text(s.anchor.hash,100)?{height:s.anchor.height,hash:s.anchor.hash,finality:text(s.anchor.finality,300)?s.anchor.finality:'Unknown'}:null,records:Number.isSafeInteger(s.records)?s.records:null}))}:{}),
     };
+  }
+  function fromCollection(bundle){
+    if(bundle?.kind!=='graphus_network_collection'||bundle.schema_version!==1||bundle.dataset?.status!=='source-reported'||!Array.isArray(bundle.dataset.snapshots)||bundle.dataset.snapshots.length>32)fail('Invalid bounded network collection.');
+    return normalize(bundle.dataset);
   }
   function fromBundle(bundle) {
     if(bundle?.kind!=='graphus_public_chain_observation'||bundle.schema_version!==1
@@ -210,7 +215,7 @@
     const cell=value=>{let s=String(value??'');if(/^[=+@\-\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
     return rows.map(row=>row.map(cell).join(',')).join('\r\n');
   }
-  const api={DECIMALS,KINDS,units,format,ratio,normalize,fromBundle,fixture,filterGraph,analyze,findPath,holderStats,csv};
+  const api={DECIMALS,KINDS,units,format,ratio,normalize,fromBundle,fromCollection,fixture,filterGraph,analyze,findPath,holderStats,csv};
   root.GraphusAnalytics=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:window);

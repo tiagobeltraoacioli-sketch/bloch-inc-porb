@@ -31,6 +31,8 @@
     if(asset&&identifier)return viewUrl(view,asset,identifier);
     if(view==='constellation.html'&&wallet&&/^[A-Za-z0-9:._-]{3,100}$/.test(wallet))
       return `constellation.html?wallet=${encodeURIComponent(wallet)}`;
+    if(!identifier&&!wallet&&url.searchParams.get('mode')!=='demo'&&(!asset||ASSETS.includes(asset)))
+      return `${view}?asset=${(asset||'BLCH').toLowerCase()}`;
     return null;
   }
   function labelFor(url){
@@ -38,7 +40,7 @@
     const view=parsed.pathname.includes('oculum')?'Oculum':parsed.pathname.includes('constellation')?'Constellation':'App';
     const asset=parsed.searchParams.get('asset')?.toUpperCase();
     const identifier=parsed.searchParams.get('address')||parsed.searchParams.get('wallet');
-    return identifier?`${view} / ${asset||'synthetic'} / ${identifier}`:view;
+    return identifier?`${view} / ${asset||'synthetic'} / ${identifier}`:asset?`${view} / ${asset} / real network sample`:view;
   }
   function readSaved(storage,base){
     try{

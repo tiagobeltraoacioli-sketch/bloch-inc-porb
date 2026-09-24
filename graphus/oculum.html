@@ -10,11 +10,13 @@
   <link rel="stylesheet" href="assets/style.css">
   <link rel="stylesheet" href="assets/silver.css">
   <link rel="stylesheet" href="assets/bloch-brand.css?v=20260923">
-  <link rel="stylesheet" href="assets/oculum.css?v=20260924e">
+  <link rel="stylesheet" href="assets/oculum.css?v=20260924feed">
   <link rel="stylesheet" href="assets/workbench.css?v=20260924a">
-  <script src="assets/workbench.js?v=20260924a" defer></script>
+  <script src="assets/workbench.js?v=20260924feed" defer></script>
   <script src="assets/oculum_compare.js?v=20260924a" defer></script>
-  <script src="assets/oculum.js?v=20260924d" defer></script>
+  <script src="assets/analytics_engine.js?v=20260924feed" defer></script>
+  <script src="assets/network_session.js?v=20260924feed" defer></script>
+  <script src="assets/oculum.js?v=20260924feed" defer></script>
   <script src="assets/brand.js?v=20260923" defer></script>
 </head>
 <body data-graphus-view="oculum">
@@ -33,7 +35,7 @@
     <section class="oculum-workspace" aria-labelledby="oculum-workspace-title">
       <div class="oculum-workspace-heading">
         <div><p class="section-index">01 / CHOOSE A SOURCE</p><h2 id="oculum-workspace-title">Map balances.<br>Read the source.</h2></div>
-        <p>Bloch displays up to 64 positive script balances ranked by its live historical indexer. BTC, ETH, USDT, and USDC display up to 64 identifiers queried in this session. These are network references, not identified holders. No names, geolocation, or AML scores appear here.</p>
+        <p>Bloch displays up to 64 positive script balances ranked by its live historical indexer. BTC, ETH, USDT, and USDC discover addresses in real transaction samples and query their balances, up to 64 identifiers in this session. These are network references, not identified holders. No names, geolocation, or AML scores appear here.</p>
       </div>
       <form id="oculum-form" class="oculum-form">
         <div class="oculum-field oculum-field-asset"><label for="oculum-asset">Asset</label><select id="oculum-asset" name="asset"><option value="blch">BLCH / Bloch script hash</option><option value="btc">BTC / Bitcoin</option><option value="eth">ETH / Ethereum</option><option value="usdt">USDT / Ethereum ERC-20</option><option value="usdc">USDC / Ethereum ERC-20</option></select></div>
@@ -41,6 +43,7 @@
         <button id="oculum-add" type="submit">Add address <span aria-hidden="true">↗</span></button>
       </form>
       <div class="oculum-index-action"><button id="oculum-load-bloch" type="button">Load Bloch indexed balances <span aria-hidden="true">↗</span></button><p>One source-reported Bloch chain tip; up to 64 ranked script hashes with exact balances and UTXO counts.</p></div>
+      <div class="oculum-live-actions"><button id="oculum-discover" type="button">Discover 16 active addresses</button><button id="oculum-refresh" type="button">Refresh observed balances</button><label><input id="oculum-auto" type="checkbox" checked>Refresh every 60s while visible</label><p id="oculum-discovery-note">Addresses come from real sampled transactions. Their balances are queried separately; discovery is not a largest-holder ranking.</p></div>
       <div class="oculum-batch"><label for="oculum-batch-input">Compare more identifiers for the selected asset</label><p>Paste up to 16 public addresses or Bloch script hashes, one per line. Repeat to build a 64-point observed sample. Each balance is queried from its public source; collection times can differ.</p><textarea id="oculum-batch-input" rows="3" spellcheck="false" autocomplete="off" placeholder="One address or script hash per line"></textarea><button id="oculum-batch-add" type="button">Add queried identifiers</button></div>
       <div class="oculum-source" id="oculum-source-status" role="status" aria-live="polite"><span class="oculum-source-dot" aria-hidden="true"></span><div><strong>Loading source</strong><p>Checking the Bloch historical indexer. Bitcoin and Ethereum address queries remain available.</p></div></div>
 
@@ -63,6 +66,7 @@
         <div class="oculum-compare-content"><div class="oculum-compare-slots"><div><span>POINT A</span><strong id="oculum-compare-a">Choose a point</strong></div><div><span>POINT B</span><strong id="oculum-compare-b">Choose another point</strong></div></div><div id="oculum-compare-result" class="oculum-compare-result" role="status" aria-live="polite">Choose two identifiers for the same asset to compare their source-reported balances.</div><button id="oculum-compare-clear" type="button">Clear comparison</button></div>
       </section>
 
+      <section class="oculum-sample-analytics"><div><p class="section-index">03 / OBSERVED BALANCE DISTRIBUTION</p><h2>Compare the collected sample.</h2><p id="oculum-sample-summary">Balance statistics appear after real observations arrive.</p><div id="oculum-balance-bars" aria-label="Largest balances in this observed sample"></div></div><div><p class="section-index">SELECTED ADDRESS / SESSION HISTORY</p><h2>Watch observed balances.</h2><div id="oculum-balance-history">Choose an identifier to inspect its observations over time.</div><p>History starts when this tab collects a balance. Changes compare source snapshots and do not reconstruct intervening transactions.</p><div class="oculum-export-actions"><button id="oculum-export-json" type="button">Export observations JSON</button><button id="oculum-export-csv" type="button">Export balances CSV</button></div></div></section>
       <div class="oculum-lower">
         <section class="oculum-ranking" aria-labelledby="oculum-ranking-title"><div class="oculum-lower-heading"><p class="section-index">03 / EXACT VALUES</p><h2 id="oculum-ranking-title">Ranked source balances</h2><p id="oculum-ranking-description">Bloch ranks positive script hashes in its indexed canonical state at one reported chain tip. Other assets rank only queried identifiers. Assets use different native units and cannot be pooled into one balance ranking.</p></div><label class="oculum-filter-label" for="oculum-filter">Find an identifier in this view</label><input id="oculum-filter" class="oculum-filter" type="search" autocomplete="off" spellcheck="false" placeholder="Filter address or script hash"><div id="oculum-list" class="oculum-list" aria-live="polite"><p class="oculum-list-empty">Loading source data.</p></div></section>
         <section class="oculum-coverage" aria-labelledby="oculum-coverage-title"><div class="oculum-lower-heading"><p class="section-index">04 / SOURCE BOUNDARY</p><h2 id="oculum-coverage-title">Know what is covered.</h2></div><div id="oculum-coverage" aria-live="polite"><p>Bloch indexed script balances and bounded BTC and Ethereum queries have different coverage. Select an asset to see the source boundary.</p></div><div class="oculum-scale"><span class="oculum-scale-small" aria-hidden="true"></span><span class="oculum-scale-large" aria-hidden="true"></span><p>Point size and glow increase on a logarithmic scale with held amount within one selected asset. They do not encode transaction activity, risk, or a cross-chain value estimate.</p></div></section>

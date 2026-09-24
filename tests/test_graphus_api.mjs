@@ -12,6 +12,9 @@ test('public DaaS manifest distinguishes bounded real samples from complete chai
   assert.equal(body.transaction_coverage,'bounded-on-demand-public-chain-samples');
   assert.equal(body.query_capabilities.recent_network_graph.endpoint,'/api/chain/network');
   assert.deepEqual(body.query_capabilities.recent_network_graph.assets,['BTC','ETH','USDT','USDC','BLCH']);
+  assert.equal(body.query_capabilities.recent_network_graph.pagination,'next_cursor');
+  assert.equal(body.query_capabilities.observed_balance_sample.limit,16);
+  assert.equal(body.query_capabilities.observed_balance_sample.holder_identity,false);
   assert.equal(body.live_scores,false);
   assert.equal(body.status,'mixed-synthetic-and-source-reported-preview');
   assert.deepEqual(body.initial_assets.map(item=>item.asset),['BTC','ETH','USDT','USDC','BLCH']);
@@ -26,10 +29,13 @@ test('public DaaS manifest distinguishes bounded real samples from complete chai
   assert.ok(body.private_fields.includes('aml_score'));
 });
 test('network graph route rejects unknown assets and extra parameters before any source request',async()=>{
-  for(const query of ['asset=SOL','asset=BTC&url=https://example.test','asset=BTC&asset=ETH']){
+  for(const query of ['asset=SOL','asset=BTC&url=https://example.test','asset=BTC&asset=ETH','asset=ETH&cursor=../secret']){
     const response=await onRequest({request:request('chain/network?'+query),env:{}});
     assert.equal(response.status,400);
   }
+});
+test('balance sample route rejects unsupported queries without requesting a source',async()=>{
+  for(const query of ['asset=ETH&addresses=invalid','asset=ETH&url=https://example.test','asset=BLCH&addresses=abc'])assert.equal((await onRequest({request:request('chain/balances?'+query),env:{}})).status,400);
 });
 
 test('Google login stays disabled until an explicit release flag and bindings exist',async()=>{

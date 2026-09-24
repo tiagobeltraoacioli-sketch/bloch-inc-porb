@@ -20,6 +20,9 @@ const records=new Map();
 const activityByKey=new Map();
 const evidenceByKey=new Map();
 let blochIndex=null;
+const balanceHistory=new Map(),discoveryPools=new Map();
+let collectionBusy=false;
+const discoverButton=document.getElementById('oculum-discover'),refreshButton=document.getElementById('oculum-refresh');
 const MAX_SAMPLE_PER_ASSET=64;
 const MAX_BATCH=16;
 let selectedKey=null;
@@ -82,7 +85,7 @@ function setStatus(message,kind='neutral'){
   body.append(heading,paragraph);sourceStatus.replaceChildren(dot,body);
   sourceStatus.dataset.state=kind;
 }
-function addRecord({asset,address,balance,observation,network,origin,independentVerification}){
+function addRecord({asset,address,balance,observation,network,origin,independentVerification,discovery=null}){
   if(!address||!/^\d+$/.test(balance?.base_units||''))return false;
   const key=recordKey(asset,address);
   if(!records.has(key)&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)return false;
@@ -99,8 +102,10 @@ function addRecord({asset,address,balance,observation,network,origin,independent
     coverage:observation?.coverage||'bounded address lookup',
     sourceHead:observation?.head_before_balance||null,
     neighborhood:observation?.neighborhood||null,
-    limitations:Array.isArray(observation?.limitations)?observation.limitations:[],network,origin,
+    limitations:Array.isArray(observation?.limitations)?observation.limitations:[],network,origin,discovery:discovery||records.get(key)?.discovery||null,
   });
+  const record=records.get(key),history=balanceHistory.get(key)||[],last=history.at(-1);
+  if(!last||last.retrievedAt!==record.retrievedAt){history.push({baseUnits:record.baseUnits,retrievedAt:record.retrievedAt,block:record.block,source:record.source});balanceHistory.set(key,history.slice(-24));}
   return true;
 }
 function renderDetail(record){
@@ -119,6 +124,7 @@ function renderDetail(record){
     ['Origin',record.origin],
     ['Independent verification',record.independentVerification?'Yes':'No'],
   ];
+  if(record.discovery)rows.push(['Discovered in',`${record.discovery.source} · block ${record.discovery.anchor.height} · collected ${record.discovery.retrieved_at}`]);
   if(record.contract)rows.push(['Token contract',record.contract]);
   if(record.utxoCount!==null)rows.push(['Source-reported UTXOs',String(record.utxoCount)]);
   if(record.corroboration?.level)rows.push(['Source corroboration',record.corroboration.level]);
@@ -209,7 +215,7 @@ function renderObservedActivity(record){
 async function loadIndexedBlochEvidence(record,request){
   try{
     const query=new URLSearchParams({network:'bloch',asset:'BLCH',address:record.address});
-    const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
+    const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
     const data=await response.json();
     if(!response.ok||data.status!=='source-reported')throw new Error(data.error||`HTTP ${response.status}`);
     if(evidenceByKey.get(record.key)!==request)return;
@@ -260,7 +266,7 @@ function renderTokenActivity(record){
 async function loadTokenActivity(record,request){
   try{
     const query=new URLSearchParams({asset:record.asset,address:record.address});
-    const response=await fetch(`/api/chain/activity?${query}`,{headers:{Accept:'application/json'}});
+    const response=await fetch(`/api/chain/activity?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
     const data=await response.json();
     if(!response.ok||data.status!=='source-reported')throw new Error(data.error||`HTTP ${response.status}`);
     if(activityByKey.get(record.key)!==request)return;
@@ -369,7 +375,28 @@ function render(){
   renderList(items);
   renderDetail(items.find(item=>item.key===selectedKey));
   renderComparison();
+  renderSampleAnalytics(items);
   draw();
+}
+function renderSampleAnalytics(items){
+  const A=window.GraphusAnalytics,asset=assetSelect.value.toUpperCase(),sum=items.reduce((n,r)=>n+BigInt(r.baseUnits),0n),ranked=[...items].sort((a,b)=>BigInt(a.baseUnits)>BigInt(b.baseUnits)?-1:BigInt(a.baseUnits)<BigInt(b.baseUnits)?1:0);
+  const top=ranked[0],summary=document.getElementById('oculum-sample-summary'),bars=document.getElementById('oculum-balance-bars');
+  summary.textContent=items.length?`${items.length} observed identifiers · sum ${formattedAmount(sum.toString(),asset)} · largest share ${sum?(A.ratio(BigInt(top.baseUnits),sum)*100).toFixed(2):'0.00'}%. Shares describe these returned identifiers only; anchors may differ.`:'No real balances collected for this asset.';
+  bars.replaceChildren(...ranked.slice(0,12).map(record=>{
+    const row=document.createElement('button');row.type='button';row.className='oculum-balance-bar';row.title=`${record.address}: ${formattedAmount(record.baseUnits,asset)}`;
+    const label=document.createElement('span');label.textContent=record.address.slice(0,10)+'…'+record.address.slice(-6);
+    const track=document.createElement('span');track.className='oculum-balance-bar-track';const fill=document.createElement('i');fill.style.width=`${sum?A.ratio(BigInt(record.baseUnits),BigInt(top.baseUnits))*100:0}%`;track.append(fill);
+    const amount=document.createElement('small');amount.textContent=formattedAmount(record.baseUnits,asset);row.append(label,track,amount);row.addEventListener('click',()=>select(record.key));return row;
+  }));
+  const panel=document.getElementById('oculum-balance-history');panel.replaceChildren();const selected=items.find(r=>r.key===selectedKey);if(!selected){panel.textContent='Choose an identifier to view its observations.';return;}
+  const history=balanceHistory.get(selected.key)||[],values=history.map(r=>BigInt(r.baseUnits)),min=values.reduce((a,b)=>a<b?a:b,values[0]||0n),max=values.reduce((a,b)=>a>b?a:b,0n),delta=values.length?values.at(-1)-values[0]:0n;
+  const title=document.createElement('p');title.textContent=`${selected.address} · ${history.length} observations in this tab`;panel.append(title);
+  if(history.length>1){
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 500 120');svg.setAttribute('role','img');svg.setAttribute('aria-label','Source-reported balance observations by collection order');
+    const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',values.map((n,i)=>`${i?'L':'M'}${10+i*480/(values.length-1)} ${max===min?60:110-A.ratio(n-min,max-min)*100}`).join(' '));path.setAttribute('fill','none');path.setAttribute('stroke','#c8ef9d');path.setAttribute('stroke-width','2');svg.append(path);panel.append(svg);
+    const change=document.createElement('p');change.textContent=`Observed difference: ${delta<0n?'−':'+'}${formattedAmount((delta<0n?-delta:delta).toString(),asset)}. Collection order; source blocks and times are listed below.`;panel.append(change);
+  }else{const note=document.createElement('p');note.textContent='Refresh balances to collect another observation. No historical values are fabricated.';panel.append(note);}
+  const list=document.createElement('ol');for(const row of history.slice(-6)){const li=document.createElement('li');li.textContent=`${row.retrievedAt} · ${formattedAmount(row.baseUnits,asset)} · ${row.block?'block '+row.block.height:'unpinned confirmed aggregate'}`;list.append(li);}panel.append(list);
 }
 function renderComparison(){
   const a=records.get(comparisonA),b=records.get(comparisonB);
@@ -451,12 +478,59 @@ function renderCoverage(items){
   for(const line of lines){const li=document.createElement('li');li.textContent=line;facts.append(li);}
   coverage.append(facts);
 }
+async function publicData(path){
+  const response=await fetch(path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+  if(!response.ok)throw new Error(`Public source returned HTTP ${response.status}`);
+  const raw=await response.text();if(raw.length>4000000)throw new Error('Source response exceeded the sample limit.');const data=JSON.parse(raw);if(data.status!=='source-reported')throw new Error('No source-reported data returned.');return data;
+}
+function setCollectionBusy(value){collectionBusy=value;discoverButton.disabled=value;refreshButton.disabled=value;addButton.disabled=value;batchButton.disabled=value;blochButton.disabled=value;assetSelect.disabled=value;}
+async function collectBalances(asset,addresses,discovery=null){
+  const data=await publicData(`/api/chain/balances?${new URLSearchParams({asset,addresses:addresses.join(',')})}`);
+  if(data.asset!==asset||!Array.isArray(data.balances)||data.balances.length>16)throw new Error('Invalid balance sample.');
+  let loaded=0;for(const row of data.balances){if(!addresses.includes(row.address)&&!addresses.some(a=>asset!=='BTC'&&a.toLowerCase()===row.address))throw new Error('Unexpected source identifier.');
+    if(addRecord({asset,address:row.address,balance:row.balance,observation:data.observation,network:data.network,origin:discovery?'address discovered in sampled chain transactions':'queried address',independentVerification:false,discovery}))loaded++;
+  }
+  render();return {loaded,unavailable:data.unavailable?.length||0,anchor:data.anchor};
+}
+async function discoverAddresses(){
+  if(collectionBusy)return;const asset=assetSelect.value.toUpperCase();if(asset==='BLCH'){await loadBlochIndex();return;}
+  const slots=MAX_SAMPLE_PER_ASSET-assetRecordCount(asset);if(slots<=0){setStatus('This asset sample contains 64 identifiers. Refresh their balances or choose another asset.','success');return;}
+  setCollectionBusy(true);setStatus(`Discovering ${asset} addresses in real chain records…`,'loading');
+  try{
+    let pool=discoveryPools.get(asset),available=pool?.candidates.filter(r=>!records.has(recordKey(asset,r.address)))||[];
+    if(!available.length){const query=new URLSearchParams({asset});if(pool?.cursor)query.set('cursor',pool.cursor);const page=await publicData('/api/chain/network?'+query);if(page.asset!==asset)throw new Error('Unexpected source asset.');GraphusAnalytics.normalize(page);
+      pool={candidates:GraphusNetworkSession.candidates(page),cursor:page.next_cursor,source:page.source,anchor:page.anchor,retrieved_at:page.retrieved_at};discoveryPools.set(asset,pool);available=pool.candidates.filter(r=>!records.has(recordKey(asset,r.address)));}
+    const addresses=available.slice(0,Math.min(16,slots)).map(r=>r.address);if(!addresses.length){setStatus('No additional address candidates in this sampled page. Try discovering the next page.');return;}
+    const result=await collectBalances(asset,addresses,{source:pool.source,anchor:pool.anchor,retrieved_at:pool.retrieved_at});
+    document.getElementById('oculum-discovery-note').textContent=`Discovery: ${pool.source} · block ${pool.anchor.height} · ${pool.retrieved_at}. Address candidates are ordered by connection count in that bounded page. Balances are queried separately.`;
+    setStatus(`${result.loaded} real ${asset} balances added from observed transaction references; ${result.unavailable} unavailable. ${result.anchor?'This balance batch shares finalized block '+result.anchor.height+'.':'BTC confirmed aggregates have no shared block anchor.'} Up to 64 identifiers per asset.`,'success');
+    const url=new URL(location.href);url.search=new URLSearchParams({asset:asset.toLowerCase()}).toString();history.replaceState(null,'',url);
+  }catch(error){setStatus(`Discovery unavailable: ${error.message}. Previously collected balances keep their source details.`,'error');}
+  finally{setCollectionBusy(false);}
+}
+async function refreshBalances(){
+  if(collectionBusy)return;const asset=assetSelect.value.toUpperCase();if(asset==='BLCH'&&blochIndex){await loadBlochIndex();return;}
+  const addresses=currentRecords().map(r=>r.address);if(!addresses.length){await discoverAddresses();return;}if(asset==='BLCH'){await addBatchFromCurrent(addresses);return;}
+  setCollectionBusy(true);setStatus(`Refreshing ${addresses.length} observed ${asset} balances…`,'loading');let loaded=0,unavailable=0;
+  try{for(let i=0;i<addresses.length;i+=16){const result=await collectBalances(asset,addresses.slice(i,i+16));loaded+=result.loaded;unavailable+=result.unavailable;}setStatus(`${loaded} source balances refreshed; ${unavailable} unavailable. Unavailable observations retain their previous retrieval time. Each batch has its own source anchor.`,'success');}
+  catch(error){setStatus(`Refresh incomplete: ${error.message}. Read each point's retrieval time.`,'error');}
+  finally{setCollectionBusy(false);}
+}
+async function addBatchFromCurrent(addresses){setCollectionBusy(true);let loaded=0;try{for(const address of addresses){try{await lookupAndAdd('BLCH',address,{includeNeighbors:false});loaded++;}catch{}}setStatus(`${loaded}/${addresses.length} BLCH script balances refreshed. Each keeps its own source observation.`,'success');}finally{setCollectionBusy(false);}}
+function exportBalanceSample(csv=false){
+  const items=currentRecords();if(!items.length){setStatus('Collect real balances before exporting.','error');return;}
+  const asset=assetSelect.value.toUpperCase();const body=csv?GraphusAnalytics.csv([['asset','network','address','balance_base_units','decimals','source','retrieved_at','block_height','block_hash','scope'],...items.map(r=>[r.asset,r.network,r.address,r.baseUnits,r.decimals??GraphusAnalytics.DECIMALS[r.asset],r.source,r.retrievedAt,r.block?.height,r.block?.hash,r.scope])]):JSON.stringify({kind:'graphus_observed_balance_sample',schema_version:1,status:'source-reported',asset,exported_at:new Date().toISOString(),independent_verification:false,coverage:'observed identifiers in this browser session; not a global holder ranking',records:items.map(r=>({...r,history:balanceHistory.get(r.key)||[]}))},null,2);
+  const url=URL.createObjectURL(new Blob([body],{type:csv?'text/csv;charset=utf-8':'application/json'})),a=document.createElement('a');a.href=url;a.download=`graphus-${asset.toLowerCase()}-balance-observations.${csv?'csv':'json'}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+discoverButton.addEventListener('click',discoverAddresses);refreshButton.addEventListener('click',refreshBalances);
+document.getElementById('oculum-export-json').addEventListener('click',()=>exportBalanceSample());document.getElementById('oculum-export-csv').addEventListener('click',()=>exportBalanceSample(true));
+setInterval(()=>{if(document.getElementById('oculum-auto').checked&&!document.hidden&&!collectionBusy&&!addButton.disabled)refreshBalances();},60000);
 async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
   if(!blochIndex&&!records.has(recordKey(asset,address))&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)throw new Error(`This asset sample is limited to ${MAX_SAMPLE_PER_ASSET} identifiers.`);
   if(asset==='BLCH'&&!/^[0-9a-f]{64}$/i.test(address))throw new Error('BLCH requires a 64-hex script hash.');
   const network=asset==='BTC'?'bitcoin':asset==='BLCH'?'bloch':'ethereum';
   const query=new URLSearchParams({network,asset,address});
-  const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
+  const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
   const data=await response.json();
   if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
   if(asset==='BLCH'&&blochIndex)clearBlochRecords();
@@ -476,10 +550,11 @@ async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
   return {source:data.observation?.source_id||'public source',enriched};
 }
 async function loadBlochIndex(){
-  blochButton.disabled=true;addButton.disabled=true;batchButton.disabled=true;
+  if(collectionBusy)return;
+  setCollectionBusy(true);
   setStatus('Loading the ranked Bloch script balances and checking the source tip…','loading');
   try{
-    const response=await fetch('/api/chain/holders?asset=BLCH',{headers:{Accept:'application/json'}});
+    const response=await fetch('/api/chain/holders?asset=BLCH',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(45000)});
     const data=await response.json();
     if(!response.ok||data.status!=='source-reported'||!Array.isArray(data.holders))throw new Error(data.error||`HTTP ${response.status}`);
     clearBlochRecords();
@@ -496,10 +571,11 @@ async function loadBlochIndex(){
     render();
     setStatus(`${data.coverage.returned} Bloch scripts ranked at source height ${data.anchor.height}; ${data.coverage.positive_script_hashes_in_index} positive scripts in the index. Source-reported, with no owner attribution.`,'success');
   }catch(error){setStatus(`Bloch index unavailable: ${error.message}. Previously loaded values, if any, remain on screen with their original anchor.`,'error');}
-  finally{blochButton.disabled=false;addButton.disabled=false;batchButton.disabled=false;}
+  finally{setCollectionBusy(false);}
 }
 async function addAddress(event){
   event?.preventDefault();
+  if(collectionBusy)return;
   const asset=assetSelect.value.toUpperCase(),address=addressInput.value.trim();
   addButton.disabled=true;batchButton.disabled=true;
   setStatus(`Loading ${asset} source data for ${address}…`,'loading');
@@ -540,6 +616,7 @@ assetSelect.addEventListener('change',()=>{
   const record=records.get(selectedKey);
   if(record&&record.asset===assetSelect.value.toUpperCase())updateSelectedUrl(record);
   else{const url=new URL(location.href);url.searchParams.delete('address');url.searchParams.set('asset',assetSelect.value);history.replaceState(null,'',url);}
+  if(!currentRecords().length)discoverAddresses();
 });
 function updateIdentifierInput(){
   const blch=assetSelect.value.toUpperCase()==='BLCH';
@@ -566,7 +643,7 @@ canvas.addEventListener('pointermove',event=>{
   tooltip.style.top=`${Math.max(8,y-52)}px`;
 });
 canvas.addEventListener('pointerleave',()=>{tooltip.hidden=true;});
-new ResizeObserver(resize).observe(canvas);
+new ResizeObserver(resize).observe(canvas.parentElement);
 const url=new URL(location.href);
 const initialAddress=url.searchParams.get('address');
 const initialAsset=url.searchParams.get('asset');
@@ -574,4 +651,5 @@ if(initialAsset&&colors[initialAsset.toUpperCase()])assetSelect.value=initialAss
 updateIdentifierInput();
 if(initialAddress){addressInput.value=initialAddress;addAddress();}
 else if(assetSelect.value==='blch')loadBlochIndex();
+else discoverAddresses();
 render();
