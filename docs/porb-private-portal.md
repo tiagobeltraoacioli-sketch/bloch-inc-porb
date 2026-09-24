@@ -76,3 +76,21 @@ python3 scripts/porb_portal_live_check.py --collect
 ```
 
 Browser tests use synthetic test fixtures in an isolated local database. Live checks use local owner credentials, save real analyses, verify a temporary scoped key and revoke it, without printing secrets. The live script accepts only configured portal origins. Custom-domain DNS activation is checked separately from application deployment.
+
+## Release verification — 2026-09-24
+
+18 model, authorization, isolation, recovery, concurrency and time-series tests passed. WebKit passed the complete local interface flow and the published owner's login, saved Ethereum analysis, HttpOnly session, administration controls, mobile layout and logout. Remote checks passed scoped-key creation/use/revocation and retrieval of persisted real datasets.
+
+Latest verified source samples (not full-chain totals):
+
+| Asset | Wallet/script references | Connection records | Source pages |
+| --- | ---: | ---: | ---: |
+| BTC | 100 | 111 | 2 |
+| ETH | 89 | 48 | 2 |
+| BLCH | 19 | 1,296 | 4 |
+| USDT | 735 | 609 | 2 |
+| USDC | 623 | 621 | 2 |
+
+Bloch's 19-reference cohort does not meet the 20-reference Red threshold; Red remains null and Blue remains available. Space returned 30 Bitcoin block observations, 48 Ethereum fee/gas observations and 97 Bloch telemetry observations. Historical AR(1) evaluation was available for Bitcoin and Ethereum; Bloch lacked the required stable-coverage fitting segment. No missing model output was fabricated.
+
+Source APIs can return transient 502 errors. Public reads use up to two attempts with a 20-second request deadline and bounded response bodies. Redirects use the Workers-supported manual mode and non-success responses are rejected. The application is available at `https://rednblue-space.pages.dev/portal/`. The custom domain was attached, but DNS creation returned HTTP 403 with the available Pages credential; activation requires the zone's proxied CNAME `rednblue.space` → `rednblue-space.pages.dev`.
