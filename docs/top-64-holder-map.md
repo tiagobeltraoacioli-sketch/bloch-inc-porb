@@ -54,6 +54,13 @@ the source-record list, including empty ranges; it does not change the full
 constellation or extend the query window. Counts and amounts use exact integer
 base units, and no AML classification is inferred.
 
+Token balance and log calls are separate. The Constellation displays each
+source-reported finalized head, block hash, and retrieval time. It accepts the
+log response only if the token contract matches the balance contract. A
+same-height hash conflict is rejected; differing valid heads remain separate
+and their amounts must not be reconciled as one snapshot. Ethereum address case
+is normalized when matching a queried address to returned log nodes.
+
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change
 the ranked snapshot balance or its block anchor. Created outputs and spent

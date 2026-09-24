@@ -3,7 +3,25 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 
 const require=createRequire(import.meta.url);
-const {summarizeObservation}=require('../graphus/assets/source_metrics.js');
+const {summarizeObservation,compareTokenAnchors}=require('../graphus/assets/source_metrics.js');
+
+test('token balance and log anchors require the same contract and reject same-height conflicts',()=>{
+  const contract='0x'+'a'.repeat(40);
+  const wallet={balance:{contract,block:{height:100,hash:'0x'+'b'.repeat(64)}}};
+  const activity={contract:contract.toUpperCase().replace('0X','0x'),
+    observation:{finalized_head:{height:100,hash:'0x'+'b'.repeat(64)}}};
+  const same=compareTokenAnchors(wallet,activity);
+  assert.equal(same.status,'same_source_anchor');
+  assert.equal(same.height_difference,0);
+  activity.observation.finalized_head={height:102,hash:'0x'+'c'.repeat(64)};
+  const separate=compareTokenAnchors(wallet,activity);
+  assert.equal(separate.status,'separate_source_anchors');
+  assert.equal(separate.height_difference,2);
+  activity.observation.finalized_head.height=100;
+  assert.throws(()=>compareTokenAnchors(wallet,activity),/Conflicting finalized anchor/);
+  activity.contract='0x'+'d'.repeat(40);
+  assert.throws(()=>compareTokenAnchors(wallet,activity),/Token contract mismatch/);
+});
 
 test('UTXO input references and created outputs stay separate exact sums',()=>{
   const result=summarizeObservation({asset:'BTC',address:'root',

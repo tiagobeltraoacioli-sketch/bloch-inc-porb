@@ -49,6 +49,31 @@
     return {total_blocks:to-from+1,active_blocks:blockCounts.size,busiest_block:busiestBlock,buckets};
   }
 
+  function compareTokenAnchors(wallet, activity) {
+    const contract=wallet?.balance?.contract;
+    const activityContract=activity?.contract;
+    if (typeof contract!=='string'||typeof activityContract!=='string'
+        || !/^0x[0-9a-fA-F]{40}$/.test(contract)||!/^0x[0-9a-fA-F]{40}$/.test(activityContract)
+        || contract.toLowerCase()!==activityContract.toLowerCase()) {
+      throw new Error('Token contract mismatch');
+    }
+    const balance=wallet?.balance?.block;
+    const logs=activity?.observation?.finalized_head;
+    for(const anchor of [balance,logs]){
+      if(!Number.isSafeInteger(anchor?.height)||anchor.height<0
+          ||typeof anchor.hash!=='string'||!/^0x[0-9a-fA-F]{64}$/.test(anchor.hash)){
+        throw new Error('Invalid token anchor');
+      }
+    }
+    if(balance.height===logs.height&&balance.hash.toLowerCase()!==logs.hash.toLowerCase()){
+      throw new Error('Conflicting finalized anchor');
+    }
+    return {status:balance.height===logs.height?'same_source_anchor':'separate_source_anchors',
+      balance:{height:balance.height,hash:balance.hash.toLowerCase()},
+      logs:{height:logs.height,hash:logs.hash.toLowerCase()},
+      height_difference:logs.height-balance.height};
+  }
+
   function summarizeObservation(data) {
     if (!data || !['BTC','BLCH','ETH','USDT','USDC'].includes(data.asset)
         || !Array.isArray(data.nodes) || !Array.isArray(data.edges)
@@ -114,6 +139,6 @@
       caveat:'Only returned Transfer logs are counted. These amounts are not a complete transaction history or a balance reconciliation.'};
   }
 
-  root.GraphusSourceMetrics={summarizeObservation};
+  root.GraphusSourceMetrics={summarizeObservation,compareTokenAnchors};
   if(typeof module!=='undefined'&&module.exports)module.exports=root.GraphusSourceMetrics;
 })(typeof globalThis!=='undefined'?globalThis:window);

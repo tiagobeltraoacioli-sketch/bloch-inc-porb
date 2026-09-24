@@ -107,6 +107,16 @@ function renderSourceMetrics(data){
   }else if(metrics.kind==='erc20_transfer_logs'){
     add('Transfer logs',String(metrics.returned_events),'Returned in the bounded finalized-block window');
     add('Other addresses',String(metrics.observed_other_identifiers),'Seen in returned logs; no owner grouping');
+    const anchors=data.tokenAnchorComparison;
+    if(anchors){
+      add('Balance block',String(anchors.balance.height),anchors.balance.hash);
+      add('Log window head',String(anchors.logs.height),anchors.logs.hash);
+      add('Balance retrieved',data.observation?.retrieved_at||'Unavailable','Separate source request');
+      add('Logs retrieved',data.tokenObservation?.retrieved_at||'Unavailable','Separate source request');
+      const distance=Math.abs(anchors.height_difference);
+      add('Anchor comparison',anchors.status==='same_source_anchor'?'Same source block':`${distance} ${distance===1?'block':'blocks'} apart`,
+        anchors.status==='same_source_anchor'?'Matching height and hash; not a balance reconciliation':'Balance and log results were retrieved at separate finalized heads');
+    }
     add('Active blocks',`${metrics.block_activity.active_blocks} / ${metrics.block_activity.total_blocks}`,'Blocks with at least one returned Transfer log');
     add('Busiest block',metrics.block_activity.busiest_block
       ?`${metrics.block_activity.busiest_block.height} · ${metrics.block_activity.busiest_block.count} logs`:'None observed',
@@ -274,15 +284,17 @@ function selectRealTransaction(id){
 }
 function combineTokenActivity(wallet,activity){
   if(activity.status!=='source-reported'||activity.network!==wallet.network||activity.asset!==wallet.asset
-    ||activity.address!==wallet.address||!Array.isArray(activity.nodes)||!Array.isArray(activity.edges)
+    ||activity.address?.toLowerCase()!==wallet.address?.toLowerCase()
+    ||!Array.isArray(activity.nodes)||!Array.isArray(activity.edges)
     ||!Array.isArray(activity.activity?.events)||activity.edges.length>256||activity.nodes.length>513){
     throw new Error('inconsistent_token_activity');
   }
-  const root=wallet.nodes?.find(node=>node.address===wallet.address);
-  return {...wallet,
-    nodes:activity.nodes.map(node=>node.address===wallet.address?{...node,balance:root?.balance}:node),
+  const anchors=GraphusSourceMetrics.compareTokenAnchors(wallet,activity);
+  const root=wallet.nodes?.find(node=>node.address?.toLowerCase()===wallet.address.toLowerCase());
+  return {...wallet,address:activity.address,
+    nodes:activity.nodes.map(node=>node.address?.toLowerCase()===activity.address.toLowerCase()?{...node,balance:root?.balance}:node),
     edges:activity.edges,tokenActivity:activity.activity,tokenActivityContract:activity.contract,
-    tokenObservation:activity.observation};
+    tokenObservation:activity.observation,tokenAnchorComparison:anchors};
 }
 async function loadLiveAddress(){
   const address=document.getElementById('record-search').value.trim();
@@ -343,7 +355,11 @@ async function loadLiveAddress(){
         if(!activityResponse.ok)throw new Error(activityData.error||`HTTP ${activityResponse.status}`);
         realObservation=combineTokenActivity(data,activityData);
         renderLiveSourceRecords(realObservation);
-        setDataMode('source-reported',`${data.asset} balance retrieved ${data.observation?.retrieved_at||'time unavailable'}; ${activityData.activity.event_count} separate Transfer logs in source-reported finalized blocks ${activityData.observation.block_window.from}–${activityData.observation.block_window.to}. No independent Graphus verification or owner inference.`);
+        const anchors=realObservation.tokenAnchorComparison;
+        const anchorNote=anchors.status==='same_source_anchor'
+          ?`Balance and logs share source-reported block ${anchors.balance.height} (${anchors.balance.hash}). This does not reconcile the balance with the bounded logs.`
+          :`Balance at source-reported block ${anchors.balance.height}; log window ends at separate source-reported block ${anchors.logs.height}. Do not reconcile their amounts.`;
+        setDataMode('source-reported',`${data.asset} balance retrieved ${data.observation?.retrieved_at||'time unavailable'}; ${activityData.activity.event_count} separate Transfer logs in finalized blocks ${activityData.observation.block_window.from}–${activityData.observation.block_window.to}. ${anchorNote} No independent Graphus verification or owner inference.`);
         draw();
       }catch(activityError){
         if(requestId!==realRequest)return;
@@ -683,7 +699,10 @@ function balanceSize(baseUnits,asset){
 function drawRealObservation(observation){
   const nodes=observation.nodes||[];
   const center={x:width*.5,y:height*.5};
-  const satellites=nodes.filter(node=>node.address!==observation.address).slice(0,36);
+  const sameAddress=(address)=>['ETH','USDT','USDC'].includes(observation.asset)
+    ?address?.toLowerCase()===observation.address.toLowerCase()
+    :address===observation.address;
+  const satellites=nodes.filter(node=>!sameAddress(node.address)).slice(0,36);
   const orbit=Math.max(80,Math.min(width*.34,height*.34,225));
   const positions=new Map();
   realAddressTargets=[];
@@ -693,7 +712,7 @@ function drawRealObservation(observation){
     const radius=orbit*(index%3===0?.76:index%3===1?.9:1.08);
     positions.set(node.id,{x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius});
   });
-  const focusIds=new Set(nodes.filter(node=>node.address===observation.address).map(node=>node.id));
+  const focusIds=new Set(nodes.filter(node=>sameAddress(node.address)).map(node=>node.id));
   for(const edge of observation.edges||[]){
     const a=focusIds.has(edge.from)?center:positions.get(edge.from);
     const b=focusIds.has(edge.to)?center:positions.get(edge.to);
