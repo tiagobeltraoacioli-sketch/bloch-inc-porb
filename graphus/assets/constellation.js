@@ -73,6 +73,7 @@ let activeAsset = 'all';
 let search = '';
 let selectedWallet = null;
 let selectedTransaction = null;
+let activeRoute = null;
 let width = 0, height = 0, dpr = 1, tick = 0;
 let paused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let transactionDots = [];
@@ -90,13 +91,21 @@ function focusedPeers() {
   if(!search||!selectedWallet)return [];
   return [...new Set(selectedWallet.transactions.map(tx=>tx.counterparty))].sort();
 }
+function displayedPeers() {
+  const peers=new Set(focusedPeers());
+  for(const tx of activeRoute||[]){
+    if(tx.from!==selectedWallet?.id)peers.add(tx.from);
+    if(tx.to!==selectedWallet?.id)peers.add(tx.to);
+  }
+  return [...peers].sort();
+}
 function displayed(wallet) {
-  return visible(wallet) && (!search || Boolean(selectedWallet && (wallet.id===selectedWallet.id || focusedPeers().includes(wallet.id))));
+  return visible(wallet) && (!search || Boolean(selectedWallet && (wallet.id===selectedWallet.id || displayedPeers().includes(wallet.id))));
 }
 function point(wallet) {
   if(search&&selectedWallet){
     if(wallet.id===selectedWallet.id)return {x:width*.5,y:height*.5};
-    const peers=focusedPeers(),index=peers.indexOf(wallet.id);
+    const peers=displayedPeers(),index=peers.indexOf(wallet.id);
     if(index>=0){
       const angle=-Math.PI*.5+index*Math.PI*2/peers.length;
       const radius=Math.max(110,Math.min(width*.32,height*.32,205));
@@ -157,6 +166,12 @@ function draw() {
       arrow(point(from),point(to),tx.direction==='OUT'?'#f3a295':'#91d9d4');
     }
   }
+  if(activeRoute){
+    for(const tx of activeRoute){
+      const from=walletById.get(tx.from),to=walletById.get(tx.to);
+      if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#f5d9a7');
+    }
+  }
   const keyboardChoice=document.activeElement===canvas?wallets.filter(displayed)[keyboardWalletIndex]:null;
   for (const wallet of wallets) {
     if (!displayed(wallet)) continue;
@@ -168,6 +183,9 @@ function draw() {
     if (selected) {
       context.strokeStyle='#f5b1a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,13,0,Math.PI*2);context.stroke();
       context.fillStyle='#f2f7fb';context.font='700 12px ui-monospace, monospace';context.fillText(wallet.id,p.x+17,p.y-13);
+    }
+    if(activeRoute?.some(tx=>tx.from===wallet.id||tx.to===wallet.id)){
+      context.strokeStyle='#f5d9a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,selected?19:12+level*7.2,0,Math.PI*2);context.stroke();
     }
     if (wallet===keyboardChoice) {
       context.strokeStyle='#ffffff';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?18:13,0,Math.PI*2);context.stroke();
@@ -241,6 +259,71 @@ function renderTemporal(wallet) {
   });
   const latest=buckets.at(-1);selectDay(latest,days.lastElementChild);
 }
+const pathPanel=document.createElement('article');
+pathPanel.className='path-explorer';
+pathPanel.innerHTML=`<div class="path-heading"><span>04 / TEMPORAL PATHS</span><h3>Trace between two points</h3><p>Explore up to three directed steps inside one synthetic Ethereum asset. Events on the same day cannot be ordered, so they do not form successive steps. A path is an association, never proof that the same value moved through each point.</p></div>
+  <div class="path-controls"><div><label for="path-source">Source point</label><output id="path-source">Select a wallet</output></div><div><label for="path-target">Target point</label><select id="path-target" disabled></select></div><div><label for="path-hops">Maximum steps</label><select id="path-hops"><option value="1">1 step</option><option value="2">2 steps</option><option value="3" selected>3 steps</option></select></div></div>
+  <p id="path-summary" class="path-summary" role="status" aria-live="polite">Select a synthetic ETH, USDT or USDC point.</p><div id="path-results" class="path-results"></div>`;
+temporalPanel.after(pathPanel);
+const pathTarget=document.getElementById('path-target');
+const pathHops=document.getElementById('path-hops');
+pathHops.disabled=true;
+const pathSummary=document.getElementById('path-summary');
+const pathResults=document.getElementById('path-results');
+function updatePathResults(){
+  activeRoute=null;pathResults.replaceChildren();
+  if(!selectedWallet||!['eth','usdt','usdc'].includes(selectedWallet.asset)){draw();return;}
+  let result;
+  try {
+    result=GraphusFlow.tracePaths({transfers,walletById,asset:selectedWallet.asset,
+      source:selectedWallet.id,target:pathTarget.value,maxHops:Number(pathHops.value),maxPaths:5});
+  } catch {
+    pathSummary.textContent='This synthetic path query exceeds its limits. Choose a different target or fewer steps.';
+    draw();return;
+  }
+  pathSummary.textContent=result.paths.length
+    ?`${result.paths.length} synthetic ${result.paths.length===1?'path':'paths'} found · ${selectedWallet.asset.toUpperCase()} only · daily order only`
+    :`No ordered synthetic path found within ${pathHops.value} ${pathHops.value==='1'?'step':'steps'}. Try another target or step limit.`;
+  result.paths.forEach((path,index)=>{
+    const button=document.createElement('button');button.type='button';button.className='path-result';
+    button.setAttribute('aria-pressed','false');
+    const heading=document.createElement('strong');
+    heading.textContent=`Route ${String(index+1).padStart(2,'0')} · ${path.length} ${path.length===1?'step':'steps'}`;
+    const sequence=document.createElement('span');
+    sequence.textContent=[path[0].from,...path.map(tx=>tx.to)].join(' → ');
+    const events=document.createElement('small');
+    events.textContent=path.map(tx=>`${tx.observed} · ${tx.id} · ${tx.amount.toLocaleString('en-US')} ${units[selectedWallet.asset]}`).join('  |  ');
+    button.append(heading,sequence,events);
+    button.addEventListener('click',()=>{
+      activeRoute=path;
+      pathResults.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+      draw();
+    });
+    pathResults.append(button);
+  });
+  draw();
+}
+function renderPathExplorer(wallet){
+  document.getElementById('path-source').textContent=wallet.id;
+  pathTarget.replaceChildren();
+  if(!['eth','usdt','usdc'].includes(wallet.asset)){
+    activeRoute=null;pathTarget.disabled=true;pathHops.disabled=true;
+    const unavailable=document.createElement('option');unavailable.textContent='Unavailable for this asset';
+    pathTarget.append(unavailable);
+    pathSummary.textContent='BTC and BLCH input outpoints do not identify a direct sender. No account-style path is drawn for these assets.';
+    pathResults.replaceChildren();draw();return;
+  }
+  pathTarget.disabled=false;pathHops.disabled=false;
+  wallets.filter(item=>item.asset===wallet.asset&&item.id!==wallet.id).forEach(item=>{
+    const option=document.createElement('option');option.value=item.id;option.textContent=item.id;
+    pathTarget.append(option);
+  });
+  const firstOutgoing=transfers.find(tx=>tx.from===wallet.id);
+  if(firstOutgoing)pathTarget.value=firstOutgoing.to;
+  updatePathResults();
+}
+pathTarget.addEventListener('change',updatePathResults);
+pathHops.addEventListener('change',updatePathResults);
 for(const [label,id,caption] of [['DAILY VOLUME SLOPE','analysis-slope','synthetic units per day'],['LINEAR FIT R²','analysis-fit','descriptive, not a risk signal']]){
   const card=document.createElement('article');
   const heading=document.createElement('span');heading.textContent=label;
@@ -329,7 +412,7 @@ function renderSearchStatus() {
   status.textContent=`${matches.length} ${matches.length===1?'match':'matches'} · ${selectedWallet.id} centered with ${peers} connected ${peers===1?'wallet':'wallets'} and ${selectedWallet.transactions.length} transaction events. Select another result below to change focus.`;
 }
 function clearWallet() {
-  selectedWallet=null;selectedTransaction=null;
+  selectedWallet=null;selectedTransaction=null;activeRoute=null;
   setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
   setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
   for(const id of ['record-asset','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
@@ -341,6 +424,9 @@ function clearWallet() {
   document.getElementById('activity-chart').replaceChildren();
   document.getElementById('analysis-ledger').innerHTML='<tr><td colspan="5">Select a wallet star.</td></tr>';
   document.getElementById('temporal-days').replaceChildren();document.getElementById('temporal-detail').textContent='Select a wallet star.';
+  document.getElementById('path-source').textContent='Select a wallet';
+  pathTarget.replaceChildren();pathTarget.disabled=true;pathHops.disabled=true;pathResults.replaceChildren();
+  pathSummary.textContent='Select a synthetic ETH, USDT or USDC point.';
 }
 function selectWallet(wallet,updateQuery=false) {
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
@@ -357,6 +443,7 @@ function selectWallet(wallet,updateQuery=false) {
   renderEvidence(wallet);
   renderAnalytics(wallet);
   renderTemporal(wallet);
+  renderPathExplorer(wallet);
   renderFlows(wallet);
   const list=document.getElementById('transaction-list');list.replaceChildren();
   wallet.transactions.forEach(tx=>{

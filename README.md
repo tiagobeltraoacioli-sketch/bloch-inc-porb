@@ -4,7 +4,7 @@ BI-PoRB is a proposed **external, optional** Bloch Inc transaction monitoring an
 
 **Graphus of Bloch Inc — A Matter of Data 2.0** is the proposed data and graph platform behind BI-PoRB. See the [Graphus product boundary](docs/graphus-product.md).
 
-The [Graphus preview](https://bloch-graphus.pages.dev/) presents the initial [three-network, five-asset scope](docs/initial-assets.md), a synthetic [wallet constellation](https://bloch-graphus.pages.dev/constellation.html), an [84-field data atlas](https://bloch-graphus.pages.dev/catalog.html), and a [DaaS proposal](https://bloch-graphus.pages.dev/daas.html). The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
+The [Graphus preview](https://bloch-graphus.pages.dev/) presents the initial [three-network, five-asset scope](docs/initial-assets.md), a synthetic [wallet constellation and temporal path explorer](https://bloch-graphus.pages.dev/constellation.html), an [84-field data atlas](https://bloch-graphus.pages.dev/catalog.html), and a [DaaS proposal](https://bloch-graphus.pages.dev/daas.html). The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
 
 ## Current status
 

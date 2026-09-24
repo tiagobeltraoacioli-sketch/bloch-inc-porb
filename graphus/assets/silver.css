@@ -80,3 +80,20 @@ footer{background:#e9edf0;border-color:#cdd5da;color:#50616e}footer a{color:#344
 .temporal-events button{background:#eef3f5;border:1px solid #cad8df;color:#31536a;cursor:pointer;padding:.45rem .6rem;text-align:left;font:.66rem var(--mono);overflow-wrap:anywhere}
 .temporal-events button:hover,.temporal-events button:focus-visible{background:#dfeaf0;border-color:#7395a8}
 @media(max-width:700px){.temporal-panel{padding:1rem}.temporal-day{flex-basis:36px}}
+.path-explorer{background:#fff;border:1px solid #c8d2d9;margin-top:1rem;padding:1.6rem;min-width:0}
+.path-heading>span{font:.63rem var(--mono);letter-spacing:.13em;color:#697d89}
+.path-heading h3{font-size:1.6rem;margin:.45rem 0 .35rem}
+.path-heading p{color:#60717b;font-size:.82rem;line-height:1.6;margin:0 0 1.35rem;max-width:840px}
+.path-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 150px;gap:.7rem}
+.path-controls>div{display:grid;gap:.35rem;min-width:0}
+.path-controls label{font:.64rem var(--mono);letter-spacing:.08em;color:#617987;text-transform:uppercase}
+.path-controls select,.path-controls output{display:block;width:100%;min-height:42px;padding:.68rem .75rem;border:1px solid #bdccd5;background:#f5f8fa;color:#274252;font:.75rem var(--mono);overflow-wrap:anywhere}
+.path-controls select{cursor:pointer}.path-controls select:focus-visible{outline:2px solid #4c829c;outline-offset:2px}
+.path-controls select:disabled{cursor:not-allowed;color:#8195a0;background:#edf1f3}
+.path-summary{color:#3e5a6b;font:.72rem var(--mono);line-height:1.5;margin:1rem 0 .7rem}
+.path-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.55rem}
+.path-result{display:grid;gap:.48rem;text-align:left;padding:.85rem 1rem;cursor:pointer;border:1px solid #c5d3dc;background:#f3f7f9;color:#324e5e;min-width:0}
+.path-result:hover,.path-result:focus-visible{border-color:#6a94a8;background:#eaf2f5}
+.path-result[aria-pressed="true"]{border-color:#597e90;background:#e2edf2;box-shadow:inset 3px 0 #d2a66f}
+.path-result strong{font:.7rem var(--mono);color:#31566b}.path-result span{font:.74rem var(--mono);overflow-wrap:anywhere}.path-result small{font:.64rem var(--mono);line-height:1.6;color:#67808e;overflow-wrap:anywhere}
+@media(max-width:700px){.path-explorer{padding:1rem}.path-controls{grid-template-columns:1fr}.path-results{grid-template-columns:1fr}}
