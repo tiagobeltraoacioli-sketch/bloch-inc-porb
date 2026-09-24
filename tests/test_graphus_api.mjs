@@ -14,6 +14,8 @@ test('public DaaS manifest is explicit about the synthetic-only stage',async()=>
   assert.equal(body.query_capabilities.production_chain_query,false);
   assert.equal(body.query_capabilities.address_search,'synthetic-browser-fixture-and-bounded-source-reported-query');
   assert.equal(body.query_capabilities.bounded_public_chain_address_lookup.independently_verified,false);
+  assert.equal(body.query_capabilities.bounded_public_chain_address_lookup.bloch,'source-reported-archival-script-hash-balance');
+  assert.deepEqual(body.query_capabilities.bounded_public_erc20_activity.assets,['USDT','USDC']);
   assert.equal(body.research.aml_model,'not-validated');
   assert.ok(body.proposed_public_fields.includes('source_version'));
   assert.ok(body.private_fields.includes('aml_score'));

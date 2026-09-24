@@ -7,13 +7,13 @@ const sourceStatus = document.createElement('details');
 sourceStatus.className = 'source-status';
 sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>synthetic map · optional live lookup</span></summary>
   <div class="source-status-body">
-    <p>The default constellation uses generated wallet examples. Mainnet address lookup reports public source facts only when its source responds. It does not identify owners, produce model predictions, or reveal AML scores.</p>
-    <div class="source-status-scroll"><table><caption>Data availability by asset</caption><thead><tr><th scope="col">Asset</th><th scope="col">Research input</th><th scope="col">Address lookup</th></tr></thead><tbody>
+    <p>The default constellation uses generated wallet examples. Mainnet address and Bloch script-hash lookups report public source facts only when their sources respond. They do not identify owners, produce model predictions, or reveal AML scores.</p>
+    <div class="source-status-scroll"><table><caption>Data availability by asset</caption><thead><tr><th scope="col">Asset</th><th scope="col">Research input</th><th scope="col">Public identifier lookup</th></tr></thead><tbody>
       <tr><th scope="row">BTC</th><td>Bounded private block sample</td><td>Esplora source reported</td></tr>
       <tr><th scope="row">ETH</th><td>Bounded private finalized-block sample</td><td>Configured RPC source reported</td></tr>
       <tr><th scope="row">USDT · ERC-20</th><td>Bounded Ethereum event sample</td><td>Configured RPC source reported</td></tr>
       <tr><th scope="row">USDC · ERC-20</th><td>Bounded Ethereum event sample</td><td>Configured RPC source reported</td></tr>
-      <tr><th scope="row">BLCH</th><td>Bounded private finalized sample</td><td>Unavailable pending complete state source</td></tr>
+      <tr><th scope="row">BLCH</th><td>Bounded private finalized sample</td><td>Archival script-hash balance, source reported</td></tr>
     </tbody></table></div>
     <p>Sampled records do not establish network history coverage or AML effectiveness. <a href="daas.html">Read the data product status ↗</a></p>
   </div>`;
@@ -27,7 +27,7 @@ function setDataMode(mode,detail){
   document.body.dataset.constellationMode=mode;
   document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':'Synthetic preview';
   document.getElementById('constellation-data-detail').textContent=detail;
-  document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?'GRAPHUS / PUBLIC-CHAIN ADDRESS':'GRAPHUS / SYNTHETIC WALLETS';
+  document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   if(mode==='synthetic'){
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
@@ -36,12 +36,13 @@ function setDataMode(mode,detail){
 }
 function formatObservedBalance(baseUnits,asset,decimals){
   if(!/^\d+$/.test(baseUnits||''))return 'Unavailable';
-  const precision=decimals??({BTC:8,ETH:18,USDT:6,USDC:6}[asset]??0);
+  const precision=decimals??({BTC:8,ETH:18,USDT:6,USDC:6,BLCH:8}[asset]??0);
   const whole=BigInt(baseUnits)/10n**BigInt(precision);
   const fraction=(BigInt(baseUnits)%10n**BigInt(precision)).toString().padStart(precision,'0').replace(/0+$/,'');
   return `${whole.toLocaleString('en-US')}${fraction?'.'+fraction:''} ${asset} (${BigInt(baseUnits).toLocaleString('en-US')} base units)`;
 }
 function assetForLiveAddress(address){
+  if(activeAsset==='blch'&&/^[0-9a-fA-F]{64}$/.test(address))return 'BLCH';
   if(/^0x[0-9a-fA-F]{40}$/.test(address))return ['usdt','usdc'].includes(activeAsset)?activeAsset.toUpperCase():'ETH';
   if(/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(address))return 'BTC';
   return null;
@@ -51,14 +52,14 @@ async function loadLiveAddress(){
   const asset=assetForLiveAddress(address);
   if(!asset){
     realObservation=null;clearWallet();
-    setDataMode('synthetic','Enter a Bitcoin or Ethereum mainnet address. For USDT or USDC, choose that asset filter first. BLCH live balances require a complete finalized state source.');
+    setDataMode('synthetic','Enter a Bitcoin or Ethereum mainnet address, or choose BLCH and enter a 64-hex script hash. For USDT or USDC, choose that asset filter first.');
     draw();return;
   }
   const requestId=++realRequest;
   liveButton.disabled=true;
   setDataMode('loading',`Requesting ${asset} address facts from the configured public-chain source…`);
   try{
-    const query=new URLSearchParams({network:asset==='BTC'?'bitcoin':'ethereum',asset,address});
+    const query=new URLSearchParams({network:asset==='BTC'?'bitcoin':asset==='BLCH'?'bloch':'ethereum',asset,address});
     const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
     const data=await response.json();
     if(requestId!==realRequest)return;
@@ -68,11 +69,11 @@ async function loadLiveAddress(){
     selectedTransaction=null;
     const unit=data.balance?.unit||'base units';
     const baseUnits=data.balance?.base_units;
-    setDataMode('source-reported',`${data.asset} · ${data.observation?.source_id||'public-chain source'} · retrieved ${data.observation?.retrieved_at||'time unavailable'} · independently verified: no. Address control and ownership are unknown.`);
-    document.getElementById('wallet-search-status').textContent=`${data.asset} public-chain address loaded from ${data.observation?.source_id||'a configured source'}. The constellation shows bounded source records and a source-reported address balance.`;
-    setText('record-type',`PUBLIC-CHAIN ADDRESS / ${data.asset}`);
+    setDataMode('source-reported',`${data.asset} · ${data.observation?.source_id||'public-chain source'} · retrieved ${data.observation?.retrieved_at||'time unavailable'} · independently verified by Graphus: no. Control and ownership are unknown.`);
+    document.getElementById('wallet-search-status').textContent=`${data.asset} public-chain ${data.asset==='BLCH'?'script hash':'address'} loaded from ${data.observation?.source_id||'a configured source'}. The constellation shows bounded source records and a source-reported held amount.`;
+    setText('record-type',`PUBLIC-CHAIN ${data.asset==='BLCH'?'SCRIPT HASH':'ADDRESS'} / ${data.asset}`);
     setText('record-id',data.address);
-    setText('record-summary',`Source-reported address facts. The central star scales with the reported address balance; satellite points are source records, not identified people or owners.`);
+    setText('record-summary',`Source-reported ${data.asset==='BLCH'?'script-hash':'address'} facts. The central star scales with the reported held amount; satellite points are source records, not identified people or owners.`);
     setText('record-asset',data.asset);
     setText('record-holdings',formatObservedBalance(baseUnits,data.asset,data.balance?.decimals));
     setText('record-time',data.balance?.block?.time||data.observation?.retrieved_at||'—');
@@ -80,8 +81,8 @@ async function loadLiveAddress(){
     setText('record-related',`${data.nodes?.length||0} source nodes · ${data.edges?.length||0} observation links`);
     setText('record-meaning','No model output or AML score.');
     setText('evidence-network',data.network||'—');
-    setText('evidence-type','Source-reported address balance and bounded activity');
-    setText('evidence-reference',data.balance?.block?.hash||data.balance?.block?.height||'Source tip');
+    setText('evidence-type',`Source-reported ${data.asset==='BLCH'?'script-hash':'address'} balance and bounded activity`);
+    setText('evidence-reference',data.balance?.block?.hash||data.balance?.block?.height||data.observation?.head_before_balance?.state_root||'Source tip');
     setText('evidence-finality',data.balance?.scope||'Source reported');
     setText('evidence-limit',(data.observation?.limitations||[]).join(' ' )||'No independent chain-state verification.');
     document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
@@ -97,7 +98,7 @@ async function loadLiveAddress(){
       list.append(row);
     });
     if(!list.childElementCount)list.textContent='No transaction index is configured for this address. Balance source and block anchor are shown above.';
-    canvas.setAttribute('aria-label',`Source-reported ${data.asset} address ${data.address}; balance ${baseUnits??'unavailable'} ${unit}.`);
+    canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}.`);
     draw();
   }catch(error){
     if(requestId!==realRequest)return;
@@ -423,7 +424,7 @@ function balanceSize(baseUnits,asset){
   const digitCount=baseUnits.length;
   const leading=Number(baseUnits.slice(0,Math.min(6,digitCount)))/10**(Math.min(6,digitCount)-1);
   const exponent=digitCount-1+Math.log10(leading);
-  const reference={BTC:8,ETH:18,USDT:11,USDC:11}[asset]??8;
+  const reference={BTC:8,ETH:18,USDT:11,USDC:11,BLCH:8}[asset]??8;
   return Math.max(5,Math.min(22,10+4*(exponent-reference)));
 }
 function drawRealObservation(observation){
@@ -858,6 +859,8 @@ canvas.addEventListener('focus',()=>{
 canvas.addEventListener('blur',draw);
 document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.addEventListener('click',()=>{
   activeAsset=button.dataset.constellationAsset;
+  liveButton.textContent=activeAsset==='blch'?'Load BLCH script hash':'Load public-chain address';
+  document.getElementById('record-search').placeholder=activeAsset==='blch'?'64-hex Bloch script hash':'Address or synthetic wallet ID';
   keyboardWalletIndex=0;
   document.querySelectorAll('[data-constellation-asset]').forEach(item=>{item.classList.toggle('active',item===button);item.setAttribute('aria-pressed',String(item===button));});
   if(selectedWallet&&!visible(selectedWallet))clearWallet();

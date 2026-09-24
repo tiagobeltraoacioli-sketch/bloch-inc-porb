@@ -2,6 +2,7 @@ const canvas=document.getElementById('oculum-canvas');
 const context=canvas.getContext('2d');
 const assetSelect=document.getElementById('oculum-asset');
 const addressInput=document.getElementById('oculum-address');
+const identifierLabel=document.getElementById('oculum-identifier-label');
 const form=document.getElementById('oculum-form');
 const addButton=document.getElementById('oculum-add');
 const sourceStatus=document.getElementById('oculum-source-status');
@@ -9,8 +10,11 @@ const coverage=document.getElementById('oculum-coverage');
 const count=document.getElementById('oculum-count');
 const list=document.getElementById('oculum-list');
 const detail=document.getElementById('oculum-detail');
-const colors={BTC:'#e9c985',ETH:'#b4d7a4',USDT:'#87c9ab',USDC:'#c6ced1'};
+const filter=document.getElementById('oculum-filter');
+const tooltip=document.getElementById('oculum-tooltip');
+const colors={BTC:'#e9c985',ETH:'#b4d7a4',USDT:'#87c9ab',USDC:'#c6ced1',BLCH:'#baff28'};
 const records=new Map();
+const activityByKey=new Map();
 let selectedKey=null;
 let points=[];
 let width=0,height=0,dpr=1;
@@ -27,11 +31,26 @@ function decimalLog(amount){
 }
 function formattedAmount(amount,asset,decimals){
   if(!/^\d+$/.test(amount||''))return 'Unavailable';
-  const precision=decimals??({BTC:8,ETH:18,USDT:6,USDC:6}[asset]??0);
+  const precision=decimals??({BTC:8,ETH:18,USDT:6,USDC:6,BLCH:8}[asset]??0);
   const scale=10n**BigInt(precision);
   const integer=BigInt(amount)/scale;
   const fraction=(BigInt(amount)%scale).toString().padStart(precision,'0').replace(/0+$/,'');
   return `${integer.toLocaleString('en-US')}${fraction?'.'+fraction:''} ${asset}`;
+}
+function observedTime(value){
+  if(!value)return 'Not supplied by source';
+  const parsed=new Date(value);
+  if(Number.isNaN(parsed.getTime()))return String(value);
+  return parsed.toISOString().replace('T',' ').replace('.000Z','Z');
+}
+function appendTime(parent,label,value){
+  const row=document.createElement('div');
+  const dt=document.createElement('dt');dt.textContent=label;
+  const dd=document.createElement('dd');
+  if(value&&!Number.isNaN(new Date(value).getTime())){
+    const time=document.createElement('time');time.dateTime=new Date(value).toISOString();time.textContent=observedTime(value);dd.append(time);
+  }else dd.textContent=observedTime(value);
+  row.append(dt,dd);parent.append(row);
 }
 function currentRecords(){
   const asset=assetSelect.value.toUpperCase();
@@ -46,23 +65,29 @@ function setStatus(message,kind='neutral'){
   body.append(heading,paragraph);sourceStatus.replaceChildren(dot,body);
   sourceStatus.dataset.state=kind;
 }
-function addRecord({asset,address,balance,observation,network,origin}){
+function addRecord({asset,address,balance,observation,network,origin,independentVerification}){
   if(!address||!/^\d+$/.test(balance?.base_units||''))return false;
   const key=recordKey(asset,address);
   if(!records.has(key)&&records.size>=24)return false;
+  activityByKey.delete(key);
   records.set(key,{
     key,asset,address,baseUnits:balance.base_units,decimals:balance.decimals,
     unit:balance.unit,block:balance.block||null,scope:balance.scope||'source reported',
+    contract:balance.contract||null,independentVerification:independentVerification===true,
+    utxoCount:Number.isSafeInteger(balance.utxo_count)?balance.utxo_count:null,
+    corroboration:balance.corroboration||observation?.corroboration||null,
     source:observation?.source_id||'public-chain source',
     retrievedAt:balance.retrieved_at||observation?.retrieved_at||null,
     coverage:observation?.coverage||'bounded address lookup',
-    limitations:observation?.limitations||[],network,origin,
+    sourceHead:observation?.head_before_balance||null,
+    neighborhood:observation?.neighborhood||null,
+    limitations:Array.isArray(observation?.limitations)?observation.limitations:[],network,origin,
   });
   return true;
 }
 function renderDetail(record){
   detail.replaceChildren();
-  if(!record){detail.textContent='Select a plotted address to inspect its exact amount and source.';return;}
+  if(!record){detail.textContent='Select a plotted identifier to inspect its exact amount and source.';return;}
   const title=document.createElement('h3');title.textContent=record.address;
   const dl=document.createElement('dl');
   const rows=[
@@ -70,29 +95,103 @@ function renderDetail(record){
     ['Exact base units',`${BigInt(record.baseUnits).toLocaleString('en-US')} ${record.unit}`],
     ['Network',record.network||'—'],
     ['Source',record.source],
-    ['Retrieved at',record.retrievedAt||'—'],
-    ['Block',record.block?`${record.block.height??'—'} · ${record.block.hash??'hash unavailable'}`:'No single pinned block for this source aggregate'],
-    ['Coverage',record.coverage],
+    ['Balance scope',record.scope.replaceAll('_',' ')],
+    ['Block anchor',record.block?`${record.block.height??'—'} · ${record.block.hash??'hash unavailable'}`:'No single pinned block for this source aggregate'],
+    ['Source coverage',record.coverage.replaceAll('_',' ')],
     ['Origin',record.origin],
+    ['Independent verification',record.independentVerification?'Yes':'No'],
   ];
+  if(record.contract)rows.push(['Token contract',record.contract]);
+  if(record.utxoCount!==null)rows.push(['Source-reported UTXOs',String(record.utxoCount)]);
+  if(record.corroboration?.level)rows.push(['Source corroboration',record.corroboration.level]);
+  if(record.sourceHead)rows.push(['Source head before balance',`slot ${record.sourceHead.slot} · height ${record.sourceHead.height} · source-finalized height ${record.sourceHead.finalized_height} · state root ${record.sourceHead.state_root}`]);
+  if(record.neighborhood)rows.push(['Observed-neighbor lookups',`${record.neighborhood.enriched??0} balances returned of ${record.neighborhood.attempted??0} attempted`]);
   for(const [label,value] of rows){
     const row=document.createElement('div');
     const dt=document.createElement('dt');dt.textContent=label;
     const dd=document.createElement('dd');dd.textContent=value;
     row.append(dt,dd);dl.append(row);
   }
+  appendTime(dl,'Retrieved at (UTC)',record.retrievedAt);
+  if(record.block?.time)appendTime(dl,'Source block time (UTC)',record.block.time);
   const caveat=document.createElement('p');
-  caveat.textContent='Address balance does not identify the owner or all addresses controlled by one wallet. Points may have different retrieval times; this is not a network-wide holder ranking.';
+  caveat.textContent='An address or script hash does not identify an owner or all holdings controlled by one wallet. Retrieval times and block anchors can differ. This is not a network-wide holder ranking.';
   detail.append(title,dl,caveat);
+  if(record.limitations.length){
+    const heading=document.createElement('h4');heading.textContent='Source limitations';
+    const notes=document.createElement('ul');
+    for(const limitation of record.limitations){const li=document.createElement('li');li.textContent=limitation;notes.append(li);}
+    detail.append(heading,notes);
+  }
+  if(record.asset==='USDT'||record.asset==='USDC')renderTokenActivity(record);
+}
+function renderTokenActivity(record){
+  const panel=document.createElement('section');panel.className='oculum-activity';
+  const heading=document.createElement('h4');heading.textContent='Bounded token transfer logs';panel.append(heading);
+  const state=activityByKey.get(record.key);
+  if(!state){
+    const message=document.createElement('p');message.textContent='Loading recent source-reported Transfer logs…';panel.append(message);
+    const request={status:'loading'};
+    activityByKey.set(record.key,request);
+    loadTokenActivity(record,request);
+  }else if(state.status==='error'){
+    const message=document.createElement('p');message.textContent=`Transfer logs unavailable: ${state.error}. Balance above remains a separate source observation.`;panel.append(message);
+  }else if(state.status==='loaded'){
+    const data=state.data;
+    const description=document.createElement('p');
+    const window=data.observation?.block_window;
+    description.textContent=`${data.activity?.event_count??0} events in source-reported finalized blocks ${window?.from??'—'}–${window?.to??'—'}; retrieved ${observedTime(data.observation?.retrieved_at)}. This bounded window is separate from the balance observation.`;
+    panel.append(description);
+    const events=(data.activity?.events||[]).slice(-8).reverse();
+    if(events.length){
+      const eventList=document.createElement('ol');
+      for(const event of events){
+        const row=document.createElement('li');
+        const summary=document.createElement('strong');summary.textContent=`${event.direction} · ${formattedAmount(event.amount_base_units,record.asset,6)} · block ${event.block_number}`;
+        const tx=document.createElement('span');tx.textContent=`Tx ${event.transaction_hash} · log ${event.log_index}`;
+        const peers=document.createElement('small');peers.textContent=`From ${event.from} · To ${event.to}`;
+        row.append(summary,tx,peers);eventList.append(row);
+      }
+      panel.append(eventList);
+      if(data.activity.event_count>events.length){const remainder=document.createElement('p');remainder.textContent=`Showing the latest ${events.length} of ${data.activity.event_count} events in this bounded window.`;panel.append(remainder);}
+    }else{
+      const empty=document.createElement('p');empty.textContent='No Transfer logs returned for this identifier in the bounded block window. This is not evidence of no earlier activity.';panel.append(empty);
+    }
+  }else{
+    const message=document.createElement('p');message.textContent='Loading recent source-reported Transfer logs…';panel.append(message);
+  }
+  detail.append(panel);
+}
+async function loadTokenActivity(record,request){
+  try{
+    const query=new URLSearchParams({asset:record.asset,address:record.address});
+    const response=await fetch(`/api/chain/activity?${query}`,{headers:{Accept:'application/json'}});
+    const data=await response.json();
+    if(!response.ok||data.status!=='source-reported')throw new Error(data.error||`HTTP ${response.status}`);
+    if(activityByKey.get(record.key)!==request)return;
+    activityByKey.set(record.key,{status:'loaded',data});
+  }catch(error){
+    if(activityByKey.get(record.key)!==request)return;
+    activityByKey.set(record.key,{status:'error',error:error.message});
+  }
+  if(selectedKey===record.key)renderDetail(record);
 }
 function renderList(items){
   list.replaceChildren();
-  if(!items.length){list.textContent='Add a mainnet address to begin a bounded comparison.';return;}
-  items.forEach((record,index)=>{
+  if(!items.length){list.textContent='Add a mainnet address or script hash to begin a bounded comparison.';return;}
+  const query=filter.value.trim().toLowerCase();
+  const visible=items.filter(record=>record.address.toLowerCase().includes(query));
+  if(!visible.length){list.textContent='No identifier in this queried sample matches the filter.';return;}
+  visible.forEach(record=>{
+    const index=items.indexOf(record);
     const button=document.createElement('button');button.type='button';
     button.className=record.key===selectedKey?'selected':'';
     button.setAttribute('aria-pressed',String(record.key===selectedKey));
-    button.textContent=`${String(index+1).padStart(2,'0')} · ${record.address} · ${formattedAmount(record.baseUnits,record.asset,record.decimals)}`;
+    const rank=document.createElement('small');rank.textContent=`SAMPLE RANK ${String(index+1).padStart(2,'0')} · ${record.origin}`;
+    const address=document.createElement('strong');address.textContent=record.address;
+    const amount=document.createElement('span');amount.textContent=formattedAmount(record.baseUnits,record.asset,record.decimals);
+    const source=document.createElement('small');source.textContent=`${record.source} · ${observedTime(record.retrievedAt)} · ${record.block?'block anchored':'no shared block anchor'}`;
+    button.append(rank,address,amount,source);
     button.addEventListener('click',()=>select(record.key));list.append(button);
   });
 }
@@ -156,51 +255,103 @@ function render(){
   const items=currentRecords();
   if(selectedKey&&!items.some(item=>item.key===selectedKey))selectedKey=items[0]?.key||null;
   if(!selectedKey&&items.length)selectedKey=items[0].key;
-  count.textContent=`${items.length} ${items.length===1?'address':'addresses'}`;
+  count.textContent=`${items.length} ${items.length===1?'point':'points'}`;
   document.getElementById('oculum-empty').hidden=items.length>0;
-  coverage.textContent=items.length
-    ?`${items.length} source-reported address balances in this session's ${assetSelect.value.toUpperCase()} sample. Ranked only within this sample; retrieval times and source anchors can differ.`
-    :'No addresses loaded. Global largest-holder coverage is not available.';
+  renderCoverage(items);
   renderList(items);
   renderDetail(items.find(item=>item.key===selectedKey));
   draw();
 }
+function renderCoverage(items){
+  coverage.replaceChildren();
+  const intro=document.createElement('p');
+  intro.textContent=items.length
+    ?`${items.length} source-reported balances in this session's ${assetSelect.value.toUpperCase()} sample. Ranking is limited to these identifiers; there is no global holder denominator.`
+    :'No identifiers loaded. Global largest-holder coverage is not available.';
+  coverage.append(intro);
+  if(!items.length)return;
+  const sources=new Set(items.map(item=>item.source));
+  const anchors=new Set(items.filter(item=>item.block?.hash).map(item=>item.block.hash));
+  const pinned=items.filter(item=>item.block?.hash).length;
+  const queried=items.filter(item=>item.origin.startsWith('queried ')).length;
+  const dates=items.filter(item=>item.retrievedAt).map(item=>new Date(item.retrievedAt).getTime()).filter(Number.isFinite).sort((a,b)=>a-b);
+  const metrics=document.createElement('div');metrics.className='oculum-quality-grid';
+  for(const [label,value,note] of [
+    ['Sample',`${items.length}/24`,'Session limit; not chain coverage'],
+    ['Direct queries',String(queried),'Other points are bounded observed neighbors'],
+    ['Block anchored',`${pinned}/${items.length}`,'Anchor reported by source; not independently checked'],
+    ['Sources',String(sources.size),'Independent verification is not implied'],
+  ]){
+    const cell=document.createElement('div');const small=document.createElement('small');small.textContent=label;
+    const strong=document.createElement('strong');strong.textContent=value;
+    const caption=document.createElement('span');caption.textContent=note;
+    cell.append(small,strong,caption);metrics.append(cell);
+  }
+  coverage.append(metrics);
+  const facts=document.createElement('ul');facts.className='oculum-quality-facts';
+  const lines=[
+    `Retrieved (UTC): ${dates.length?`${observedTime(new Date(dates[0]).toISOString())} to ${observedTime(new Date(dates.at(-1)).toISOString())}`:'not supplied'}.`,
+    `Block alignment: ${pinned===items.length&&anchors.size===1?'all points report one block hash':pinned===0?'no point has a pinned block':'mixed or partial anchors; points are not one snapshot'}.`,
+    'Source-reported values only; no independent balance reconciliation or ownership attribution.',
+  ];
+  for(const line of lines){const li=document.createElement('li');li.textContent=line;facts.append(li);}
+  coverage.append(facts);
+}
 async function addAddress(event){
   event?.preventDefault();
   const asset=assetSelect.value.toUpperCase(),address=addressInput.value.trim();
-  if(records.size>=24&&!records.has(recordKey(asset,address))){setStatus('This session is limited to 24 addresses. Reload before adding more.','error');return;}
-  if(asset==='BLCH'){setStatus('BLCH holder balances require a complete finalized state source.','error');return;}
-  const network=asset==='BTC'?'bitcoin':'ethereum';
+  if(records.size>=24&&!records.has(recordKey(asset,address))){setStatus('This session is limited to 24 identifiers. Reload before adding more.','error');return;}
+  if(asset==='BLCH'&&!/^[0-9a-f]{64}$/i.test(address)){setStatus('BLCH requires a 64-hex script hash. A person or wallet name cannot be used.','error');return;}
+  const network=asset==='BTC'?'bitcoin':asset==='BLCH'?'bloch':'ethereum';
   addButton.disabled=true;setStatus(`Loading ${asset} source data for ${address}…`,'loading');
   try{
     const query=new URLSearchParams({network,asset,address});
     const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
     const data=await response.json();
-    if(!response.ok||data.status!=='source-reported')throw new Error(data.error||`HTTP ${response.status}`);
-    addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:'queried address'});
+    if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
+    addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:asset==='BLCH'?'queried script hash':'queried address',independentVerification:data.independent_verification});
     let enriched=0;
     for(const node of data.nodes||[]){
       if(node.kind!=='address'||node.address===data.address||!node.balance)continue;
-      if(addRecord({asset,address:node.address,balance:node.balance,observation:{...data.observation,retrieved_at:node.balance.retrieved_at,coverage:'bounded observed-neighbor address summary'},network:data.network,origin:'address seen in bounded BTC transaction page'}))enriched++;
+      const before=records.size;
+      if(addRecord({asset,address:node.address,balance:node.balance,observation:{...data.observation,retrieved_at:node.balance.retrieved_at,coverage:'bounded observed-neighbor address summary'},network:data.network,origin:'address seen in bounded BTC transaction page',independentVerification:data.independent_verification})&&records.size>before)enriched++;
     }
     selectedKey=recordKey(asset,data.address);
-    setStatus(`${asset} source-reported balance loaded from ${data.observation?.source_id||'public source'}; ${enriched} observed-neighbor balances added. No ownership attribution.`, 'success');
+    setStatus(`${asset} source-reported balance loaded from ${data.observation?.source_id||'public source'}${asset==='BTC'?`; ${enriched} observed-neighbor balances added`:''}. No ownership attribution.`, 'success');
     render();
   }catch(error){setStatus(`Lookup unavailable: ${error.message}. No balance was added.`,'error');}
   finally{addButton.disabled=false;}
 }
 
 form.addEventListener('submit',addAddress);
-assetSelect.addEventListener('change',render);
+assetSelect.addEventListener('change',()=>{updateIdentifierInput();render();});
+function updateIdentifierInput(){
+  const blch=assetSelect.value.toUpperCase()==='BLCH';
+  identifierLabel.textContent=blch?'Script hash (64 hex)':'Address';
+  addressInput.placeholder=blch?'Paste a 64-hex Bloch script hash':'Paste a public address';
+  addressInput.maxLength=blch?64:128;
+}
+filter.addEventListener('input',()=>renderList(currentRecords()));
 canvas.addEventListener('click',event=>{
   const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;
   const hit=[...points].reverse().find(point=>Math.hypot(x-point.x,y-point.y)<Math.max(14,point.radius+7));
   if(hit)select(hit.record.key);
 });
+canvas.addEventListener('pointermove',event=>{
+  const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;
+  const hit=[...points].reverse().find(point=>Math.hypot(x-point.x,y-point.y)<Math.max(16,point.radius+8));
+  if(!hit){tooltip.hidden=true;return;}
+  tooltip.textContent=`${hit.record.address} · ${formattedAmount(hit.record.baseUnits,hit.record.asset,hit.record.decimals)} · ${hit.record.source}`;
+  tooltip.hidden=false;
+  tooltip.style.left=`${Math.min(x+14,Math.max(8,width-tooltip.offsetWidth-8))}px`;
+  tooltip.style.top=`${Math.max(8,y-52)}px`;
+});
+canvas.addEventListener('pointerleave',()=>{tooltip.hidden=true;});
 new ResizeObserver(resize).observe(canvas);
 const url=new URL(location.href);
 const initialAddress=url.searchParams.get('address');
 const initialAsset=url.searchParams.get('asset');
 if(initialAsset&&colors[initialAsset.toUpperCase()])assetSelect.value=initialAsset.toLowerCase();
+updateIdentifierInput();
 if(initialAddress){addressInput.value=initialAddress;addAddress();}
 render();

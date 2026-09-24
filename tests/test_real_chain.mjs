@@ -170,7 +170,7 @@ test('Ethereum token balance uses the same source-reported finalized block and f
   assert.equal(requests[2].params[0].to, result.body.balance.contract);
 });
 
-test('wrong Ethereum chain, invalid address and unsupported Bloch state fail closed', async () => {
+test('wrong Ethereum chain and malformed Bitcoin or Bloch identifiers fail closed', async () => {
   const wrongChain = await queryChainWallet({
     network: 'ethereum', address: ethAddress, env: {GRAPHUS_ETHEREUM_RPC_URL: 'https://rpc.example.test/'},
     fetcher: async () => reply({jsonrpc: '2.0', id: 1, result: '0x5'}), now,
@@ -179,7 +179,7 @@ test('wrong Ethereum chain, invalid address and unsupported Bloch state fail clo
   const invalid = await queryChainWallet({network: 'bitcoin', address: 'not-an-address', now});
   assert.deepEqual(invalid, {status: 400, body: {error: 'invalid_address_or_asset'}});
   const bloch = await queryChainWallet({network: 'bloch', asset: 'BLCH', address: 'anything', now});
-  assert.deepEqual(bloch, {status: 501, body: {error: 'real_bloch_wallet_state_unavailable'}});
+  assert.deepEqual(bloch, {status: 400, body: {error: 'invalid_bloch_script_hash'}});
 });
 
 test('public chain route answers before optional account database configuration', async () => {
@@ -187,6 +187,6 @@ test('public chain route answers before optional account database configuration'
     request: new Request('https://bloch-graphus.pages.dev/api/chain/wallet?network=bloch&asset=BLCH&address=unknown'),
     env: {},
   });
-  assert.equal(response.status, 501);
-  assert.deepEqual(await response.json(), {error: 'real_bloch_wallet_state_unavailable'});
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {error: 'invalid_bloch_script_hash'});
 });

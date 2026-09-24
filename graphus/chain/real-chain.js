@@ -1,3 +1,5 @@
+import {queryBlochScriptHash} from './bloch-chain.js';
+
 const BITCOIN_API = 'https://blockstream.info/api';
 const TOKEN_CONTRACTS = Object.freeze({
   USDT: '0xdac17f958d2ee523a2206206994597c13d831ec7',
@@ -270,7 +272,8 @@ export async function queryChainWallet({network, asset, address, env = {}, fetch
   const chain = String(network || '').toLowerCase();
   const token = String(asset || (chain.startsWith('bitcoin') || chain === 'btc' ? 'BTC' : 'ETH')).toUpperCase();
   if (chain === 'bloch' || chain === 'bloch-mainnet' || token === 'BLCH') {
-    return failure('real_bloch_wallet_state_unavailable', 501);
+    if(token!=='BLCH'||!['bloch','bloch-mainnet'].includes(chain))return failure('invalid_address_or_asset',400);
+    return queryBlochScriptHash({address,fetcher,now});
   }
   try {
     if (chain === 'bitcoin' || chain === 'bitcoin-mainnet' || chain === 'btc') {

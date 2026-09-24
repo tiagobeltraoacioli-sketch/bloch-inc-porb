@@ -1,6 +1,6 @@
 # Real observations and held-balance provenance
 
-Graphus may show a real, bounded on-chain observation only when its source, network, asset, collection time, available block reference, and coverage boundary accompany it. A real transaction or output is **not** evidence of a wallet's current holdings. The default constellation remains synthetic; the separate public address lookup returns source-reported facts for Bitcoin and, when configured, Ethereum assets. Private pilot records must not be copied to the public site to make it appear live.
+Graphus may show a real, bounded on-chain observation only when its source, network, asset, collection time, available block reference, and coverage boundary accompany it. A real transaction or output is **not** evidence of a wallet's current holdings. The default constellation remains synthetic; separate public lookups return source-reported facts for Bitcoin, configured Ethereum assets, and Bloch script hashes. Private pilot records must not be copied to the public site to make it appear live.
 
 ## Display contract
 
@@ -16,6 +16,8 @@ Held amount is a separate field with four states: `verified` (exact base-unit va
 | BLCH | Complete finalized eUTXO/state snapshot at a named Genesis-4 state root, all relevant unspent outputs and script/address mapping, complete spend resolution, and node/indexer reconciliation. A script hash does not identify a person. | Bounded finalized-output and spent-outpoint observations; `source_complete` describes pagination of that bounded snapshot, not chain-history completeness. |
 
 For each balance, retain the exact anchor, source method and response digest, freshness, completeness and reconciliation result, plus any reorg invalidation. An Esplora address aggregate and an Ethereum RPC state read may be displayed as `source_reported` with their limitations; neither independently proves canonical state or address ownership. Withhold or invalidate the value when the anchor is no longer accepted. Querying a current balance and displaying it beside older flows requires separate timestamps; do not imply they share one snapshot.
+
+The Bloch public lookup is also `source_reported`: its archival `getbalance` and preceding `getchaininfo` are separate calls. The head is not a balance anchor. A bounded history page can establish that a script hash was used, but it cannot establish complete history or ownership. Graphus refuses an otherwise ambiguous zero for a 64-hex input without use evidence. See [Bloch public script-hash lookup](bloch-public-script-lookup.md).
 
 ## Integration gates
 
