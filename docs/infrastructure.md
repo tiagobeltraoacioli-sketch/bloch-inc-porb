@@ -21,6 +21,13 @@ mode was replaced during early sync because it cannot serve old token logs;
 only its 1.9 MB `chaindata` was reset while snapshots were retained. See `ops/bitcoin` and
 `ops/ethereum` for the deployed configuration and progress checks.
 
+A read-only check on 2026-09-24 around 05:26 UTC found Bitcoin Core at block
+549,934 of 968,361 reported headers, `verificationprogress=0.252087`, and
+`initialblockdownload=true`. Erigon was still downloading snapshots at 34.04%
+(704.1 GB of 2.0 TB); its downloader estimated about six more hours for that
+phase alone. Neither observation establishes a completion date for full sync,
+index construction, or validated holder rankings.
+
 Private timers now gate further work on node readiness. The Bitcoin snapshot
 job checks `initialblockdownload=false` before exporting and wrote no ranking
 while validation was in progress. On the bridge, USDT and USDC Transfer-event
