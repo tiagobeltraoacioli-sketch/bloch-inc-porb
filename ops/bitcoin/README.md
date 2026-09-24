@@ -24,6 +24,10 @@ refresh and publication need a separate reviewed process.
 
 Check progress without exposing the RPC cookie:
 
+`python3 -m service.chain_node_status` from the authorized workstation reads
+this node and the Ethereum node over existing SSH aliases and prints aggregate
+JSON status. It does not initiate a snapshot or publish a ranking.
+
 ```sh
 sudo -u graphusbtc /opt/graphus-bitcoin/31.1/bin/bitcoin-cli \
   -conf=/etc/graphus-bitcoin/bitcoin.conf \

@@ -28,6 +28,16 @@ A read-only check on 2026-09-24 around 05:26 UTC found Bitcoin Core at block
 phase alone. Neither observation establishes a completion date for full sync,
 index construction, or validated holder rankings.
 
+A second read-only check around 10:02 UTC found Bitcoin Core at block 774,371
+of 968,382 headers, with `initialblockdownload=true` and verification progress
+0.56636. Erigon reported execution block 0 while its snapshot downloader was
+at 83.71%; the downloader's approximately 1h30m ETA covers that download
+phase, not subsequent execution sync or indexing. The Ethereum volume had
+about 1.16 TB available. The private Bitcoin ranking and token scans remained
+behind their node-sync gates. Run `python3 -m service.chain_node_status` from
+the authorized workstation for a fresh, read-only JSON status; it does not
+publish node data or claim that a holder ranking is ready.
+
 Private timers now gate further work on node readiness. The Bitcoin snapshot
 job checks `initialblockdownload=false` before exporting and wrote no ranking
 while validation was in progress. On the bridge, USDT and USDC Transfer-event

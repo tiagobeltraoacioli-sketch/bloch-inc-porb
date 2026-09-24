@@ -18,6 +18,9 @@ finalized block hash. The local `debug` RPC module is enabled for testing
 `debug_accountRange` pagination on that pinned block. USDT and USDC need
 contract-specific holder discovery plus `balanceOf` at the same block; ETH
 account enumeration cannot establish token-holder completeness by itself.
+Run `python3 -m service.chain_node_status` from the authorized workstation for
+one read-only JSON view of both nodes, including RPC sync, the downloader's
+reported phase progress, and disk space. It does not trigger a collector.
 
 Erigon estimates roughly 2.03 TB for an Ethereum archive node and recommends
 a 4 TB disk. This host has a 3 TB volume, so monitor real usage and stop the
