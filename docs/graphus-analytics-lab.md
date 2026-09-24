@@ -42,4 +42,11 @@ GRAPHUS_URL=https://bloch-graphus.xyz LIVE_SOURCE=1 \
   PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/check_graphus_analytics.cjs
 ```
 
-Publish the existing site with `wrangler pages deploy graphus --project-name bloch-graphus --branch main`. Deploy only `graphus/`; sibling products and private source directories are outside this artifact.
+Publish from the `graphus/` working directory so Wrangler discovers its `functions/` API directory:
+
+```sh
+cd graphus
+wrangler pages deploy . --project-name bloch-graphus --branch main
+```
+
+Confirm the deployment output includes the compiled Functions worker, then verify `/api/chain/holders?asset=BLCH` returns JSON. Deploying the static directory from the repository root misses the nested Functions directory and makes API paths fall back to HTML. Sibling products and private source directories are outside this artifact.

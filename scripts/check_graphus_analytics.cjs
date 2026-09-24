@@ -59,6 +59,14 @@ const observation={schema_version:1,kind:'graphus_public_chain_observation',stat
     assert.match(await page.locator('#lab-badge').innerText(),/SOURCE-REPORTED/);
     if(process.env.LIVE_SOURCE!=='1')assert.match(await page.locator('#lab-balance-boundary').innerText(),/truncated ranking/);
     await page.screenshot({path:'/private/tmp/graphus-analytics-balances.png',fullPage:true});
+    if(process.env.LIVE_SOURCE==='1'){
+      await page.locator('#lab-balance-body a').first().click();
+      await page.locator('#analyze-observation').waitFor({state:'visible',timeout:45000});
+      await page.locator('#analyze-observation').click();
+      await page.waitForFunction(()=>document.querySelector('#lab-badge')?.innerText.includes('IMPORTED'),{},{timeout:45000});
+      assert.match(await page.locator('#lab-source-detail').innerText(),/bloch/i);
+      assert.match(await page.locator('#lab-message').innerText(),/opened locally/);
+    }
     const mobile=await browser.newPage({viewport:{width:390,height:844}});mobile.on('pageerror',e=>errors.push(e.message));
     for(const asset of ['ETH','USDT','USDC','BTC','BLCH']){
       await mobile.goto(base+'/analytics.html?asset='+asset);
