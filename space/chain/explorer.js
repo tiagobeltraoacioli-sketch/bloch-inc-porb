@@ -10,6 +10,12 @@ const ETH_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const BTC_ADDRESS = /^(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{11,87})$/i;
 const DECIMAL = /^(0|[1-9][0-9]{0,15})$/;
 const MAX_BYTES = 3 * 1024 * 1024;
+const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const TOKENS = new Map([
+  ['0xdac17f958d2ee523a2206206994597c13d831ec7', 'USDT'],
+  ['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', 'USDC'],
+]);
+const ZERO_ADDRESS = `0x${'0'.repeat(40)}`;
 
 const reply = (status, body) => ({status, body});
 const bad = (message, status = 400) => reply(status, {error: message});
@@ -147,7 +153,43 @@ async function bitcoinTx(fetcher, query, now) {
     json(fetcher, `${BTC}/tx/${query}`), json(fetcher, `${BTC}/tx/${query}/outspends`),
   ]);
   if (transaction?.txid !== query || !Array.isArray(transaction.vin) || !Array.isArray(transaction.vout) || !Array.isArray(outspends)) throw new Error('invalid_source_response');
-  return {...source('bitcoin', 'Blockstream Esplora', now(), 'Inputs identify spent outpoints, not a single sender or owner.'), transaction, outspends};
+  return {...source('bitcoin', 'Blockstream Esplora', now(), 'Inputs identify spent outpoints, not a single sender or owner. Sequence-based replacement is a signal, not a guarantee.'), transaction, outspends, facts:bitcoinTransactionFacts(transaction)};
+}
+
+export function bitcoinTransactionFacts(tx) {
+  const coinbase = tx.vin?.some(input => input.is_coinbase === true) ?? false;
+  const weight = Number(tx.weight);
+  const fee = Number(tx.fee);
+  const virtualSize = Number.isSafeInteger(weight) && weight > 0 ? Math.ceil(weight / 4) : null;
+  return {
+    coinbase,
+    virtual_size_vb: virtualSize,
+    fee_rate_sat_vb: !coinbase && virtualSize && Number.isSafeInteger(fee) && fee >= 0 ? (fee / virtualSize).toFixed(2) : null,
+    signals_rbf: !coinbase && tx.vin?.some(input => Number.isSafeInteger(input.sequence) && input.sequence < 0xfffffffe) === true,
+  };
+}
+
+export function ethereumReceiptFacts(receipt) {
+  if (!receipt) return {gas_fee_wei:null, token_transfers:[], token_transfer_count:0};
+  let gasFee = null;
+  try {
+    if (receipt.gasUsed != null && receipt.effectiveGasPrice != null) gasFee = (quantity(receipt.gasUsed) * quantity(receipt.effectiveGasPrice)).toString();
+  } catch { /* Preserve the raw receipt without an invented fee. */ }
+  const transfers = [];
+  if (receipt.status === '0x1' && Array.isArray(receipt.logs)) {
+    for (const log of receipt.logs) {
+      const asset = TOKENS.get(log.address?.toLowerCase());
+      if (!asset || !Array.isArray(log.topics) || log.topics.length !== 3 || log.topics[0]?.toLowerCase() !== TRANSFER ||
+          !/^0x[0-9a-f]{64}$/i.test(log.topics[1] || '') || !/^0x[0-9a-f]{64}$/i.test(log.topics[2] || '') ||
+          !/^0x[0-9a-f]{64}$/i.test(log.data || '') ||
+          !/^0x0{24}[0-9a-f]{40}$/i.test(log.topics[1]) || !/^0x0{24}[0-9a-f]{40}$/i.test(log.topics[2])) continue;
+      const from = `0x${log.topics[1].slice(-40).toLowerCase()}`;
+      const to = `0x${log.topics[2].slice(-40).toLowerCase()}`;
+      transfers.push({asset, from, to, amount_base_units:BigInt(log.data).toString(),
+        kind:from === ZERO_ADDRESS ? 'mint' : to === ZERO_ADDRESS ? 'burn' : 'transfer', log_index:log.logIndex ?? null});
+    }
+  }
+  return {gas_fee_wei:gasFee, token_transfers:transfers.slice(0,64), token_transfer_count:transfers.length};
 }
 
 async function ethereumBlock(fetcher, env, query, now, offset = 0) {
@@ -180,7 +222,7 @@ async function ethereumTx(fetcher, env, query, now) {
   if (transaction?.hash?.toLowerCase() !== query.toLowerCase()) throw new Error('invalid_source_response');
   return {
     ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Receipt status is execution success; finality is a separate checkpoint.'),
-    transaction, receipt, finalized_height: safeNumber(quantity(finalized.number)),
+    transaction, receipt, finalized_height: safeNumber(quantity(finalized.number)), ...ethereumReceiptFacts(receipt),
   };
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {handleExplore} from '../space/chain/explorer.js';
+import {handleExplore, bitcoinTransactionFacts, ethereumReceiptFacts} from '../space/chain/explorer.js';
 
 const hash = 'a'.repeat(64);
 const block = 'b'.repeat(64);
@@ -50,6 +50,29 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
   assert.equal(response.body.receipt.status,'0x1');
   assert.equal(response.body.finalized_height,16);
   assert.deepEqual(methods.sort(),['eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
+});
+
+test('Bitcoin transaction fee rate uses virtual bytes and replacement needs a sequence signal', () => {
+  assert.deepEqual(bitcoinTransactionFacts({weight:561,fee:282,vin:[{sequence:0xfffffffd}]}),
+    {coinbase:false,virtual_size_vb:141,fee_rate_sat_vb:'2.00',signals_rbf:true});
+  assert.deepEqual(bitcoinTransactionFacts({weight:400,fee:0,vin:[{is_coinbase:true}]}),
+    {coinbase:true,virtual_size_vb:100,fee_rate_sat_vb:null,signals_rbf:false});
+});
+
+test('Ethereum receipt decodes only successful allowlisted Transfer logs and preserves exact units', () => {
+  const topic = address => `0x${'0'.repeat(24)}${address}`;
+  const from = '1'.repeat(40), to = '2'.repeat(40);
+  const good = {address:'0xdAC17F958D2ee523a2206206994597C13D831ec7',topics:[
+    '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',topic(from),topic(to)],
+    data:'0x'+'0'.repeat(63)+'a',logIndex:'0x2'};
+  const receipt = {status:'0x1',gasUsed:'0x5208',effectiveGasPrice:'0x3b9aca00',logs:[good,
+    {...good,address:'0x'+'3'.repeat(40)}, {...good,topics:[good.topics[0],topic(from),`0x${'f'.repeat(64)}`]}]};
+  const facts=ethereumReceiptFacts(receipt);
+  assert.equal(facts.gas_fee_wei,'21000000000000');
+  assert.equal(facts.token_transfer_count,1);
+  assert.deepEqual(facts.token_transfers[0],{asset:'USDT',from:`0x${from}`,to:`0x${to}`,
+    amount_base_units:'10',kind:'transfer',log_index:'0x2'});
+  assert.equal(ethereumReceiptFacts({...receipt,status:'0x0'}).token_transfer_count,0);
 });
 
 test('Bloch overview keeps head, indexer and holder snapshots separate', async () => {

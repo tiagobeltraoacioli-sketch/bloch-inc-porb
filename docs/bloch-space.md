@@ -9,8 +9,8 @@ adapters are imported directly for public address and script lookups.
 
 | Network | Overview | Block and transaction | Public reference |
 | --- | --- | --- | --- |
-| Bitcoin | Blockstream Esplora best-chain blocks, mempool, fee estimates | Esplora block, transaction, outspend facts | Graphus Esplora address aggregate and bounded confirmed transaction graph |
-| Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price | JSON-RPC block, transaction, receipt; source finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
+| Bitcoin | Blockstream Esplora best-chain blocks, mempool, fee estimates | Esplora block, transaction, outspend facts, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
+| Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price | JSON-RPC block and receipt; exact execution gas fee, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
 | Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
 
 The API is read-only and validates network, record type, identifier, asset, and
@@ -35,6 +35,14 @@ An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source
 envelope. There is no cross-chain ownership inference or public AML score.
+Bitcoin fee rates divide source-reported satoshis by rounded-up weight units;
+the sequence flag signals replacement eligibility and does not predict whether
+a transaction will be replaced. Ethereum execution gas fees multiply receipt
+gas used by effective gas price; optional blob fees are not included. Token
+transfers come only from successful receipt logs emitted by fixed Ethereum
+mainnet USDT and USDC contracts, with exact base-unit amounts and at most 64
+events shown per transaction. Other contract calls and token approvals are
+not represented as transfers.
 
 ## Dedicated Graphus nodes
 
