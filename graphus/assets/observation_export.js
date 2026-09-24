@@ -20,6 +20,8 @@
       ...(value.finalized_head?{finalized_head:anchor(value.finalized_head)}:{}),
       ...(value.window_end_anchor?{window_end_anchor:anchor(value.window_end_anchor)}:{}),
       ...(value.block_window?{block_window:pick(value.block_window,['from','to','width'])}:{}),
+      ...(value.source_response_consistency?{source_response_consistency:pick(value.source_response_consistency,
+        ['block_heights','transaction_hashes','log_positions','duplicate_direction_hits'])}:{}),
       ...(value.head_before_balance?{head_before_balance:pick(value.head_before_balance,['slot','height','finalized_height','state_root'])}:{})}
     :null;
   const node=value=>({

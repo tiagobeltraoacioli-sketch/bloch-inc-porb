@@ -144,10 +144,25 @@ export async function queryEthereumActivity({address, asset, toBlock = null, exp
       return fail('ethereum_activity_window_too_dense', 413);
     }
     const events = new Map();
+    const blockHashes = new Map();
+    const transactionAnchors = new Map();
+    const logPositions = new Map();
     for (const [logs, direction] of [[inbound, 'incoming'], [outbound, 'outgoing']]) {
       for (const log of logs) {
         const event = normalizeLog(log, {contract, address: normalizedAddress, first, last, finalizedHash: windowEnd.hash.toLowerCase()});
         if (event.direction !== direction && event.direction !== 'self') throw new Error('invalid_rpc_log');
+        const knownBlockHash = blockHashes.get(event.block_number);
+        if (knownBlockHash && knownBlockHash !== event.block_hash) throw new Error('inconsistent_rpc_log_block');
+        blockHashes.set(event.block_number, event.block_hash);
+        const transactionAnchor = `${event.block_number}:${event.block_hash}:${event.transaction_index}`;
+        const knownTransactionAnchor = transactionAnchors.get(event.transaction_hash);
+        if (knownTransactionAnchor && knownTransactionAnchor !== transactionAnchor)
+          throw new Error('inconsistent_rpc_log_transaction');
+        transactionAnchors.set(event.transaction_hash, transactionAnchor);
+        const position = `${event.block_hash}:${event.log_index}`;
+        const knownEvent = logPositions.get(position);
+        if (knownEvent && knownEvent !== event.event_id) throw new Error('inconsistent_rpc_log_position');
+        logPositions.set(position, event.event_id);
         const previous = events.get(event.event_id);
         if (previous && JSON.stringify(previous) !== JSON.stringify(event)) throw new Error('invalid_rpc_log');
         events.set(event.event_id, event);
@@ -176,6 +191,11 @@ export async function queryEthereumActivity({address, asset, toBlock = null, exp
         finalized_head: {height: finalizedHeight, hash: block.hash.toLowerCase(), time: finalizedTime.toISOString()},
         window_end_anchor: {height: last, hash: windowEnd.hash.toLowerCase(), time: blockTime.toISOString()},
         block_window: {from: first, to: last, width: last - first + 1},
+        source_response_consistency: {
+          block_heights: blockHashes.size, transaction_hashes: transactionAnchors.size,
+          log_positions: logPositions.size,
+          duplicate_direction_hits: inbound.length + outbound.length - ordered.length,
+        },
         coverage: 'erc20_transfer_logs_in_64_or_fewer_source_reported_finalized_blocks',
         limitations: [
           'Only Transfer logs from the fixed token contract and bounded block window are included; this is not complete address history.',

@@ -14,11 +14,12 @@ const now = () => new Date('2026-09-23T12:00:00.000Z');
 const reply = (id, result) => new Response(JSON.stringify({jsonrpc: '2.0', id, result}), {
   headers: {'content-type': 'application/json'},
 });
-function log({from = other, to = address, index = 0, number = '0x64', blockHash = hash} = {}) {
+function log({from = other, to = address, index = 0, number = '0x64', blockHash = hash,
+  transactionHash = `0x${'b'.repeat(64)}`, transactionIndex = '0x2'} = {}) {
   return {
     address: contract, topics: [topic, indexed(from), indexed(to)], data: `0x${'0'.repeat(59)}f4240`,
-    blockNumber: number, blockHash, transactionHash: `0x${'b'.repeat(64)}`,
-    transactionIndex: '0x2', logIndex: `0x${index.toString(16)}`, removed: false,
+    blockNumber: number, blockHash, transactionHash,
+    transactionIndex, logIndex: `0x${index.toString(16)}`, removed: false,
   };
 }
 function source({incoming = [], outgoing = [], chainId = '0x1', block = null, historicalBlock = null} = {}) {
@@ -55,6 +56,8 @@ test('USDC activity is exact bounded Transfer-log evidence with source provenanc
   assert.deepEqual(body.observation.block_window, {from: 37, to: 100, width: 64});
   assert.equal(body.observation.finalized_head.hash, hash);
   assert.equal(body.observation.window_end_anchor.hash, hash);
+  assert.deepEqual(body.observation.source_response_consistency,{
+    block_heights:1,transaction_hashes:1,log_positions:2,duplicate_direction_hits:0});
   assert.equal(body.observation.retrieved_at, '2026-09-23T12:00:00.000Z');
   assert.equal(calls.length, 4);
   assert.equal(calls[2].params[0].address, contract);
@@ -119,6 +122,8 @@ test('self transfer appearing in both filters is represented once', async () => 
   assert.equal(result.status, 200);
   assert.equal(result.body.activity.event_count, 1);
   assert.equal(result.body.activity.events[0].direction, 'self');
+  assert.deepEqual(result.body.observation.source_response_consistency,{
+    block_heights:1,transaction_hashes:1,log_positions:1,duplicate_direction_hits:1});
 });
 
 test('wrong network and mismatched head log fail closed', async () => {
@@ -129,6 +134,24 @@ test('wrong network and mismatched head log fail closed', async () => {
   const mismatch = source({incoming: [log({blockHash: `0x${'c'.repeat(64)}`})]});
   assert.deepEqual(await queryEthereumActivity({address, asset: 'USDC', env, fetcher: mismatch.fetcher, now}),
     {status: 502, body: {error: 'chain_source_unavailable'}});
+});
+
+test('conflicting block hashes, transaction anchors, and log positions fail closed',async()=>{
+  const one=`0x${'c'.repeat(64)}`,two=`0x${'d'.repeat(64)}`;
+  const otherTx=`0x${'e'.repeat(64)}`;
+  const cases=[
+    {incoming:[log({number:'0x63',blockHash:one})],
+      outgoing:[log({from:address,to:other,number:'0x63',blockHash:two,transactionHash:otherTx,index:1})]},
+    {incoming:[log({number:'0x63',blockHash:one})],
+      outgoing:[log({from:address,to:other,number:'0x62',blockHash:two,index:1})]},
+    {incoming:[log({number:'0x63',blockHash:one})],
+      outgoing:[log({from:address,to:other,number:'0x63',blockHash:one,transactionHash:otherTx})]},
+  ];
+  for(const fixture of cases){
+    const {fetcher}=source(fixture);
+    assert.deepEqual(await queryEthereumActivity({address,asset:'USDC',env,fetcher,now}),
+      {status:502,body:{error:'chain_source_unavailable'}});
+  }
 });
 
 test('dense window returns no partial activity', async () => {

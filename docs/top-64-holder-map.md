@@ -92,6 +92,14 @@ a different source-reported block hash before retrieving logs. This makes the
 link reproducible against the configured source, but it is not independent
 verification of the chain or a guarantee that the source will remain online.
 
+The Ethereum activity adapter rejects returned logs that give different block
+hashes for the same height, conflicting block or transaction positions for the
+same transaction hash, or the same block log position for different events.
+The panel and JSON export show the number of returned block heights,
+transactions, and log positions checked, plus duplicate hits across the two
+direction filters. These checks establish internal consistency of one source
+response only; they do not independently verify chain history or log omission.
+
 The source-aware canvas plots at most 36 other points from a bounded response
 and states the visible and returned counts. For USDT and USDC, it chooses points
 by the number of returned logs; selecting a log brings its address into view

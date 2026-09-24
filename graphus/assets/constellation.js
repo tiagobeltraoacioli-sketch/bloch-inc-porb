@@ -153,6 +153,11 @@ function renderSourceMetrics(data){
     add('Observed transactions',String(metrics.transaction_activity.transactions.length),'Distinct transaction hashes among returned logs');
     add('Multiple logs',String(metrics.transaction_activity.multi_log_transactions),'Returned transactions with more than one Transfer log');
     add('Other addresses',String(metrics.observed_other_identifiers),'Seen in returned logs; no owner grouping');
+    const consistency=data.tokenObservation?.source_response_consistency;
+    if(consistency){
+      add('Source response checks',`${consistency.block_heights} blocks · ${consistency.transaction_hashes} transactions`,
+        `${consistency.log_positions} unique log positions; ${consistency.duplicate_direction_hits} duplicate filter hits removed. Checks compare returned source records, not the chain independently.`);
+    }
     const anchors=data.tokenAnchorComparison;
     if(anchors){
       add('Balance block',String(anchors.balance.height),anchors.balance.hash);

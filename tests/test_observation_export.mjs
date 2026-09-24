@@ -49,7 +49,9 @@ test('Token export keeps separate anchors and bounded logs without implying hist
     tokenActivity:{event_count:1,events:[event]},tokenActivityContract:'0x'+'e'.repeat(40),
     tokenObservation:{source_id:'rpc',retrieved_at:'2026-09-24T04:59:00Z',coverage:'64 blocks',
       finalized_head:{height:100,hash:'0x'+'d'.repeat(64)},
-      window_end_anchor:{height:100,hash:'0x'+'d'.repeat(64)},block_window:{from:37,to:100,width:64}},
+      window_end_anchor:{height:100,hash:'0x'+'d'.repeat(64)},block_window:{from:37,to:100,width:64},
+      source_response_consistency:{block_heights:1,transaction_hashes:1,log_positions:1,
+        duplicate_direction_hits:0,private_note:'omit'}},
     tokenAnchorComparison:{status:'separate_source_anchors',height_difference:1,
       balance:{height:99,hash:'0x'+'f'.repeat(64)},logs:{height:100,hash:'0x'+'d'.repeat(64)}},
   };
@@ -59,6 +61,8 @@ test('Token export keeps separate anchors and bounded logs without implying hist
   assert.equal(bundle.token_logs.anchor_comparison.status,'separate_source_anchors');
   assert.equal(bundle.token_logs.source.block_window.width,64);
   assert.equal(bundle.token_logs.source.window_end_anchor.hash,'0x'+'d'.repeat(64));
+  assert.equal(bundle.token_logs.source.source_response_consistency.log_positions,1);
+  assert.equal('private_note' in bundle.token_logs.source.source_response_consistency,false);
   assert.equal(JSON.stringify(bundle).includes('"score":93'),false);
   delete data.tokenActivity;
   const balanceOnly=buildObservationBundle(data,EXPORTED_AT);
