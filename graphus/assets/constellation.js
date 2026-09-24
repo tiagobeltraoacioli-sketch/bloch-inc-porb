@@ -28,6 +28,11 @@ liveTransactionDetail.setAttribute('aria-label','Selected public-chain transacti
 liveTransactionDetail.setAttribute('aria-live','polite');
 liveTransactionDetail.hidden=true;
 document.querySelector('.record-card .transaction-fan').before(liveTransactionDetail);
+const sourceMetricsPanel=document.createElement('section');
+sourceMetricsPanel.className='source-metrics-panel';
+sourceMetricsPanel.setAttribute('aria-label','Bounded public-chain metrics');
+sourceMetricsPanel.hidden=true;
+liveTransactionDetail.before(sourceMetricsPanel);
 const liveButton=document.createElement('button');
 liveButton.type='button';liveButton.id='load-live-address';liveButton.textContent='Load public-chain address';
 document.querySelector('.constellation-controls').append(liveButton);
@@ -45,8 +50,7 @@ function setDataMode(mode,detail){
   if(mode==='synthetic'){
     selectedRealTransactionId=null;
     liveTransactionDetail.hidden=true;
-    selectedRealTransactionId=null;
-    liveTransactionDetail.hidden=true;
+    sourceMetricsPanel.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
     canvas.setAttribute('aria-label','Synthetic wallet constellation. Use arrow keys to choose a wallet, then Enter to inspect it.');
   }
@@ -63,6 +67,50 @@ function assetForLiveAddress(address){
   if(/^0x[0-9a-fA-F]{40}$/.test(address))return ['usdt','usdc'].includes(activeAsset)?activeAsset.toUpperCase():'ETH';
   if(/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(address))return 'BTC';
   return null;
+}
+function renderSourceMetrics(data){
+  sourceMetricsPanel.replaceChildren();
+  let metrics;
+  try{metrics=GraphusSourceMetrics.summarizeObservation(data);}
+  catch{
+    const message=document.createElement('p');message.textContent='Bounded observation metrics are unavailable for this source response.';
+    sourceMetricsPanel.append(message);sourceMetricsPanel.hidden=false;return;
+  }
+  const heading=document.createElement('h3');heading.textContent='Observed data · source bounded';
+  const grid=document.createElement('div');grid.className='source-metrics-grid';
+  const add=(label,value,note)=>{
+    const item=document.createElement('div');
+    const name=document.createElement('small');name.textContent=label;
+    const number=document.createElement('strong');number.textContent=value;
+    const caption=document.createElement('span');caption.textContent=note;
+    item.append(name,number,caption);grid.append(item);
+  };
+  if(metrics.kind==='utxo_observations'){
+    add('Transaction records',String(metrics.transaction_records),'Returned in this bounded response');
+    add('Directed references',String(metrics.returned_edges),'Input and output references remain separate');
+    add('Other identifiers',String(metrics.observed_other_identifiers),'Observed in returned records; no owner grouping');
+    if(metrics.source_reported_confirmed_tx_count!==null)
+      add('Source tx count',String(metrics.source_reported_confirmed_tx_count),'Address aggregate reported by source; not this page size');
+    const labels=metrics.asset==='BTC'
+      ?[['observed_input_prevout','Input prevouts referenced'],['created_output','Outputs created']]
+      :[['observed_spent_outpoint_reference','Spent outpoints referenced'],['observed_created_output','Script outputs created']];
+    for(const [kind,label] of labels){
+      const group=metrics.groups[kind];
+      add(label,formatObservedBalance(group.base_units,metrics.asset),`${group.count} returned ${group.count===1?'reference':'references'}; not economic transfer volume`);
+    }
+  }else if(metrics.kind==='erc20_transfer_logs'){
+    add('Transfer logs',String(metrics.returned_events),'Returned in the bounded finalized-block window');
+    add('Other addresses',String(metrics.observed_other_identifiers),'Seen in returned logs; no owner grouping');
+    for(const [direction,label] of [['incoming','Incoming logs'],['outgoing','Outgoing logs'],['self','Self logs']]){
+      const group=metrics.groups[direction];
+      add(label,formatObservedBalance(group.base_units,metrics.asset,6),`${group.count} returned ${group.count===1?'log':'logs'}`);
+    }
+  }else add('Activity coverage','Balance only','No transaction index is connected for this observation');
+  sourceMetricsPanel.append(heading,grid);
+  const provenance=document.createElement('p');
+  provenance.textContent=`Source: ${metrics.source}. Blocks: ${metrics.block_range?`${metrics.block_range.from}–${metrics.block_range.to}`:'not supplied'}. Coverage: ${metrics.coverage}. ${metrics.caveat}`;
+  sourceMetricsPanel.append(provenance);
+  sourceMetricsPanel.hidden=false;
 }
 function renderLiveSourceRecords(data){
   const activity=data.tokenActivity;
@@ -104,6 +152,7 @@ function renderLiveSourceRecords(data){
     });
   }
   if(!list.childElementCount)list.textContent='No bounded transaction records were returned. Balance provenance is shown above.';
+  renderSourceMetrics(data);
 }
 function selectRealTransaction(id){
   const data=realObservation;
@@ -167,6 +216,7 @@ async function loadLiveAddress(){
   selectedRealTransactionId=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
+  sourceMetricsPanel.hidden=true;
   liveButton.disabled=true;
   setDataMode('loading',`Requesting ${asset} address facts from the configured public-chain source…`);
   try{

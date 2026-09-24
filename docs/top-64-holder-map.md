@@ -34,6 +34,14 @@ The detail lists the transaction identifier, source block, observation scope,
 and up to 24 input/output references returned for that transaction. It does
 not infer sender identity or input ownership.
 
+The source-aware Constellation also calculates bounded observation metrics in
+exact base units. BTC and BLCH input references and created outputs have
+separate counts and sums; they are never added into a claimed transaction
+volume. ERC-20 incoming, outgoing, and self `Transfer` logs are counted
+separately within the reported block window. Native ETH remains a balance-only
+view until a transaction index is connected. Every panel states its source,
+block range, and coverage limit.
+
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change
 the ranked snapshot balance or its block anchor. Created outputs and spent

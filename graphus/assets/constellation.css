@@ -11,3 +11,12 @@
 .live-transaction-detail ol{padding-left:1.1rem;max-height:250px;overflow:auto}
 .live-transaction-detail li{margin:.35rem 0}
 .live-source-record[aria-pressed="true"]{color:#baff28;border-left:2px solid #baff28;padding-left:.55rem}
+.source-metrics-panel{margin:1rem 0;padding:1rem;border:1px solid #48633c;background:#142113;color:#eaf4e4;overflow-wrap:anywhere}
+.source-metrics-panel[hidden]{display:none}
+.source-metrics-panel h3{margin:0 0 .75rem;color:#baff28;font-size:.9rem}
+.source-metrics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem}
+.source-metrics-grid>div{display:grid;gap:.25rem;min-width:0;padding:.65rem;border:1px solid #40503f;background:#1b2b19}
+.source-metrics-grid small{font:.58rem var(--mono);letter-spacing:.06em;text-transform:uppercase;color:#a9c09e}
+.source-metrics-grid strong{font-size:.82rem;color:#f1f6ec;overflow-wrap:anywhere}
+.source-metrics-grid span,.source-metrics-panel>p{font-size:.68rem;line-height:1.5;color:#bbd0b1}
+.source-metrics-panel>p{margin:.85rem 0 0}
