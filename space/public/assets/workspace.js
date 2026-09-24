@@ -17,7 +17,7 @@ const views={
 };
 const params=new URLSearchParams(location.search);
 const initialNetwork=configs[params.get('network')]?params.get('network'):'bitcoin';
-const state={network:initialNetwork,view:views[initialNetwork].some(([key])=>key===params.get('view'))?params.get('view'):'overview',ranges:{bitcoin:'10',ethereum:'12',bloch:'6h'},validatorOffset:0,data:null,request:0,busy:false};
+const state={network:initialNetwork,view:views[initialNetwork].some(([key])=>key===params.get('view'))?params.get('view'):'overview',ranges:{bitcoin:'10',ethereum:'12',bloch:'6h'},validatorOffset:0,data:null,request:0,busy:false,cache:new Map()};
 if(configs[state.network].ranges.includes(params.get('range')))state.ranges[state.network]=params.get('range');
 if(state.view==='validators'&&/^(0|[1-9][0-9]{0,3})$/.test(params.get('offset')||'')&&Number(params.get('offset'))%32===0)state.validatorOffset=Number(params.get('offset'));
 const themeKey='bloch-space-theme';
@@ -202,17 +202,19 @@ function csv(){const data=state.data;let rows;
   else if(state.network==='ethereum'){const oldest=BigInt(data.fee_history.oldest_height);rows=[['height','gas_used_ratio','base_fee_wei'],...data.fee_history.gas_used_ratio.map((ratio,index)=>[(oldest+BigInt(index)).toString(),ratio,data.fee_history.base_fee_wei[index]])];}
   else rows=[['timestamp_utc','connections','reporting_nodes'],...data.points.map(point=>[new Date(point.at).toISOString(),point.connections??'',point.reporting_nodes??''])];
   return rows.map(columns=>columns.map(value=>`"${String(value).replace(/"/g,'""')}"`).join(',')).join('\r\n')+'\r\n';}
-async function load(){const request=++state.request,network=state.network,view=state.view,range=state.ranges[network];state.busy=true;$('#workspace-refresh').disabled=true;$('#workspace-status').textContent=state.data?'Updating source…':'Connecting to source…';
+function renderData(data,view){state.data=data;({overview:renderOverview,activity:renderActivity,economics:renderEconomics,entities:renderEntities,validators:renderValidators,analytics:renderAnalytics,sources:renderSources}[view])(data);$('#workspace-status').textContent=`Source retrieved ${utc(data.retrieved_at)}`;}
+async function load(force=false){const request=++state.request,network=state.network,view=state.view,range=state.ranges[network];state.busy=true;$('#workspace-refresh').disabled=true;$('#workspace-status').textContent=state.data?'Updating source…':'Connecting to source…';
+  const url=view==='analytics'?`/api/series?network=${network}&range=${range}`:view==='validators'?`/api/validators?network=bloch&offset=${state.validatorOffset}`:`/api/overview?network=${network}`;
+  const cached=state.cache.get(url);if(!force&&cached&&Date.now()-cached.at<45000){try{renderData(cached.data,view);state.busy=false;$('#workspace-refresh').disabled=false;return;}catch{state.cache.delete(url);}}
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
-  try{const url=view==='analytics'?`/api/series?network=${network}&range=${range}`:view==='validators'?`/api/validators?network=bloch&offset=${state.validatorOffset}`:`/api/overview?network=${network}`;
-    const response=await fetch(url,{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);if(request!==state.request)return;
-    state.data=data;({overview:renderOverview,activity:renderActivity,economics:renderEconomics,entities:renderEntities,validators:renderValidators,analytics:renderAnalytics,sources:renderSources}[view])(data);$('#workspace-status').textContent=`Source retrieved ${utc(data.retrieved_at)}`;
+  try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error(response.status===429?'Read limit reached. Retry after the source window resets.':data.error||`HTTP ${response.status}`);if(request!==state.request)return;
+    renderData(data,view);state.cache.set(url,{at:Date.now(),data});$('#workspace-status').textContent=`Source retrieved ${utc(data.retrieved_at)}`;
   }catch(error){if(request!==state.request)return;$('#workspace-status').textContent=`${state.data?'Showing last successful view. ':'Source unavailable. '}${error.message}`;}
   finally{clearTimeout(timer);if(request===state.request){state.busy=false;$('#workspace-refresh').disabled=false;}}
 }
 function select(push=false){state.data=null;controls();history[push?'pushState':'replaceState'](null,'',address());$('#workspace-stats').replaceChildren();$('#workspace-charts').replaceChildren();$('#workspace-feature').replaceChildren();$('#workspace-table').replaceChildren();$('#workspace-source').replaceChildren();$('#workspace-coverage').textContent='';$('#workspace-json').textContent='';$('#workspace-csv').disabled=true;load();}
 document.querySelectorAll('#network-picker button').forEach(button=>button.addEventListener('click',()=>{if(button.dataset.network===state.network)return;state.network=button.dataset.network;state.view='overview';state.validatorOffset=0;select(true);}));
-$('#workspace-refresh').addEventListener('click',()=>{if(!state.busy)load();});
+$('#workspace-refresh').addEventListener('click',()=>{if(!state.busy)load(true);});
 $('#workspace-csv').addEventListener('click',()=>{if(!state.data||$('#workspace-csv').disabled)return;const url=URL.createObjectURL(new Blob([csv()],{type:'text/csv;charset=utf-8'})),link=el('a');link.href=url;link.download=`bloch-space-${state.network}-${state.view}${state.view==='analytics'?'-'+state.ranges[state.network]:''}.csv`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('#workspace-search').addEventListener('submit',event=>{event.preventDefault();const query=$('#workspace-query').value.trim();if(query)location.href=record(state.network,'auto',query);});
 window.addEventListener('popstate',()=>{const next=new URLSearchParams(location.search);state.network=configs[next.get('network')]?next.get('network'):'bitcoin';state.view=views[state.network].some(([key])=>key===next.get('view'))?next.get('view'):'overview';if(configs[state.network].ranges.includes(next.get('range')))state.ranges[state.network]=next.get('range');state.validatorOffset=state.view==='validators'&&/^(0|[1-9][0-9]{0,3})$/.test(next.get('offset')||'')&&Number(next.get('offset'))%32===0?Number(next.get('offset')):0;select(false);});

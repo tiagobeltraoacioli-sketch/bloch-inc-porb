@@ -25,7 +25,10 @@ Stake, Holders, Validators, Analytics, and Sources. Each sidebar selection
 changes the app view and URL in place. Tables in each view can be downloaded as
 CSV; analytics CSV preserves raw numeric source fields. The Bloch validator
 view pages through 32 registry indices while keeping unavailable records
-explicit. Source provenance and raw responses remain visible in every view.
+explicit. A source response is reused for up to 45 seconds when moving between
+subpages that read the same endpoint; Refresh forces a new request. The
+retrieval time remains visible. Source provenance and raw responses remain
+visible in every view.
 Dedicated legacy data pages remain at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
 They share the read-only `/api/overview` response and link each shown record
 back to the unified explorer. The Bitcoin page charts recent block transaction
