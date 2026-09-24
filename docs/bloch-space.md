@@ -45,6 +45,10 @@ Block records link to their source-reported parent when available. Transaction
 records link to the containing block, Ethereum sender and recipient, and
 allowlisted token transfer parties. Long transaction input, output, and receipt
 log lists can be expanded in bounded batches without hiding the total count.
+Successful searches, network changes, block transaction pages, and related
+record links create browser history entries. Back and Forward restore the
+network, record kind, asset, and block offset from the URL. Background overview
+refreshes do not create history entries.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source

@@ -11,7 +11,7 @@ function setTheme(theme,persist=false){
 }
 setTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
 $('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light',true));
-const state = {network:'bitcoin', overview:null, result:null, request:0};
+const state = {network:'bitcoin', overview:null, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
 const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Choose ETH, USDT or USDC for addresses.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
 const assetDecimals = {BTC:8, ETH:18, USDT:6, USDC:6, BLCH:8};
@@ -253,7 +253,15 @@ function showResult(kind,data,query,asset) {
 }
 
 function detect(query) {if(/^[0-9]+$/.test(query))return 'block';if(/^0x[0-9a-f]{40}$/i.test(query))return 'address';if(/^(bc1|[13])[a-z0-9]{20,90}$/i.test(query))return 'address';return 'tx';}
-async function search(kind,query,asset,offset=0) {
+function setHistory(params,mode){
+  if(mode==='none')return;
+  const target=`/?${params}`;
+  if(`${location.pathname}${location.search}`===target)return;
+  if(mode==='push')history.pushState(null,'',target);
+  else history.replaceState(null,'',target);
+}
+async function search(kind,query,asset,offset=0,historyMode='push') {
+  if(historyMode==='push')state.navigation++;
   const network=state.network;asset=network==='bitcoin'?'BTC':network==='bloch'?'BLCH':['ETH','USDT','USDC'].includes(asset)?asset:'ETH';const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
   message('Looking up the source record…');
   try{
@@ -270,13 +278,15 @@ async function search(kind,query,asset,offset=0) {
     if(sequence!==state.request)return;
     state.result={kind:resolved,query,asset,offset};message('');showResult(resolved,data,query,asset);
     const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);if(resolved==='block'&&offset>0)params.set('offset',String(offset));
-    history.replaceState(null,'',`/?${params}`);
+    setHistory(params,historyMode);
   }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}
 }
 
-async function switchNetwork(network,updateUrl=true) {
+async function switchNetwork(network,historyMode='push') {
   if(!titles[network])return;
+  if(historyMode==='push')state.navigation++;
   state.network=network;const sequence=++state.request;
+  state.result=null;
   for(const tab of document.querySelectorAll('[data-network]'))tab.setAttribute('aria-selected',String(tab.dataset.network===network));
   $('#network-title').textContent=titles[network];$('#search-hint').textContent=hints[network];$('#search-input').placeholder=network==='bloch'?'Script hash, transaction ID, block ID or slot':network==='ethereum'?'Ethereum address, transaction, block hash or height':'Bitcoin address, transaction, block hash or height';
   $('#search-asset').style.display=network==='ethereum'?'block':'none';
@@ -285,13 +295,26 @@ async function switchNetwork(network,updateUrl=true) {
   clear($('#holder-map'));$('#holder-map').hidden=true;
   clear($('#btc-mempool'));$('#btc-mempool').hidden=true;
   $('#result-section').hidden=true;message('');
-  if(updateUrl)history.replaceState(null,'',`/?network=${network}`);
+  setHistory(new URLSearchParams({network}),historyMode);
   try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}
 }
 
 document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
-$('#clear-result').addEventListener('click',()=>{state.result=null;$('#result-section').hidden=true;message('');history.replaceState(null,'',`/?network=${state.network}`);});
-const initial=new URLSearchParams(location.search);const network=titles[initial.get('network')]?initial.get('network'):'bitcoin';
-switchNetwork(network,false).then(()=>{if(initial.get('query')){const kind=['auto','block','tx','address'].includes(initial.get('kind'))?initial.get('kind'):'auto';$('#search-kind').value=kind;$('#search-input').value=initial.get('query');if(network==='ethereum'&&['ETH','USDT','USDC'].includes(initial.get('asset')))$('#search-asset').value=initial.get('asset');const offset=/^(0|[1-9][0-9]{0,5})$/.test(initial.get('offset')||'')?Number(initial.get('offset')):0;search(kind,initial.get('query'),$('#search-asset').value,offset);}});
-setInterval(()=>{if(!document.hidden&&!state.result)switchNetwork(state.network,false);},60000);
+$('#clear-result').addEventListener('click',()=>{state.navigation++;state.request++;state.result=null;$('#result-section').hidden=true;message('');setHistory(new URLSearchParams({network:state.network}),'push');});
+async function restoreLocation(historyMode='none'){
+  const navigation=++state.navigation;
+  const params=new URLSearchParams(location.search);
+  const network=titles[params.get('network')]?params.get('network'):'bitcoin';
+  const kind=['auto','block','tx','address'].includes(params.get('kind'))?params.get('kind'):'auto';
+  const query=params.get('query')||'';
+  const asset=network==='ethereum'&&['ETH','USDT','USDC'].includes(params.get('asset'))?params.get('asset'):'ETH';
+  const offset=/^(0|[1-9][0-9]{0,5})$/.test(params.get('offset')||'')?Number(params.get('offset')):0;
+  $('#search-kind').value=kind;$('#search-input').value=query;$('#search-asset').value=asset;
+  await switchNetwork(network,'none');
+  if(navigation!==state.navigation)return;
+  if(query)await search(kind,query,asset,offset,historyMode);
+}
+window.addEventListener('popstate',()=>restoreLocation());
+restoreLocation('replace');
+setInterval(()=>{if(!document.hidden&&!state.result)switchNetwork(state.network,'none');},60000);
