@@ -72,6 +72,14 @@ def build_once(*, workdir, cli, conf, datadir, converter, check_only=False):
         ranking["converter_sha256"] = CONVERTER_SHA256
         ranking["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         ranking["publication_status"] = "private_pending_review"
+        final_info = json.loads(_cli(cli, conf, datadir, "getblockchaininfo"))
+        if (final_info.get("chain") != "main"
+                or final_info.get("initialblockdownload") is not False
+                or type(final_info.get("blocks")) is not int
+                or final_info["blocks"] < metadata["base_height"]
+                or _cli(cli, conf, datadir, "getblockhash",
+                        str(metadata["base_height"])) != metadata["base_hash"]):
+            raise ValueError("snapshot base block changed during ranking")
         temporary_output = workdir / ".bitcoin-top64-scripts.json.tmp"
         temporary_output.write_text(json.dumps(ranking, sort_keys=True) + "\n")
         os.chmod(temporary_output, 0o600)

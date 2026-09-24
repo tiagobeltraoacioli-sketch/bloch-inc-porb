@@ -38,6 +38,15 @@ behind their node-sync gates. Run `python3 -m service.chain_node_status` from
 the authorized workstation for a fresh, read-only JSON status; it does not
 publish node data or claim that a holder ranking is ready.
 
+At approximately 10:19 UTC, the status command found Bitcoin at 783,980 of
+968,386 headers with IBD still active, and Erigon at 86.77% snapshot download
+with execution block 0. The Bitcoin snapshot job was updated on `bloch-dex`
+to repeat its canonical base-block and IBD checks after conversion and snapshot
+hashing, immediately before writing the private ranking. The installed file
+matched the local SHA-256, and a read-only `--check-only` run returned
+`waiting_for_full_validation` at block 785,954. No snapshot or ranking was
+created by that verification.
+
 Private timers now gate further work on node readiness. The Bitcoin snapshot
 job checks `initialblockdownload=false` before exporting and wrote no ranking
 while validation was in progress. On the bridge, USDT and USDC Transfer-event

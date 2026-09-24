@@ -39,6 +39,10 @@ Do not create or publish a network-wide ranking while
 `dumptxoutset <path> latest` and its official
 `contrib/utxo-tools/utxo_to_sqlite.py` to convert the snapshot. Preserve the
 RPC result, snapshot hash, converter version, and exact Bitcoin block anchor.
+The job checks the snapshot's base block again after conversion and snapshot
+hashing, immediately before writing its private result. If a reorganization
+replaces that block during processing, it writes no ranking and retries on the
+next timer run.
 Rank exact `scriptPubKey` balances from the converted SQLite database and use
 Bitcoin Core `decodescript` to obtain an address where one is defined. A
 `scriptPubKey` or address is not a wallet owner. The snapshot covers confirmed

@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from service.bitcoin_snapshot_job import build_once
@@ -42,6 +43,35 @@ class BitcoinSnapshotJobTests(unittest.TestCase):
         result = build_once(**self.args)
         self.assertEqual(result["status"], "already_built")
         cli.assert_not_called()
+
+    def test_reorg_during_conversion_prevents_private_ranking_file(self):
+        base_hash = "ab" * 32
+        chain = json.dumps({"chain": "main", "blocks": 110, "headers": 110,
+                            "initialblockdownload": False})
+        hashes = iter((base_hash, "cd" * 32))
+
+        def cli(*arguments):
+            command = arguments[-2:]
+            if command == ("getblockhash", "100"):
+                return next(hashes)
+            if arguments[-1] == "getblockchaininfo":
+                return chain
+            if "dumptxoutset" in arguments:
+                return json.dumps({"base_height": 100, "base_hash": base_hash,
+                                   "coins_written": 1})
+            raise AssertionError(arguments)
+
+        with patch("service.bitcoin_snapshot_job._cli", side_effect=cli), \
+             patch("service.bitcoin_snapshot_job.shutil.disk_usage",
+                   return_value=SimpleNamespace(free=1_000_000_000_000)), \
+             patch("service.bitcoin_snapshot_job._sha256",
+                   return_value="532bb3ce8c84d1448b930b7f9195e97ce604da713c5d5e58c00ceff27490e9b9"), \
+             patch("service.bitcoin_snapshot_job.subprocess.run"), \
+             patch("service.bitcoin_snapshot_job.rank_snapshot",
+                   return_value={"base_hash": base_hash, "base_height": 100}):
+            with self.assertRaisesRegex(ValueError, "changed during ranking"):
+                build_once(**self.args)
+        self.assertFalse((self.workdir / "bitcoin-top64-scripts.json").exists())
 
 
 if __name__ == "__main__":
