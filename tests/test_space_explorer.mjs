@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {handleExplore, bitcoinTransactionFacts, ethereumReceiptFacts} from '../space/chain/explorer.js';
+import {handleExplore, bitcoinTransactionFacts, ethereumReceiptFacts, blochTransactionPosition} from '../space/chain/explorer.js';
 
 const hash = 'a'.repeat(64);
 const block = 'b'.repeat(64);
@@ -105,4 +105,17 @@ test('Bloch overview falls back to the verified indexer when the network head is
   assert.equal(response.body.head.slot,127);
   assert.equal(response.body.head.block_id,block);
   assert.equal(response.body.corroboration.level,'indexer verified snapshot');
+});
+
+test('Bloch finality comparison distinguishes a matched tip from moving snapshots', () => {
+  const tx={height:90,as_of_height:100,as_of_slot:128,chain_tip:block};
+  const health={finalized_height:95,indexed_to_height:100,indexed_to_slot:128,chain_tip:block};
+  const matched=blochTransactionPosition(tx,health);
+  assert.equal(matched.indexed_depth_blocks,11);
+  assert.equal(matched.finality_relation,'at_or_below_reported_checkpoint');
+  assert.equal(matched.comparison_scope,'matched_indexer_tip');
+  const moving=blochTransactionPosition(tx,{...health,indexed_to_height:101});
+  assert.equal(moving.comparison_scope,'separate_indexer_snapshots');
+  assert.equal(blochTransactionPosition(tx,null).finality_relation,'unavailable');
+  assert.throws(()=>blochTransactionPosition({...tx,height:101},health),/invalid_source_response/);
 });

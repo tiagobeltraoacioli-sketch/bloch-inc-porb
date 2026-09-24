@@ -11,7 +11,7 @@ adapters are imported directly for public address and script lookups.
 | --- | --- | --- | --- |
 | Bitcoin | Blockstream Esplora best-chain blocks, mempool, fee estimates | Esplora block, transaction, outspend facts, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
 | Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price | JSON-RPC block and receipt; exact execution gas fee, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
-| Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
+| Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts with indexed depth and finalized-height comparison | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
 
 The API is read-only and validates network, record type, identifier, asset, and
 parameter count before a source call. Responses are capped at 3 MiB, have an
@@ -46,6 +46,11 @@ transfers come only from successful receipt logs emitted by fixed Ethereum
 mainnet USDT and USDC contracts, with exact base-unit amounts and at most 64
 events shown per transaction. Other contract calls and token approvals are
 not represented as transfers.
+Bloch transaction depth is calculated from the receipt's own indexed height.
+The finalized height comes from a separate indexer health call. The explorer
+labels whether the transaction receipt and health used the same chain tip,
+height and slot; a separate-snapshot comparison is not presented as a
+transaction-specific finality proof.
 
 ## Dedicated Graphus nodes
 

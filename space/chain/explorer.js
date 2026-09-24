@@ -239,9 +239,38 @@ async function blochBlock(fetcher, query, now, offset = 0) {
 }
 
 async function blochTx(fetcher, query, now) {
-  const transaction = await json(fetcher, `${BLOCH}/indexer/tx/${query}`);
+  const [transaction, healthResult] = await Promise.all([
+    json(fetcher, `${BLOCH}/indexer/tx/${query}`),
+    json(fetcher, `${BLOCH}/indexer/health`).catch(() => null),
+  ]);
   if (transaction?.txid !== query) throw new Error('invalid_source_response');
-  return {...source('bloch', 'Bloch verified historical indexer', now(), 'Exact values are base-unit decimal strings; input references do not prove ownership.'), transaction};
+  const health = healthResult?.ok ? healthResult : null;
+  return {...source('bloch', 'Bloch verified historical indexer', now(), 'Transaction and health may be separate indexer snapshots; finality is shown with the comparison scope. Input references do not prove ownership.'), transaction, position:blochTransactionPosition(transaction, health)};
+}
+
+export function blochTransactionPosition(tx, health) {
+  const height = safeNumber(tx.height);
+  const indexedHeight = safeNumber(tx.as_of_height);
+  const indexedSlot = safeNumber(tx.as_of_slot);
+  if (height > indexedHeight || !isHex64(tx.chain_tip)) throw new Error('invalid_source_response');
+  const result = {
+    indexed_depth_blocks:indexedHeight - height + 1,
+    indexed_to_height:indexedHeight,
+    indexed_to_slot:indexedSlot,
+    indexed_chain_tip:tx.chain_tip,
+    finalized_height:null,
+    finality_relation:'unavailable',
+    comparison_scope:'transaction_snapshot_only',
+  };
+  if (!health || !Number.isSafeInteger(health.finalized_height) || health.finalized_height < 0 ||
+      !Number.isSafeInteger(health.indexed_to_height) || health.finalized_height > health.indexed_to_height ||
+      !Number.isSafeInteger(health.indexed_to_slot) || health.indexed_to_slot < health.indexed_to_height ||
+      !isHex64(health.chain_tip)) return result;
+  result.finalized_height = health.finalized_height;
+  result.finality_relation = height <= health.finalized_height ? 'at_or_below_reported_checkpoint' : 'above_reported_checkpoint';
+  result.comparison_scope = health.indexed_to_height === indexedHeight && health.indexed_to_slot === indexedSlot &&
+    health.chain_tip.toLowerCase() === tx.chain_tip.toLowerCase() ? 'matched_indexer_tip' : 'separate_indexer_snapshots';
+  return result;
 }
 
 async function address(fetcher, env, network, asset, query, now) {
