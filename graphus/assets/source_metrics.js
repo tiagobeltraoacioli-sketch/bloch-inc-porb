@@ -122,20 +122,45 @@
     }
     const groups={incoming:{count:0,base_units:'0'},outgoing:{count:0,base_units:'0'},self:{count:0,base_units:'0'}};
     const totals={incoming:0n,outgoing:0n,self:0n};
-    const peers=new Set();
+    const peers=new Map();
+    const rootAddress=data.address.toLowerCase();
     for (const event of events) {
       if (!Object.hasOwn(groups,event?.direction)) throw new Error('Invalid token direction');
-      totals[event.direction]+=amount(event.amount_base_units);
+      const value=amount(event.amount_base_units);
+      totals[event.direction]+=value;
       groups[event.direction].count++;
-      if(event.from&&event.from.toLowerCase()!==data.address.toLowerCase())peers.add(event.from.toLowerCase());
-      if(event.to&&event.to.toLowerCase()!==data.address.toLowerCase())peers.add(event.to.toLowerCase());
+      const from=event.from?.toLowerCase(),to=event.to?.toLowerCase();
+      if(typeof from!=='string'||typeof to!=='string')throw new Error('Invalid token peer');
+      if(event.direction==='self'){
+        if(from!==rootAddress||to!==rootAddress)throw new Error('Invalid self log');
+        continue;
+      }
+      if((event.direction==='incoming'&&to!==rootAddress)
+          ||(event.direction==='outgoing'&&from!==rootAddress))
+        throw new Error('Invalid token direction');
+      const peer=event.direction==='incoming'?from:to;
+      if(peer===rootAddress)throw new Error('Invalid token peer');
+      if(!peers.has(peer))peers.set(peer,{address:peer,event_count:0,
+        incoming:{count:0,base_units:'0'},outgoing:{count:0,base_units:'0'},
+        first_block:null,last_block:null});
+      const row=peers.get(peer);
+      row.event_count++;
+      const direction=row[event.direction];
+      direction.count++;
+      direction.base_units=(BigInt(direction.base_units)+value).toString();
+      if(Number.isSafeInteger(event.block_number)){
+        row.first_block=row.first_block===null?event.block_number:Math.min(row.first_block,event.block_number);
+        row.last_block=row.last_block===null?event.block_number:Math.max(row.last_block,event.block_number);
+      }
     }
     for(const direction of Object.keys(groups))groups[direction].base_units=totals[direction].toString();
     const block_activity=tokenBlockActivity(events,data.tokenObservation?.block_window);
+    const peer_activity=[...peers.values()].sort((left,right)=>right.event_count-left.event_count
+      ||(left.address<right.address?-1:left.address>right.address?1:0));
     return {kind:'erc20_transfer_logs',asset,source,
       returned_events:events.length,observed_other_identifiers:peers.size,
       block_range:data.tokenObservation?.block_window||blockRange(events.map(event=>event.block_number)),
-      groups,block_activity,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
+      groups,block_activity,peer_activity,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
       caveat:'Only returned Transfer logs are counted. These amounts are not a complete transaction history or a balance reconciliation.'};
   }
 

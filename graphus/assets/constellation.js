@@ -6,15 +6,19 @@ let realAddressTargets=[];
 let realTransactionTargets=[];
 let selectedRealTransactionId=null;
 let selectedRealEventId=null;
+let selectedRealPeerAddress=null;
 let selectedTokenBlockBucket=null;
 let realGraphViewCache=null;
 let realKeyboardIndex=0;
 function getRealGraphView(data){
   if(realGraphViewCache?.data===data&&realGraphViewCache.eventId===selectedRealEventId
-    &&realGraphViewCache.transactionId===selectedRealTransactionId)return realGraphViewCache.view;
+    &&realGraphViewCache.transactionId===selectedRealTransactionId
+    &&realGraphViewCache.peerAddress===selectedRealPeerAddress)return realGraphViewCache.view;
   const view=GraphusSourceGraphView.selectVisibleSourceNodes(data,{
-    selectedEventId:selectedRealEventId,selectedTransactionId:selectedRealTransactionId});
-  realGraphViewCache={data,eventId:selectedRealEventId,transactionId:selectedRealTransactionId,view};
+    selectedEventId:selectedRealEventId,selectedTransactionId:selectedRealTransactionId,
+    selectedAddress:selectedRealPeerAddress});
+  realGraphViewCache={data,eventId:selectedRealEventId,transactionId:selectedRealTransactionId,
+    peerAddress:selectedRealPeerAddress,view};
   return view;
 }
 const syntheticCanvasHelp=document.getElementById('constellation-help').textContent;
@@ -81,6 +85,7 @@ function setDataMode(mode,detail){
   if(mode==='synthetic'){
     selectedRealTransactionId=null;
     selectedRealEventId=null;
+    selectedRealPeerAddress=null;
     selectedTokenBlockBucket=null;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
@@ -182,6 +187,28 @@ function renderSourceMetrics(data){
     }
     timeline.append(title,description,controls);sourceMetricsPanel.append(timeline);
   }
+  if(metrics.kind==='erc20_transfer_logs'&&metrics.peer_activity.length){
+    const panel=document.createElement('div');panel.className='source-peer-ledger';
+    const title=document.createElement('h4');title.textContent='Observed addresses in returned logs';
+    const description=document.createElement('p');
+    description.textContent='Ordered by returned log count, not risk. Select an address to filter its logs and bring its point into view. Amounts are separate directions, not a balance or owner attribution.';
+    const list=document.createElement('div');list.className='source-peer-ledger-list';
+    const all=document.createElement('button');all.type='button';all.textContent='All observed addresses';
+    all.setAttribute('aria-pressed',String(!selectedRealPeerAddress));
+    all.addEventListener('click',()=>filterTokenPeer(null));list.append(all);
+    for(const peer of metrics.peer_activity){
+      const button=document.createElement('button');button.type='button';
+      button.dataset.peerAddress=peer.address;
+      button.setAttribute('aria-pressed',String(peer.address===selectedRealPeerAddress));
+      const address=document.createElement('strong');address.textContent=peer.address;
+      const count=document.createElement('span');count.textContent=`${peer.event_count} returned ${peer.event_count===1?'log':'logs'} · blocks ${peer.first_block}–${peer.last_block}`;
+      const incoming=document.createElement('small');incoming.textContent=`To queried address ${peer.incoming.count}: ${formatObservedBalance(peer.incoming.base_units,data.asset,6)}`;
+      const outgoing=document.createElement('small');outgoing.textContent=`From queried address ${peer.outgoing.count}: ${formatObservedBalance(peer.outgoing.base_units,data.asset,6)}`;
+      button.append(address,count,incoming,outgoing);
+      button.addEventListener('click',()=>filterTokenPeer(peer.address));list.append(button);
+    }
+    panel.append(title,description,list);sourceMetricsPanel.append(panel);
+  }
   const provenance=document.createElement('p');
   provenance.textContent=`Source: ${metrics.source}. Blocks: ${metrics.block_range?`${metrics.block_range.from}–${metrics.block_range.to}`:'not supplied'}. Coverage: ${metrics.coverage}. ${metrics.caveat}`;
   sourceMetricsPanel.append(provenance);
@@ -189,6 +216,13 @@ function renderSourceMetrics(data){
 }
 function filterTokenBlockBucket(bucket){
   selectedTokenBlockBucket=bucket;
+  selectedRealEventId=null;
+  liveTransactionDetail.hidden=true;
+  if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
+  draw();
+}
+function filterTokenPeer(address){
+  selectedRealPeerAddress=address;
   selectedRealEventId=null;
   liveTransactionDetail.hidden=true;
   if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
@@ -203,11 +237,12 @@ function renderLiveSourceRecords(data){
   if(activity){
     const heading=document.createElement('p');
     const window=data.tokenObservation?.block_window;
-    const shown=selectedTokenBlockBucket
-      ?activity.events.filter(event=>event.block_number>=selectedTokenBlockBucket.from&&event.block_number<=selectedTokenBlockBucket.to)
-      :activity.events;
+    const shown=activity.events.filter(event=>(!selectedTokenBlockBucket
+      ||event.block_number>=selectedTokenBlockBucket.from&&event.block_number<=selectedTokenBlockBucket.to)
+      &&(!selectedRealPeerAddress||event.from?.toLowerCase()===selectedRealPeerAddress
+        ||event.to?.toLowerCase()===selectedRealPeerAddress));
     heading.className='live-source-record';
-    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${selectedTokenBlockBucket?`Showing ${shown.length} in selected range ${selectedTokenBlockBucket.from}–${selectedTokenBlockBucket.to}. `:''}The balance above was queried separately. Peer balances are unknown.`;
+    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${selectedTokenBlockBucket||selectedRealPeerAddress?`Showing ${shown.length} for the selected ${selectedTokenBlockBucket?'block range':''}${selectedTokenBlockBucket&&selectedRealPeerAddress?' and ':''}${selectedRealPeerAddress?'address':''}. `:''}The balance above was queried separately. Peer balances are unknown.`;
     list.append(heading);
     for(const event of shown.slice().reverse()){
       const row=document.createElement('button');row.type='button';row.className='live-source-record';
@@ -217,7 +252,7 @@ function renderLiveSourceRecords(data){
       row.addEventListener('click',()=>selectRealTokenEvent(event.event_id));
       list.append(row);
     }
-    if(!shown.length){const empty=document.createElement('p');empty.className='live-source-record';empty.textContent='No Transfer logs were returned in this selected range.';list.append(empty);}
+    if(!shown.length){const empty=document.createElement('p');empty.className='live-source-record';empty.textContent='No Transfer logs were returned for these selected filters.';list.append(empty);}
   }else{
     (data.nodes||[]).forEach(node=>{
       const actionable=(node.kind==='address'&&node.address)||node.kind==='transaction';
@@ -313,7 +348,9 @@ function combineTokenActivity(wallet,activity){
   if(activity.status!=='source-reported'||activity.network!==wallet.network||activity.asset!==wallet.asset
     ||activity.address?.toLowerCase()!==wallet.address?.toLowerCase()
     ||!Array.isArray(activity.nodes)||!Array.isArray(activity.edges)
-    ||!Array.isArray(activity.activity?.events)||activity.edges.length>256||activity.nodes.length>513){
+    ||!Array.isArray(activity.activity?.events)
+    ||activity.activity.event_count!==activity.activity.events.length
+    ||activity.activity.events.length>256||activity.edges.length>256||activity.nodes.length>513){
     throw new Error('inconsistent_token_activity');
   }
   const anchors=GraphusSourceMetrics.compareTokenAnchors(wallet,activity);
@@ -334,6 +371,7 @@ async function loadLiveAddress(){
   const requestId=++realRequest;
   selectedRealTransactionId=null;
   selectedRealEventId=null;
+  selectedRealPeerAddress=null;
   selectedTokenBlockBucket=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
@@ -741,11 +779,14 @@ function drawRealObservation(observation){
     positions.set(node.id,{x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius});
   });
   const focusIds=new Set(nodes.filter(node=>sameAddress(node.address)).map(node=>node.id));
+  const selectedPeerIds=new Set(nodes.filter(node=>selectedRealPeerAddress
+    &&node.address?.toLowerCase()===selectedRealPeerAddress).map(node=>node.id));
   for(const edge of observation.edges||[]){
     const a=focusIds.has(edge.from)?center:positions.get(edge.from);
     const b=focusIds.has(edge.to)?center:positions.get(edge.to);
     if(a&&b&&a!==b)arrow(a,b,(selectedRealTransactionId&&(edge.from===selectedRealTransactionId||edge.to===selectedRealTransactionId))
-      ||(selectedRealEventId&&edge.event_id===selectedRealEventId)?'#e9ffb0':'#a9bba6');
+      ||(selectedRealEventId&&edge.event_id===selectedRealEventId)
+      ||(selectedRealPeerAddress&&(selectedPeerIds.has(edge.from)||selectedPeerIds.has(edge.to)))?'#e9ffb0':'#a9bba6');
   }
   satellites.forEach(node=>{
     const p=positions.get(node.id);
@@ -762,6 +803,10 @@ function drawRealObservation(observation){
       const radius=node.balance?.base_units?balanceSize(node.balance.base_units,observation.asset):5;
       if(node.balance?.base_units)star(p.x,p.y,radius,colors[observation.asset?.toLowerCase()]||'#baff28',.8);
       else {context.beginPath();context.arc(p.x,p.y,radius,0,Math.PI*2);context.strokeStyle='#aab5a7';context.lineWidth=1.4;context.stroke();}
+      if(selectedPeerIds.has(node.id)){
+        context.beginPath();context.arc(p.x,p.y,radius+6,0,Math.PI*2);
+        context.strokeStyle='#e9ffb0';context.lineWidth=2;context.stroke();
+      }
       realAddressTargets.push({address:node.address,p,radius});
     }
   });

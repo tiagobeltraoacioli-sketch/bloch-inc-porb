@@ -70,6 +70,14 @@ is not a risk ranking. The scrollable source-record list keeps every returned
 token log and source node; the JSON export keeps all returned nodes, edges, and
 token logs, including those omitted from the canvas.
 
+For a queried USDT or USDC address, the metrics panel also contains a
+scrollable ledger of every other address seen in returned `Transfer` logs. It
+orders them by observed log count and shows separate exact incoming and
+outgoing sums relative to the queried address, counts, and first and last observed blocks. Selecting an address
+filters the log list and brings its point and returned links into view. This
+is a bounded address-level observation, not a person, owner, balance, or AML
+score. The same peer breakdown is included in the JSON export.
+
 Any source-reported Constellation query can be downloaded as a versioned
 `graphus_public_chain_observation` JSON file. The browser builds it from the
 currently loaded bounded response. It includes the queried identifier, exact

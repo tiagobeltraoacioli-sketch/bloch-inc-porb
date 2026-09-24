@@ -73,6 +73,26 @@ test('ERC-20 self logs are counted once and excluded from peer count',()=>{
   assert.equal(result.block_activity.buckets.find(bucket=>bucket.from===13).groups.self.base_units,'50');
 });
 
+test('ERC-20 peer ledger separates exact incoming and outgoing observations',()=>{
+  const data={asset:'USDT',address:'0xroot',nodes:[],edges:[],
+    tokenActivity:{events:[
+      {direction:'incoming',from:'0xpeer',to:'0xroot',amount_base_units:'9007199254740993',block_number:20},
+      {direction:'outgoing',from:'0xroot',to:'0xpeer',amount_base_units:'7',block_number:23},
+      {direction:'self',from:'0xroot',to:'0xroot',amount_base_units:'3',block_number:24},
+    ]},tokenObservation:{block_window:{from:20,to:24}},
+  };
+  const result=summarizeObservation(data);
+  assert.equal(result.peer_activity.length,1);
+  assert.deepEqual(result.peer_activity[0],{
+    address:'0xpeer',event_count:2,
+    incoming:{count:1,base_units:'9007199254740993'},
+    outgoing:{count:1,base_units:'7'},first_block:20,last_block:23,
+  });
+  assert.equal(result.groups.self.base_units,'3');
+  data.tokenActivity.events[0].to='0xother';
+  assert.throws(()=>summarizeObservation(data),/Invalid token direction/);
+});
+
 test('ERC-20 block timeline preserves exact amounts, empty windows, and bounded scope',()=>{
   const data={asset:'USDT',address:'0xroot',nodes:[],edges:[],
     tokenActivity:{events:[

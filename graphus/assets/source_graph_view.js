@@ -1,6 +1,6 @@
 /* Canvas selection from a bounded source response. Rank is observed record count, never risk. */
 (function(root){
-  function selectVisibleSourceNodes(data,{selectedEventId=null,selectedTransactionId=null,maxPoints=36}={}){
+  function selectVisibleSourceNodes(data,{selectedEventId=null,selectedTransactionId=null,selectedAddress=null,maxPoints=36}={}){
     if(!data||typeof data.address!=='string'||!Array.isArray(data.nodes)||!Array.isArray(data.edges)
         ||data.nodes.length>513||data.edges.length>512
         ||!Number.isSafeInteger(maxPoints)||maxPoints<1||maxPoints>36){
@@ -19,6 +19,11 @@
     const degree=new Map([...candidates.keys()].map(id=>[id,0]));
     const priority=new Set();
     if(selectedTransactionId&&candidates.has(selectedTransactionId))priority.add(selectedTransactionId);
+    if(accountStyle&&typeof selectedAddress==='string'){
+      for(const node of candidates.values()){
+        if(node.address?.toLowerCase()===selectedAddress.toLowerCase())priority.add(node.id);
+      }
+    }
     for(const edge of data.edges){
       for(const id of new Set([edge?.from,edge?.to])){
         if(degree.has(id))degree.set(id,degree.get(id)+1);

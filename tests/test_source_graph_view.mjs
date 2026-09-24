@@ -22,6 +22,8 @@ test('Token canvas ranks by returned log count and always includes the selected 
   assert.equal(initial.visible.some(node=>node.id==='peer:40'),false);
   const selected=selectVisibleSourceNodes(data,{selectedEventId:'event:40:0'});
   assert.equal(selected.visible[0].id,'peer:40');
+  const selectedPeer=selectVisibleSourceNodes(data,{selectedAddress:peers[40].toUpperCase().replace('0X','0x')});
+  assert.equal(selectedPeer.visible[0].id,'peer:40');
   assert.equal(selected.selection_rule,'returned_log_count');
   assert.equal(selected.visible.some(node=>node.id==='root'),false);
 });

@@ -32,3 +32,11 @@
 .source-block-timeline-bar i{display:block;height:100%;background:#baff28}
 .live-export[hidden]{display:none}
 body[data-constellation-mode="source-reported"] #transaction-list{max-height:430px;overflow:auto;overscroll-behavior:contain}
+.source-peer-ledger{margin-top:1rem;padding-top:.85rem;border-top:1px solid #40503f}
+.source-peer-ledger h4{margin:0;color:#e9f5e2;font-size:.78rem}
+.source-peer-ledger>p{margin:.4rem 0 .7rem;color:#bbd0b1;font-size:.67rem;line-height:1.5}
+.source-peer-ledger-list{display:grid;gap:.35rem;max-height:340px;overflow:auto;overscroll-behavior:contain}
+.source-peer-ledger-list button{display:grid;gap:.2rem;min-width:0;text-align:left;padding:.5rem;border:1px solid #40503f;background:#1b2b19;color:#eaf4e4;cursor:pointer;font:.64rem var(--mono);overflow-wrap:anywhere}
+.source-peer-ledger-list button:hover,.source-peer-ledger-list button:focus-visible,.source-peer-ledger-list button[aria-pressed="true"]{border-color:#baff28;color:#baff28}
+.source-peer-ledger-list button strong{font-size:.66rem}
+.source-peer-ledger-list button small{font-size:.6rem;color:#aac39e;line-height:1.35}
