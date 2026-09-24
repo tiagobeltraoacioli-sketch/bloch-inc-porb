@@ -1,0 +1,25 @@
+[Unit]
+Description=Graphus Bitcoin Core mainnet state source
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=graphusbtc
+Group=graphusbtc
+ExecStart=/opt/graphus-bitcoin/31.1/bin/bitcoind -conf=/etc/graphus-bitcoin/bitcoin.conf -datadir=/var/lib/graphus-bitcoin
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=300
+CPUQuota=800%
+MemoryMax=32G
+IOWeight=200
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/graphus-bitcoin
+
+[Install]
+WantedBy=multi-user.target

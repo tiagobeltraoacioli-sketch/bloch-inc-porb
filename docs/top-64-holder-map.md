@@ -7,3 +7,16 @@ The page cannot presently say these are the network's 64 largest holders. The [B
 The private holder-candidate index can rank saved successful lookups for all five assets, up to 64 results per request. BTC and BLCH samples combine different retrieval times. Ethereum candidates can be compared only at the same source-reported finalized block hash. The private index is not connected to the public Pages site and never claims complete network discovery.
 
 A network-wide top-64 release needs complete candidate discovery at a declared chain snapshot, exact same-snapshot balances, reorg handling, source reconciliation, and an explicit coverage ledger. For BTC and BLCH this means an indexed UTXO set and a defined script/address grouping rule. For ETH it means account-state enumeration. For each ERC-20 it means contract-specific holder discovery and same-block `balanceOf` reads. Even then the ranked objects are addresses or script hashes, not beneficial owners or multi-address wallets.
+
+## Own-node index work
+
+Dedicated Bitcoin Core and Erigon mainnet nodes started initial sync on
+2026-09-24 UTC; see `docs/infrastructure.md`. This changes the available data
+source, but does not yet change the public map's sample-only coverage claim.
+`service/bitcoin_utxo_ranking.py` can rank all confirmed Bitcoin output scripts
+from a complete Bitcoin Core UTXO snapshot converted by the official SQLite
+utility. It rejects an incomplete node, a mismatched snapshot anchor, and a
+partial conversion. The rank unit is an exact output script, with an address
+only where Bitcoin Core defines one; it is not a ranking of persons or all
+addresses controlled by a wallet. The other four assets still need complete
+indexing and same-anchor balance validation before a global top-64 view.

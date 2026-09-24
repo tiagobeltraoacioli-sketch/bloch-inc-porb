@@ -6,6 +6,26 @@
 | `bloch-dex` | BI-PoRB private data node | 32 vCPU, ~125 GiB RAM, ~3 TB disk | Official-list refresh and bounded Bloch indexer probe. No inbound service port. |
 | `bloch-bridge` | Graphus graph/ML/ZK worker | 32 vCPU, ~125 GiB RAM, ~3 TB disk | Isolated code and state workspace; synthetic validation only until governed labels and feature data exist. No inbound service port. |
 
+## Chain node deployment — 2026-09-24
+
+The two dedicated hosts now also carry isolated chain state sources for the
+requested holder index. On `bloch-dex`, the verified official Bitcoin Core 31.1
+binary runs as `graphusbtc` through `graphus-bitcoind.service`, limited to eight
+CPU cores and 32 GB RAM. Its 100 GB prune target retains current UTXO state.
+Its RPC listens only on `127.0.0.1:8332`; BI-PoRB timers remained active after
+deployment. On `bloch-bridge`, the pinned Erigon v3.6.1 image runs with embedded
+Caplin, limited to 16 CPU cores and 48 GB RAM. Its RPC and private interfaces
+listen only on loopback. Both nodes were in initial sync at last inspection;
+neither is yet a source for a complete holder ranking. See `ops/bitcoin` and
+`ops/ethereum` for the deployed configuration and progress checks.
+
+The previous planning allocation below predates this deployment. Actual disk
+usage and bandwidth must be measured during sync and before reserving space for
+Bloch state, token-event indexes, or ML data. Do not treat either full node as
+an archive node, a full holder index, or a public API. Node completion,
+snapshot anchoring, complete candidate discovery, and ranking validation are
+separate milestones.
+
 The DEX and Bridge hosts were inspected before reassignment. Neither had its planned application service running; L2 had its container runtime installed. Preserve the previous SSH aliases as an audit trail. New service accounts use no fleet SSH private key. The deployments must leave SSH and the host firewall unchanged.
 
 ## Data node
