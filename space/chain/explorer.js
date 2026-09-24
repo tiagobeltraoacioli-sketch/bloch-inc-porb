@@ -222,16 +222,16 @@ async function ethereumTx(fetcher, env, query, now) {
   const endpoint = ethereumEndpoint(env);
   const transaction = await rpcResult(fetcher, endpoint, 'eth_getTransactionByHash', [query], true);
   if (transaction == null) throw new Error('not_found');
-  const [receiptResult, finalized, latest] = await Promise.all([
+  const [receiptResult, finalized, latestHeight] = await Promise.all([
     rpcResult(fetcher, endpoint, 'eth_getTransactionReceipt', [query], true).then(value => ({value, unavailable:false})).catch(() => ({value:null, unavailable:true})),
     rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]).catch(() => null),
-    rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['latest', false]).catch(() => null),
+    rpc(fetcher, endpoint, 'eth_blockNumber', []).catch(() => null),
   ]);
   if (transaction?.hash?.toLowerCase() !== query.toLowerCase()) throw new Error('invalid_source_response');
   const receipt = receiptResult.value;
   const receiptStatus = receiptResult.unavailable ? 'source_unavailable' : receipt == null ?
     transaction.blockNumber == null ? 'pending' : 'missing' : ethereumReceiptMatches(transaction, receipt) ? 'available' : 'inconsistent';
-  const position = ethereumTransactionPosition(transaction, receiptStatus, finalized, latest);
+  const position = ethereumTransactionPosition(transaction, receiptStatus, finalized, latestHeight);
   return {
     ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Receipt availability, execution status and finality are separate. Latest and finalized heights are separate source snapshots.'),
     transaction, receipt, receipt_status:receiptStatus, position, finalized_height:position.finalized_height,
@@ -248,12 +248,15 @@ function ethereumReceiptMatches(tx, receipt) {
   } catch { return false; }
 }
 
-export function ethereumTransactionPosition(tx, receiptStatus, finalized, latest) {
+export function ethereumTransactionPosition(tx, receiptStatus, finalized, latestHeight) {
   const height = block => {
     try { return isHex64(block?.hash) ? safeNumber(quantity(block.number)) : null; }
     catch { return null; }
   };
-  const finalizedHeight = height(finalized), headHeight = height(latest);
+  const finalizedHeight = height(finalized);
+  let headHeight = null;
+  try { if (latestHeight != null) headHeight = safeNumber(quantity(latestHeight)); }
+  catch { /* An invalid head height cannot establish confirmation depth. */ }
   let transactionHeight = null;
   try { if (tx.blockNumber != null) transactionHeight = safeNumber(quantity(tx.blockNumber)); }
   catch { /* An invalid height cannot establish position. */ }

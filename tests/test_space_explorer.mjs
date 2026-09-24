@@ -41,8 +41,7 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
   const methods=[];
   const fetcher=async (_input,init) => {
     const request=JSON.parse(init.body);methods.push(request.method);
-    const result=request.method==='eth_getBlockByNumber'?
-      request.params[0]==='latest'?{number:'0x12',hash:`0x${hash}`}:{number:'0x10',hash:`0x${block}`}:
+    const result=request.method==='eth_blockNumber'?'0x12':request.method==='eth_getBlockByNumber'?{number:'0x10',hash:`0x${block}`}:
       {eth_getTransactionByHash:{hash:`0x${hash}`,value:'0x0',blockNumber:'0x11',blockHash:`0x${block}`},
         eth_getTransactionReceipt:{transactionHash:`0x${hash}`,blockHash:`0x${block}`,blockNumber:'0x11',status:'0x1',gasUsed:'0x5208'}}[request.method];
     return answer({jsonrpc:'2.0',id:1,result});
@@ -55,7 +54,7 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
   assert.equal(response.body.finalized_height,16);
   assert.equal(response.body.position.confirmations,2);
   assert.equal(response.body.position.finality_relation,'above_reported_checkpoint');
-  assert.deepEqual(methods.sort(),['eth_getBlockByNumber','eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
+  assert.deepEqual(methods.sort(),['eth_blockNumber','eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
 });
 
 test('Ethereum distinguishes pending receipts, source failure and mismatched block identity', async () => {
@@ -66,7 +65,7 @@ test('Ethereum distinguishes pending receipts, source failure and mismatched blo
     fetcher:async (_input,init) => {
       const request=JSON.parse(init.body);
       if(request.method==='eth_getTransactionReceipt'&&failReceipt)throw new Error('timeout');
-      const result=request.method==='eth_getTransactionByHash'?tx:request.method==='eth_getTransactionReceipt'?receipt:
+      const result=request.method==='eth_getTransactionByHash'?tx:request.method==='eth_getTransactionReceipt'?receipt:request.method==='eth_blockNumber'?'0x12':
         {number:'0x12',hash:`0x${block}`};
       return answer({jsonrpc:'2.0',id:1,result});
     },

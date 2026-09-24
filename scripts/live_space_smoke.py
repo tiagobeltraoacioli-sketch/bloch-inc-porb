@@ -47,7 +47,8 @@ for network in ("bitcoin", "ethereum", "bloch"):
         assert transaction["facts"]["fee_rate_sat_vb"] is not None
         if transaction["facts"]["head_height"] is not None and transaction["transaction"]["status"]["confirmed"]:
             assert transaction["facts"]["confirmations"] == transaction["facts"]["head_height"] - transaction["transaction"]["status"]["block_height"] + 1
-    if network == "ethereum" and transaction["receipt_status"] == "available":
+    if network == "ethereum":
+        assert transaction["receipt_status"] == "available"
         receipt = transaction["receipt"]
         assert receipt["transactionHash"].lower() == transaction["transaction"]["hash"].lower()
         assert receipt["blockHash"].lower() == transaction["transaction"]["blockHash"].lower()
