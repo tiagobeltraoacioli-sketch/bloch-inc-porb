@@ -1,22 +1,105 @@
 const canvas = document.getElementById('evidence-constellation');
 const context = canvas.getContext('2d');
+let realObservation=null;
+let realRequest=0;
 const sourceStatus = document.createElement('details');
 sourceStatus.className = 'source-status';
-sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>5 assets · public map synthetic</span></summary>
+sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>synthetic map · optional live lookup</span></summary>
   <div class="source-status-body">
-    <p>Search on this page uses generated wallet examples only. No live wallet lookup, transaction feed, model prediction or AML score is available.</p>
-    <div class="source-status-scroll"><table><caption>Internal research inputs by initial asset; none are served as public wallet data</caption><thead><tr><th scope="col">Asset</th><th scope="col">Current internal input</th><th scope="col">Public map</th></tr></thead><tbody>
-      <tr><th scope="row">BTC</th><td>Bounded private block sample; offline parser</td><td>Synthetic</td></tr>
-      <tr><th scope="row">ETH</th><td>Bounded private finalized-block sample; offline parser</td><td>Synthetic</td></tr>
-      <tr><th scope="row">USDT · ERC-20</th><td>Events in bounded private Ethereum sample</td><td>Synthetic</td></tr>
-      <tr><th scope="row">USDC · ERC-20</th><td>Events in bounded private Ethereum sample</td><td>Synthetic</td></tr>
-      <tr><th scope="row">BLCH</th><td>Bounded private finalized sample; local query index</td><td>Synthetic</td></tr>
+    <p>The default constellation uses generated wallet examples. Mainnet address lookup reports public source facts only when its source responds. It does not identify owners, produce model predictions, or reveal AML scores.</p>
+    <div class="source-status-scroll"><table><caption>Data availability by asset</caption><thead><tr><th scope="col">Asset</th><th scope="col">Research input</th><th scope="col">Address lookup</th></tr></thead><tbody>
+      <tr><th scope="row">BTC</th><td>Bounded private block sample</td><td>Esplora source reported</td></tr>
+      <tr><th scope="row">ETH</th><td>Bounded private finalized-block sample</td><td>Configured RPC source reported</td></tr>
+      <tr><th scope="row">USDT · ERC-20</th><td>Bounded Ethereum event sample</td><td>Configured RPC source reported</td></tr>
+      <tr><th scope="row">USDC · ERC-20</th><td>Bounded Ethereum event sample</td><td>Configured RPC source reported</td></tr>
+      <tr><th scope="row">BLCH</th><td>Bounded private finalized sample</td><td>Unavailable pending complete state source</td></tr>
     </tbody></table></div>
     <p>Sampled records do not establish network history coverage or AML effectiveness. <a href="daas.html">Read the data product status ↗</a></p>
   </div>`;
 document.getElementById('wallet-search-status').after(sourceStatus);
+const liveButton=document.createElement('button');
+liveButton.type='button';liveButton.id='load-live-address';liveButton.textContent='Load public-chain address';
+document.querySelector('.constellation-controls').append(liveButton);
+function setDataMode(mode,detail){
+  const status=document.getElementById('constellation-data-status');
+  status.dataset.mode=mode;
+  document.body.dataset.constellationMode=mode;
+  document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':'Synthetic preview';
+  document.getElementById('constellation-data-detail').textContent=detail;
+  document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?'GRAPHUS / PUBLIC-CHAIN ADDRESS':'GRAPHUS / SYNTHETIC WALLETS';
+  document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
+  if(mode==='synthetic'){
+    document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
+    canvas.setAttribute('aria-label','Synthetic wallet constellation. Use arrow keys to choose a wallet, then Enter to inspect it.');
+  }
+}
+function formatObservedBalance(baseUnits,asset,decimals){
+  if(!/^\d+$/.test(baseUnits||''))return 'Unavailable';
+  const precision=decimals??({BTC:8,ETH:18,USDT:6,USDC:6}[asset]??0);
+  const whole=BigInt(baseUnits)/10n**BigInt(precision);
+  const fraction=(BigInt(baseUnits)%10n**BigInt(precision)).toString().padStart(precision,'0').replace(/0+$/,'');
+  return `${whole.toLocaleString('en-US')}${fraction?'.'+fraction:''} ${asset} (${BigInt(baseUnits).toLocaleString('en-US')} base units)`;
+}
+function assetForLiveAddress(address){
+  if(/^0x[0-9a-fA-F]{40}$/.test(address))return ['usdt','usdc'].includes(activeAsset)?activeAsset.toUpperCase():'ETH';
+  if(/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(address))return 'BTC';
+  return null;
+}
+async function loadLiveAddress(){
+  const address=document.getElementById('record-search').value.trim();
+  const asset=assetForLiveAddress(address);
+  if(!asset){setDataMode('synthetic','Enter a Bitcoin or Ethereum mainnet address. For USDT or USDC, choose that asset filter first. BLCH live balances require a complete finalized state source.');return;}
+  const requestId=++realRequest;
+  liveButton.disabled=true;
+  setDataMode('loading',`Requesting ${asset} address facts from the configured public-chain source…`);
+  try{
+    const query=new URLSearchParams({network:asset==='BTC'?'bitcoin':'ethereum',asset,address});
+    const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
+    const data=await response.json();
+    if(requestId!==realRequest)return;
+    if(!response.ok||data.status!=='source-reported')throw new Error(data.error||data.reason||`Source returned HTTP ${response.status}`);
+    realObservation=data;
+    selectedWallet=null;
+    selectedTransaction=null;
+    const unit=data.balance?.unit||'base units';
+    const baseUnits=data.balance?.base_units;
+    setDataMode('source-reported',`${data.asset} · ${data.observation?.source_id||'public-chain source'} · retrieved ${data.observation?.retrieved_at||'time unavailable'} · independently verified: no. Address control and ownership are unknown.`);
+    document.getElementById('wallet-search-status').textContent=`${data.asset} public-chain address loaded from ${data.observation?.source_id||'a configured source'}. The constellation shows bounded source records and a source-reported address balance.`;
+    setText('record-type',`PUBLIC-CHAIN ADDRESS / ${data.asset}`);
+    setText('record-id',data.address);
+    setText('record-summary',`Source-reported address facts. The central star scales with the reported address balance; satellite points are source records, not identified people or owners.`);
+    setText('record-asset',data.asset);
+    setText('record-holdings',formatObservedBalance(baseUnits,data.asset,data.balance?.decimals));
+    setText('record-time',data.balance?.block?.time||data.observation?.retrieved_at||'—');
+    setText('record-source',data.observation?.source_id||'—');
+    setText('record-related',`${data.nodes?.length||0} source nodes · ${data.edges?.length||0} observation links`);
+    setText('record-meaning','No model output or AML score.');
+    setText('evidence-network',data.network||'—');
+    setText('evidence-type','Source-reported address balance and bounded activity');
+    setText('evidence-reference',data.balance?.block?.hash||data.balance?.block?.height||'Source tip');
+    setText('evidence-finality',data.balance?.scope||'Source reported');
+    setText('evidence-limit',(data.observation?.limitations||[]).join(' ' )||'No independent chain-state verification.');
+    document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
+    const list=document.getElementById('transaction-list');list.replaceChildren();
+    (data.nodes||[]).slice(0,40).forEach(node=>{
+      const row=document.createElement('div');row.className='live-source-record';
+      row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}`;
+      list.append(row);
+    });
+    if(!list.childElementCount)list.textContent='No transaction index is configured for this address. Balance source and block anchor are shown above.';
+    canvas.setAttribute('aria-label',`Source-reported ${data.asset} address ${data.address}; balance ${baseUnits??'unavailable'} ${unit}.`);
+    draw();
+  }catch(error){
+    if(requestId!==realRequest)return;
+    realObservation=null;
+    setDataMode('synthetic',`Public-chain lookup unavailable: ${error.message}. The map remains a synthetic preview.`);
+    draw();
+  }finally{if(requestId===realRequest)liveButton.disabled=false;}
+}
+liveButton.addEventListener('click',loadLiveAddress);
+document.getElementById('record-search').addEventListener('keydown',event=>{if(event.key==='Enter'&&assetForLiveAddress(event.currentTarget.value.trim())){event.preventDefault();loadLiveAddress();}});
 const assetKeys = ['btc', 'eth', 'usdt', 'usdc', 'blch'];
-const colors = {btc:'#f2b96c',eth:'#9cc7ff',usdt:'#77d8c2',usdc:'#75bdf0',blch:'#ef8b80'};
+const colors = {btc:'#e9c985',eth:'#b4d7a4',usdt:'#87c9ab',usdc:'#c6ced1',blch:'#baff28'};
 const units = {btc:'sat',eth:'wei',usdt:'token units',usdc:'token units',blch:'sat'};
 const sourceNames = {btc:'Synthetic Bitcoin fixture',eth:'Synthetic Ethereum fixture',usdt:'Synthetic ERC-20 USDT fixture',usdc:'Synthetic ERC-20 USDC fixture',blch:'Synthetic Bloch fixture'};
 const networks = {btc:'Bitcoin / synthetic network',eth:'Ethereum / synthetic network',usdt:'Ethereum ERC-20 / synthetic network',usdc:'Ethereum ERC-20 / synthetic network',blch:'Bloch / synthetic network'};
@@ -35,7 +118,8 @@ for (let index = 0; index < 70; index++) {
   const y = Math.max(.11,Math.min(.89,cy + Math.sin(angle)*radius));
   const id = `SIM-${asset.toUpperCase()}-${serial}`;
   const address=`${asset}:simulated:${String(Math.floor(index / assetKeys.length)+1).padStart(5,'0')}`;
-  wallets.push({id,address,asset,x,y,transactions:[],volume:0,index});
+  const heldStart=8_000_000*(Math.floor(index/assetKeys.length)+1)**2;
+  wallets.push({id,address,asset,x,y,transactions:[],volume:0,holdings:heldStart,index});
 }
 const walletById = new Map(wallets.map(wallet=>[wallet.id,wallet]));
 const transfers=[];
@@ -52,6 +136,8 @@ for (let assetIndex=0;assetIndex<assetKeys.length;assetIndex++) {
         observed:`2026-09-${String(3+((serial+sequence+assetIndex)%18)).padStart(2,'0')}`,
       };
       transfers.push(tx);
+      from.holdings-=tx.amount;
+      to.holdings+=tx.amount;
       from.transactions.push({...tx,direction:'OUT',counterparty:to.id});
       to.transactions.push({...tx,direction:'IN',counterparty:from.id});
     }
@@ -61,7 +147,10 @@ for(const wallet of wallets){
   wallet.transactions.sort((a,b)=>a.observed.localeCompare(b.observed)||a.id.localeCompare(b.id));
   wallet.volume=wallet.transactions.reduce((sum,tx)=>sum+tx.amount,0);
 }
-const maxVolumeByAsset=Object.fromEntries(assetKeys.map(asset=>[asset,Math.max(...wallets.filter(wallet=>wallet.asset===asset).map(wallet=>wallet.volume))]));
+const heldRangeByAsset=Object.fromEntries(assetKeys.map(asset=>{
+  const values=wallets.filter(wallet=>wallet.asset===asset).map(wallet=>wallet.holdings);
+  return [asset,[Math.min(...values),Math.max(...values)]];
+}));
 const relationMap=new Map();
 for(const tx of transfers){
   const key=[tx.from,tx.to].sort().join('|');
@@ -87,9 +176,9 @@ document.getElementById('record-id').setAttribute('aria-live','polite');
 function visible(wallet) { return activeAsset === 'all' || wallet.asset === activeAsset; }
 function matchesSearch(wallet) { return !search || wallet.id.toLowerCase().includes(search) || wallet.address.toLowerCase().includes(search); }
 function magnitude(wallet) {
-  const activity=wallet.transactions.length/20;
-  const volume=wallet.volume/maxVolumeByAsset[wallet.asset];
-  return Math.min(1,.5*activity+.5*volume);
+  const [minimum,maximum]=heldRangeByAsset[wallet.asset];
+  if(maximum===minimum)return .5;
+  return (Math.log1p(wallet.holdings)-Math.log1p(minimum))/(Math.log1p(maximum)-Math.log1p(minimum));
 }
 const neighborhoodControl=document.createElement('div');
 neighborhoodControl.className='neighborhood-control';
@@ -239,8 +328,9 @@ function draw() {
   if (!width || !height) return;
   context.clearRect(0,0,width,height);
   const gradient=context.createRadialGradient(width*.5,height*.5,20,width*.5,height*.5,Math.max(width,height)*.8);
-  gradient.addColorStop(0,'#153752');gradient.addColorStop(.55,'#0a1b2a');gradient.addColorStop(1,'#07111b');
+  gradient.addColorStop(0,'#1d301b');gradient.addColorStop(.55,'#0b150c');gradient.addColorStop(1,'#050806');
   context.fillStyle=gradient;context.fillRect(0,0,width,height);
+  if(realObservation){drawRealObservation(realObservation);return;}
   for (const [asset,[cx,cy]] of Object.entries(centers)) {
     if(search)continue;
     if (activeAsset !== 'all' && activeAsset !== asset) continue;
@@ -256,23 +346,23 @@ function draw() {
       if(fromStep===undefined||toStep===undefined||Math.min(fromStep,toStep)>=neighborhoodHops)continue;
     }
     const selected=selectedWallet && (from.id===selectedWallet.id||to.id===selectedWallet.id);
-    line(point(from),point(to),selected?'#9bc6e2':'#6da8c8',selected?.48:.12,selected?1.5:.8);
+    line(point(from),point(to),selected?'#c8eba3':'#9bb296',selected?.48:.12,selected?1.5:.8);
   }
   if(selectedWallet&&displayed(selectedWallet)){
     for(const tx of selectedWallet.transactions){
       const from=walletById.get(tx.from),to=walletById.get(tx.to);
-      arrow(point(from),point(to),tx.direction==='OUT'?'#f3a295':'#91d9d4');
+      arrow(point(from),point(to),tx.direction==='OUT'?'#d7dfbc':'#baff28');
     }
   }
   if(activeRoute){
     for(const tx of activeRoute){
       const from=walletById.get(tx.from),to=walletById.get(tx.to);
-      if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#f5d9a7');
+      if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#e5f7b0');
     }
   }
   if(selectedNetworkEvent){
     const from=walletById.get(selectedNetworkEvent.from),to=walletById.get(selectedNetworkEvent.to);
-    if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#f5d9a7');
+    if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#e5f7b0');
   }
   const keyboardChoice=document.activeElement===canvas?wallets.filter(displayed)[keyboardWalletIndex]:null;
   for (const wallet of wallets) {
@@ -284,31 +374,72 @@ function draw() {
     const depth=neighborhoodLevels.get(wallet.id)||0;
     star(p.x,p.y,selected?12:4+level*7.2,colors[wallet.asset],selected?1:twinkle*(search?(depth===2?.75:1):(matchesSearch(wallet)?1:.35)));
     if (selected) {
-      context.strokeStyle='#f5b1a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,13,0,Math.PI*2);context.stroke();
-      context.fillStyle='#f2f7fb';context.font='700 12px ui-monospace, monospace';context.fillText(wallet.id,p.x+17,p.y-13);
+      context.strokeStyle='#baff28';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,13,0,Math.PI*2);context.stroke();
+      context.fillStyle='#f3f5ef';context.font='700 12px ui-monospace, monospace';context.fillText(wallet.id,p.x+17,p.y-13);
     }
     if(activeRoute?.some(tx=>tx.from===wallet.id||tx.to===wallet.id)){
-      context.strokeStyle='#f5d9a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,selected?19:12+level*7.2,0,Math.PI*2);context.stroke();
+      context.strokeStyle='#e5f7b0';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,selected?19:12+level*7.2,0,Math.PI*2);context.stroke();
     }
     if(selectedNetworkEvent&&(selectedNetworkEvent.from===wallet.id||selectedNetworkEvent.to===wallet.id)){
-      context.strokeStyle='#f5d9a7';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?21:14+level*7.2,0,Math.PI*2);context.stroke();
+      context.strokeStyle='#e5f7b0';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?21:14+level*7.2,0,Math.PI*2);context.stroke();
     }
     if (wallet===keyboardChoice) {
-      context.strokeStyle='#ffffff';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?18:13,0,Math.PI*2);context.stroke();
+      context.strokeStyle='#f3f5ef';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?18:13,0,Math.PI*2);context.stroke();
     }
   }
   transactionDots=[];
   if (selectedWallet && displayed(selectedWallet)) {
     const base=point(selectedWallet);const count=selectedWallet.transactions.length;
     const fan={x:Math.max(105,Math.min(width-105,base.x)),y:Math.max(108,Math.min(height-108,base.y))};
-    if (Math.hypot(fan.x-base.x,fan.y-base.y)>2) line(base,fan,'#f4aa9f',.7,1.5);
+    if (Math.hypot(fan.x-base.x,fan.y-base.y)>2) line(base,fan,'#baff28',.7,1.5);
     selectedWallet.transactions.forEach((tx,index)=>{
       const angle=-Math.PI*.85+index*(Math.PI*1.7/Math.max(1,count-1));
       const p={x:fan.x+Math.cos(angle)*74,y:fan.y+Math.sin(angle)*74};
-      line(fan,p,'#f2d5a2',.65,1.3);star(p.x,p.y,selectedTransaction?.id===tx.id?6:4.5,'#f9e2b6');
+      line(fan,p,'#d4e5a5',.65,1.3);star(p.x,p.y,selectedTransaction?.id===tx.id?6:4.5,'#e8f5bd');
       transactionDots.push({tx,p});
     });
   }
+}
+function balanceSize(baseUnits,asset){
+  if(!/^\d+$/.test(baseUnits||''))return 7;
+  if(BigInt(baseUnits)===0n)return 5;
+  const digitCount=baseUnits.length;
+  const leading=Number(baseUnits.slice(0,Math.min(6,digitCount)))/10**(Math.min(6,digitCount)-1);
+  const exponent=digitCount-1+Math.log10(leading);
+  const reference={BTC:8,ETH:18,USDT:11,USDC:11}[asset]??8;
+  return Math.max(5,Math.min(22,10+4*(exponent-reference)));
+}
+function drawRealObservation(observation){
+  const nodes=observation.nodes||[];
+  const center={x:width*.5,y:height*.5};
+  const satellites=nodes.filter(node=>node.address!==observation.address).slice(0,36);
+  const orbit=Math.max(80,Math.min(width*.34,height*.34,225));
+  const positions=new Map();
+  satellites.forEach((node,index)=>{
+    const angle=-Math.PI/2+index*Math.PI*2/Math.max(1,satellites.length);
+    const radius=orbit*(index%3===0?.76:index%3===1?.9:1.08);
+    positions.set(node.id,{x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius});
+  });
+  const focusIds=new Set(nodes.filter(node=>node.address===observation.address).map(node=>node.id));
+  for(const edge of observation.edges||[]){
+    const a=focusIds.has(edge.from)?center:positions.get(edge.from);
+    const b=focusIds.has(edge.to)?center:positions.get(edge.to);
+    if(a&&b&&a!==b)arrow(a,b,'#a9bba6');
+  }
+  satellites.forEach(node=>{
+    const p=positions.get(node.id);
+    context.fillStyle='#d0d9ca';context.globalAlpha=.75;
+    if(node.kind==='transaction')context.fillRect(p.x-3,p.y-3,6,6);
+    else {context.beginPath();context.arc(p.x,p.y,3.5,0,Math.PI*2);context.fill();}
+    context.globalAlpha=1;
+  });
+  const radius=balanceSize(observation.balance?.base_units,observation.asset);
+  star(center.x,center.y,radius,colors[observation.asset?.toLowerCase()]||'#baff28');
+  context.fillStyle='#f0f3eb';context.font='700 12px ui-monospace, monospace';
+  context.fillText(observation.address.slice(0,12)+'…',center.x+radius+12,center.y-9);
+  context.font='11px ui-monospace, monospace';context.fillStyle='#aac39b';
+  context.fillText('SOURCE-REPORTED ADDRESS BALANCE',20,32);
+  context.fillText(`${satellites.length} SOURCE RECORDS · NO OWNERSHIP INFERENCE`,20,height-22);
 }
 function frame() {if(!paused){tick++;draw();}requestAnimationFrame(frame);}
 function setText(id,value) {document.getElementById(id).textContent=value;}
@@ -511,6 +642,7 @@ function renderAnalytics(wallet) {
   setText('ml-relations',String(links));setText('ml-window',`${days} days · synthetic`);
   setText('analysis-events',String(txs.length));setText('analysis-direction',`${inbound} / ${txs.length-inbound}`);
   setText('analysis-volume',total.toLocaleString('en-US'));setText('analysis-unit',units[wallet.asset]);
+  setText('analysis-held',wallet.holdings.toLocaleString('en-US'));
   setText('analysis-connections',String(links));setText('analysis-span',String(days));
   setText('analysis-concentration',`${(100*Math.max(...txs.map(tx=>tx.amount))/total).toFixed(1)}%`);
   const start=Math.min(...dates),end=Math.max(...dates);
@@ -587,7 +719,7 @@ function clearWallet() {
   neighborhoodHops=1;neighborhoodLevels=new Map();neighborhoodSelect.value='1';neighborhoodSelect.disabled=true;
   setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
   setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
-  for(const id of ['record-asset','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
+  for(const id of ['record-asset','record-holdings','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-held','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
   setText('record-source','Synthetic fixture');setText('record-meaning','No trained or validated model.');
   for(const id of ['evidence-network','evidence-type','evidence-reference'])setText(id,'—');
   setText('evidence-finality','Not applicable to synthetic data');setText('evidence-limit','Select a wallet to inspect the fixture.');
@@ -603,6 +735,7 @@ function clearWallet() {
   renderNetworkEvidence();
 }
 function selectWallet(wallet,updateQuery=false) {
+  if(realObservation){realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; no public-chain address is loaded.');}
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
   selectedWallet=wallet;selectedTransaction=null;selectedNetworkEvent=null;
   networkStepFilter=0;networkStepSelect.value='0';
@@ -614,8 +747,9 @@ function selectWallet(wallet,updateQuery=false) {
   noteLink.href=`account.html?wallet=${encodeURIComponent(wallet.address)}`;
   setText('record-type','SYNTHETIC WALLET / '+wallet.asset.toUpperCase());
   setText('record-id',wallet.id);
-  setText('record-summary',`${wallet.address} · Illustrative wallet point with a fan of independently inspectable synthetic transactions. Star magnitude combines event count and within-asset volume, never AML risk.`);
+  setText('record-summary',`${wallet.address} · Star size and brightness represent a synthetic held amount, scaled within this asset. The amount begins with a generated balance and changes with the synthetic transfers; it is not an observed chain balance or AML risk.`);
   setText('record-asset',wallet.asset.toUpperCase());
+  setText('record-holdings',`${wallet.holdings.toLocaleString('en-US')} ${units[wallet.asset]}`);
   setText('record-time',wallet.transactions[0].observed+' to '+wallet.transactions.at(-1).observed);
   setText('record-source',sourceNames[wallet.asset]);
   setText('record-related',`${wallet.transactions.length} synthetic transactions · ${wallet.volume.toLocaleString('en-US')} ${units[wallet.asset]}`);
@@ -641,6 +775,7 @@ function selectTransaction(wallet,tx) {
   setText('record-id',tx.id);
   setText('record-summary',`${tx.direction} event with ${tx.counterparty} in an illustrative wallet flow. Amount: ${tx.amount} ${units[wallet.asset]}. The same synthetic transfer is visible from both wallets.`);
   setText('record-asset',wallet.asset.toUpperCase());setText('record-time',tx.observed);
+  setText('record-holdings',`${wallet.holdings.toLocaleString('en-US')} ${units[wallet.asset]}`);
   setText('record-source',sourceNames[wallet.asset]);setText('record-related',`${wallet.id} ↔ ${tx.counterparty}`);
   setText('record-meaning','No AML finding or model output; source and finality would be required for a real event.');
   renderEvidence(wallet,tx);
@@ -657,11 +792,12 @@ function renderList() {
     const button=document.createElement('button');button.type='button';
     const depth=neighborhoodLevels.get(wallet.id);
     const position=search&&selectedWallet?(depth===0?'focus':depth===1?'step 1':depth===2?'step 2':'route point'):null;
-    button.textContent=`${wallet.id} · ${wallet.address} · ${wallet.transactions.length} tx${position?' · '+position:''}`;
+    button.textContent=`${wallet.id} · ${wallet.address} · held ${wallet.holdings.toLocaleString('en-US')} ${units[wallet.asset]} · ${wallet.transactions.length} tx${position?' · '+position:''}`;
     button.addEventListener('click',()=>selectWallet(wallet,Boolean(search)));list.append(button);
   });
 }
 canvas.addEventListener('click',event=>{
+  if(realObservation)return;
   const rect=canvas.getBoundingClientRect();const x=event.clientX-rect.left,y=event.clientY-rect.top;
   const txHit=transactionDots.find(({p})=>Math.hypot(x-p.x,y-p.y)<12);
   if(txHit && selectedWallet){selectTransaction(selectedWallet,txHit.tx);return;}
@@ -670,6 +806,7 @@ canvas.addEventListener('click',event=>{
   if(nearest)selectWallet(nearest,Boolean(search));
 });
 canvas.addEventListener('keydown',event=>{
+  if(realObservation)return;
   const options=wallets.filter(displayed);
   if(!options.length)return;
   if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)){
@@ -683,6 +820,7 @@ canvas.addEventListener('keydown',event=>{
   }
 });
 canvas.addEventListener('focus',()=>{
+  if(realObservation)return;
   const options=wallets.filter(displayed);
   const index=options.findIndex(wallet=>wallet===selectedWallet);
   keyboardWalletIndex=index>=0?index:0;
@@ -699,6 +837,8 @@ document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.a
   renderSearchStatus();renderList();draw();
 }));
 document.getElementById('record-search').addEventListener('input',event=>{
+  realRequest++;
+  if(realObservation){realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; enter a mainnet address and load it to view public-chain facts.');}
   search=event.target.value.trim().toLowerCase();
   keyboardWalletIndex=0;
   document.getElementById('wallet-browser').open=Boolean(search);
@@ -707,6 +847,7 @@ document.getElementById('record-search').addEventListener('input',event=>{
   else {clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();}
 });
 document.getElementById('clear-wallet-search').addEventListener('click',()=>{
+  realRequest++;realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; no public-chain address is loaded.');
   const input=document.getElementById('record-search');input.value='';search='';document.getElementById('wallet-browser').open=false;clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();input.focus();
 });
 const pauseButton=document.getElementById('pause-constellation');

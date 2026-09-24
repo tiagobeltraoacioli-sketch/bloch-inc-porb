@@ -1,3 +1,5 @@
+import {queryChainWallet} from '../../chain/real-chain.js';
+
 const COOKIE = 'graphus_session';
 const NONCE_COOKIE = 'graphus_login_nonce';
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
@@ -79,11 +81,25 @@ export async function onRequest({request,env}) {
   const path=url.pathname.replace(/^\/api\/?/,'').replace(/\/$/,'');
   const method=request.method;
   const secure=url.protocol==='https:';
+  if(path==='chain/wallet'&&method==='GET') {
+    const result=await queryChainWallet({
+      network:url.searchParams.get('network'),asset:url.searchParams.get('asset'),
+      address:url.searchParams.get('address'),env,
+    });
+    return json(result.body,result.status);
+  }
   if(path==='config'&&method==='GET')return json({google_enabled:configured(env),annotations_enabled:configured(env),google_client_id:configured(env)?env.GOOGLE_CLIENT_ID:null,daas_mode:'synthetic-preview'});
   if(path==='daas/manifest'&&method==='GET')return json({
     product:'Graphus Data as a Service',status:'synthetic-preview',live_transactions:false,live_scores:false,
     initial_assets:INITIAL_ASSETS,
-    query_capabilities:{address_search:'synthetic-browser-fixture',local_constellation:'synthetic-browser-fixture',production_chain_query:false},
+    query_capabilities:{
+      address_search:'synthetic-browser-fixture-and-bounded-source-reported-query',
+      local_constellation:'synthetic-browser-fixture',production_chain_query:false,
+      bounded_public_chain_address_lookup:{
+        endpoint:'/api/chain/wallet',bitcoin:'public-esplora-address-aggregate-and-bounded-transactions',
+        ethereum:'requires-GRAPHUS_ETHEREUM_RPC_URL',bloch:'unavailable',independently_verified:false,
+      },
+    },
     research:{bloch_sample:'private-bounded',structural_groups:'unsupervised-research-only',aml_model:'not-validated'},
     proposed_public_fields:['network','asset','transaction_id','event_index','observed_at','finality','source','source_version','flow_edges','feature_definitions','validated_non_score_features'],
     private_fields:['aml_score','personal_identity','raw_ip','customer_case'],api_version:'proposed-v1'

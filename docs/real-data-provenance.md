@@ -1,0 +1,27 @@
+# Real observations and held-balance provenance
+
+Graphus may show a real, bounded on-chain observation only when its source, network, asset, collection time, available block reference, and coverage boundary accompany it. A real transaction or output is **not** evidence of a wallet's current holdings. The default constellation remains synthetic; the separate public address lookup returns source-reported facts for Bitcoin and, when configured, Ethereum assets. Private pilot records must not be copied to the public site to make it appear live.
+
+## Display contract
+
+Every displayed fact needs `data_mode` (`synthetic`, `source_reported`, or `verified`), `chain`, `network`, `asset_id`, `source_id`, `retrieved_at`, `block_ref`, `height_or_slot`, `finality_basis`, and `coverage`. Preserve amount as an exact decimal string in base units, with an asset-specific unit label. If an observation lacks a source-reported event time, display collection time as **retrieved at**, never as transaction time. A missing observation means *not observed in this sample*, not zero activity. Source-reported finality and canonicality must be distinguished from locally or independently verified claims.
+
+Held amount is a separate field with four states: `verified` (exact base-unit value and independently checked chain-specific state evidence), `source_reported` (an RPC/indexer balance at a named anchor without independent state verification), `unavailable` (no adequate state evidence), or `synthetic` (an explicitly simulated fixture). The `unavailable` state carries `amount_base_units: null`; a missing balance must never become `0`. The star-size legend must name the state and asset. Base units from different assets are incomparable; a multi-asset size scale needs a separately timestamped valuation with price-source provenance, or it must normalize **within each asset** and say so. Neither a sum of incoming events nor an incoming-minus-outgoing sum over a bounded sample is held amount.
+
+| Asset | Sufficient evidence for a real held amount at one anchor | Current private pilot boundary |
+| --- | --- | --- |
+| BTC | A canonical best-chain UTXO set at a named tip, all unspent outpoints mapped to the queried script/address, exact satoshis, reorganization policy, and source reconciliation. One address is not necessarily one owner or wallet. | One sampled block contains outputs and input outpoint references. `unspent_status_queried=false`; no wallet balance. |
+| ETH | `eth_getBalance` at a named finalized or sufficiently confirmed Ethereum mainnet block, with chain ID, block hash/number, RPC source, timestamp, and reconciliation or a fully replayed state. Contract account balances do not identify owners. | First transactions from one source-reported finalized block; movements do not reveal starting state. |
+| USDT/USDC on Ethereum | An allowlisted contract's `balanceOf(address)` via `eth_call` at that **same named block**, verified contract identity, chain ID 1, token decimals/version, source and reconciliation; or complete event replay from a trusted initial state with mint/burn and upgrades handled. | Allowlisted `Transfer` logs only. A transfer sum cannot recover a token balance. USDT and USDC remain distinct assets even at the same address. |
+| BLCH | Complete finalized eUTXO/state snapshot at a named Genesis-4 state root, all relevant unspent outputs and script/address mapping, complete spend resolution, and node/indexer reconciliation. A script hash does not identify a person. | Bounded finalized-output and spent-outpoint observations; `source_complete` describes pagination of that bounded snapshot, not chain-history completeness. |
+
+For each balance, retain the exact anchor, source method and response digest, freshness, completeness and reconciliation result, plus any reorg invalidation. An Esplora address aggregate and an Ethereum RPC state read may be displayed as `source_reported` with their limitations; neither independently proves canonical state or address ownership. Withhold or invalidate the value when the anchor is no longer accepted. Querying a current balance and displaying it beside older flows requires separate timestamps; do not imply they share one snapshot.
+
+## Integration gates
+
+1. Keep private pilot query endpoints and their identifiers behind operator access. The bounded public address lookup exposes only source-reported chain facts, never private pilot records or restricted scores. Apply edge rate controls before promoting it to a general data product.
+2. Preserve `source_id`, retrieval time, source-reported block and finality, sample digest, and explicit completeness flags when promoting observations into the graph. Do not upgrade `chain_history_complete=false` merely because sample pagination ended.
+3. Require the chain-specific balance evidence above before setting `held_amount.status=verified`. A directly queried, anchored source balance can use `source_reported`; a bounded movement sample alone leaves held amount `unavailable`. Keep the synthetic constellation clearly separated.
+4. Never turn address, script, or transaction relationships into a person's name, beneficial owner, sanctions match, or AML score. They are protocol identifiers and evidence for review only.
+
+The current adapters and pilot limitations are described in [chain adapters](chain-adapters.md), [Bitcoin private query index](bitcoin-private-query-index.md), [Ethereum private query index](ethereum-private-query-index.md), and [Bloch private query index](bloch-private-query-index.md).
