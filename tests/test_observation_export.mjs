@@ -82,11 +82,13 @@ test('Bloch history export keeps page scope and cursor without unknown source fi
     nodes:[{id:'root',kind:'script_hash',address}],edges:[],
     observation:{source_id:'bloch-archival-rpc',coverage:'bounded_64_script_hash_history_page',
       history:{as_of_slot:100,total:800,events_returned:0,has_more:true,requested_cursor:'before_64',next_cursor:'after_64',page_number:2,
+        source_anchor:{height:80,hash:'d'.repeat(64),private_note:'omit'},
         source:'bloch-historical-indexer',private_label:'omit'},
       history_page_retrieved_at:'2026-09-24T06:00:00Z'}},EXPORTED_AT);
   assert.equal(bundle.source.history.next_cursor,'after_64');
   assert.equal(bundle.source.history.requested_cursor,'before_64');
   assert.equal(bundle.source.history.page_number,2);
+  assert.deepEqual(bundle.source.history.source_anchor,{height:80,hash:'d'.repeat(64)});
   assert.equal(bundle.source.history.total,800);
   assert.equal(bundle.source.history_page_retrieved_at,'2026-09-24T06:00:00Z');
   assert.equal('private_label' in bundle.source.history,false);

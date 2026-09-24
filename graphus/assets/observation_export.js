@@ -23,7 +23,10 @@
       ...(value.source_response_consistency?{source_response_consistency:pick(value.source_response_consistency,
         ['block_heights','transaction_hashes','log_positions','duplicate_direction_hits'])}:{}),
       ...(value.head_before_balance?{head_before_balance:pick(value.head_before_balance,['slot','height','finalized_height','state_root'])}:{}),
-      ...(value.history?{history:pick(value.history,['as_of_slot','total','events_returned','has_more','requested_cursor','next_cursor','source','page_number'])}:{}),
+      ...(value.history?{history:{
+        ...pick(value.history,['as_of_slot','total','events_returned','has_more','requested_cursor','next_cursor','source','page_number']),
+        ...(value.history.source_anchor?{source_anchor:anchor(value.history.source_anchor)}:{}),
+      }}:{}),
       ...(value.history_page_retrieved_at?{history_page_retrieved_at:value.history_page_retrieved_at}:{})}
     :null;
   const node=value=>({

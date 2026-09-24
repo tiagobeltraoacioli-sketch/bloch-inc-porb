@@ -63,34 +63,51 @@ function historyEvidence(scriptHash,page){
   if(page?.script_hash?.toLowerCase()!==scriptHash||!Array.isArray(page?.events)
     ||page.events.length>HISTORY_LIMIT
     ||!Number.isSafeInteger(page?.as_of_slot)||page.as_of_slot<0
+    ||(page.as_of_height!=null||page.chain_tip!=null)
+      &&(!Number.isSafeInteger(page.as_of_height)||page.as_of_height<0
+        ||page.as_of_height>page.as_of_slot||!HASH.test(page.chain_tip||''))
     ||page.next_cursor!=null&&(!CURSOR.test(page.next_cursor)||typeof page.next_cursor!=='string')
+    ||page.next_cursor!=null&&page.events.length===0
     ||page.total!=null&&(!Number.isSafeInteger(page.total)||page.total<page.events.length)){
     throw new Error('invalid_bloch_history');
   }
   const nodes=[{id:`bloch:script:${scriptHash}`,kind:'script_hash',address:scriptHash}];
   const edges=[];
   const seen=new Set();
+  const eventKeys=new Set();
+  const transactionBlocks=new Map();
   for(const event of page.events){
     if(!['created','spent'].includes(event?.kind)||!HASH.test(event?.transaction_id||'')
       ||!HASH.test(event?.txid||'')||!DECIMAL.test(event?.value_sat||'')
       ||!Number.isSafeInteger(event?.vout)||event.vout<0
-      ||!Number.isSafeInteger(event?.slot)||!Number.isSafeInteger(event?.height))
+      ||!Number.isSafeInteger(event?.slot)||!Number.isSafeInteger(event?.height)
+      ||event.height<0||event.height>event.slot||event.slot>page.as_of_slot
+      ||page.as_of_height!=null&&event.height>page.as_of_height
+      ||!HASH.test(event?.block_id||''))
       throw new Error('invalid_bloch_history_event');
     const txid=event.transaction_id.toLowerCase();
+    const outpointTxid=event.txid.toLowerCase();
+    const blockHash=event.block_id.toLowerCase();
+    const eventKey=`${event.kind}:${txid}:${outpointTxid}:${event.vout}`;
+    const blockKey=`${event.height}:${event.slot}:${blockHash}`;
+    if(eventKeys.has(eventKey)||transactionBlocks.has(txid)&&transactionBlocks.get(txid)!==blockKey)
+      throw new Error('inconsistent_bloch_history_event');
+    eventKeys.add(eventKey);transactionBlocks.set(txid,blockKey);
     const id=`bloch:tx:${txid}`;
-    if(!seen.has(id)){seen.add(id);nodes.push({id,kind:'transaction',txid,block:{height:event.height,slot:event.slot,hash:HASH.test(event.block_id||'')?event.block_id.toLowerCase():null}});}
+    if(!seen.has(id)){seen.add(id);nodes.push({id,kind:'transaction',txid,block:{height:event.height,slot:event.slot,hash:blockHash}});}
     edges.push({
       from:event.kind==='created'?id:`bloch:script:${scriptHash}`,
       to:event.kind==='created'?`bloch:script:${scriptHash}`:id,
       kind:event.kind==='created'?'observed_created_output':'observed_spent_outpoint_reference',
       amount_base_units:event.value_sat,txid,
-      outpoint:{txid:event.txid.toLowerCase(),vout:event.vout},
-      block:{height:event.height,slot:event.slot,hash:HASH.test(event.block_id||'')?event.block_id.toLowerCase():null},
+      outpoint:{txid:outpointTxid,vout:event.vout},
+      block:{height:event.height,slot:event.slot,hash:blockHash},
     });
   }
   return {nodes,edges,history:{as_of_slot:page.as_of_slot,total:page.total??null,
     events_returned:page.events.length,has_more:Boolean(page.next_cursor),
-    next_cursor:page.next_cursor||null,source:page.source||'bloch-historical-indexer'}};
+    next_cursor:page.next_cursor||null,source:page.source||'bloch-historical-indexer',
+    ...(page.as_of_height!=null?{source_anchor:{height:page.as_of_height,hash:page.chain_tip.toLowerCase()}}:{})}};
 }
 
 async function fetchHistoryEvidence(scriptHash,cursor,fetcher){

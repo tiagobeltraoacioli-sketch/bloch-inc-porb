@@ -149,6 +149,8 @@ function renderSourceMetrics(data){
       const history=data.observation.history;
       add('History page',String(blochHistoryPageIndex+1),`${history.events_returned} returned events in this page; ${history.total??'unknown'} source-reported total`);
       add('History as of slot',String(history.as_of_slot),'Source index snapshot for this page; separate from the balance query');
+      if(history.source_anchor)add('Source history anchor',String(history.source_anchor.height),
+        `${history.source_anchor.hash} · reported by the source; not independently verified`);
     }
     const labels=metrics.asset==='BTC'
       ?[['observed_input_prevout','Input prevouts referenced'],['created_output','Outputs created']]
@@ -194,7 +196,7 @@ function renderSourceMetrics(data){
     const navigation=document.createElement('div');navigation.className='source-block-timeline';
     const title=document.createElement('h4');title.textContent='Bloch script-history pages';
     const note=document.createElement('p');
-    note.textContent=`Page ${blochHistoryPageIndex+1}: ${history.events_returned} returned events as of source slot ${history.as_of_slot}. Each page replaces the graph and JSON export. The balance above was queried separately and is not recalculated from this page.`;
+    note.textContent=`Page ${blochHistoryPageIndex+1}: ${history.events_returned} returned events as of source slot ${history.as_of_slot}${history.source_anchor?` and source-reported block ${history.source_anchor.height}`:''}. Each page replaces the graph and JSON export. The balance above was queried separately and is not recalculated from this page.`;
     const controls=document.createElement('div');controls.className='source-block-timeline-controls';
     if(blochHistoryPageIndex>0&&blochHistoryCursors[blochHistoryPageIndex-1]!==undefined){
       const newer=document.createElement('button');newer.type='button';newer.dataset.blochHistory='newer';

@@ -78,14 +78,16 @@ test('Bloch history cursor exposes a bounded 64-event page and rejects malformed
   const fetcher=async url=>{
     calls.push(url);
     const older=url.includes('cursor=')?{script_hash:hash,events:[event(64)],as_of_slot:101,
-      total:65,next_cursor:null,source:'archival-indexer'}
-      :{script_hash:hash,events:first,as_of_slot:100,total:65,next_cursor:cursor,source:'archival-indexer'};
+      as_of_height:80,chain_tip:'d'.repeat(64),total:65,next_cursor:null,source:'archival-indexer'}
+      :{script_hash:hash,events:first,as_of_slot:100,as_of_height:80,chain_tip:'d'.repeat(64),
+        total:65,next_cursor:cursor,source:'archival-indexer'};
     return Response.json(older);
   };
   const page=await queryBlochHistoryPage({address:hash,fetcher,now:()=>observed});
   assert.equal(page.status,200);
   assert.equal(page.body.edges.length,64);
   assert.equal(page.body.observation.history.next_cursor,cursor);
+  assert.deepEqual(page.body.observation.history.source_anchor,{height:80,hash:'d'.repeat(64)});
   assert.equal(page.body.observation.coverage,'bounded_64_script_hash_history_page');
   assert.equal(calls[0].includes('limit=64'),true);
   const second=await queryBlochHistoryPage({address:hash,cursor,fetcher});
@@ -101,4 +103,17 @@ test('Bloch history cursor exposes a bounded 64-event page and rejects malformed
   const circular=await queryBlochHistoryPage({address:hash,cursor,
     fetcher:async()=>Response.json({script_hash:hash,events:[event(64)],as_of_slot:101,total:65,next_cursor:cursor})});
   assert.equal(circular.status,502);
+});
+
+test('Bloch history rejects duplicate events, conflicting transaction blocks and future events',async()=>{
+  const event={kind:'spent',transaction_id:txid,txid:'e'.repeat(64),vout:0,
+    value_sat:'25',slot:90,height:75,block_id:'c'.repeat(64)};
+  const query=async events=>queryBlochHistoryPage({address:hash,
+    fetcher:async()=>Response.json({script_hash:hash,events,as_of_slot:100,
+      as_of_height:80,chain_tip:'d'.repeat(64),total:events.length,next_cursor:null})});
+  assert.equal((await query([event,{...event}])).status,502);
+  assert.equal((await query([event,{...event,vout:1,block_id:'f'.repeat(64)}])).status,502);
+  assert.equal((await query([{...event,slot:101}])).status,502);
+  assert.equal((await query([{...event,height:81}])).status,502);
+  assert.equal((await query([event])).status,200);
 });
