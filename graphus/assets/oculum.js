@@ -18,6 +18,7 @@ const tooltip=document.getElementById('oculum-tooltip');
 const colors={BTC:'#e9c985',ETH:'#b4d7a4',USDT:'#87c9ab',USDC:'#c6ced1',BLCH:'#baff28'};
 const records=new Map();
 const activityByKey=new Map();
+const evidenceByKey=new Map();
 let blochIndex=null;
 const MAX_SAMPLE_PER_ASSET=64;
 const MAX_BATCH=16;
@@ -65,7 +66,9 @@ function currentRecords(){
 }
 function assetRecordCount(asset){return [...records.values()].filter(record=>record.asset===asset).length;}
 function clearBlochRecords(){
-  for(const [key,record] of records)if(record.asset==='BLCH')records.delete(key);
+  for(const [key,record] of records)if(record.asset==='BLCH'){
+    records.delete(key);evidenceByKey.delete(key);
+  }
   blochIndex=null;
   selectedKey=null;
 }
@@ -82,6 +85,7 @@ function addRecord({asset,address,balance,observation,network,origin,independent
   const key=recordKey(asset,address);
   if(!records.has(key)&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)return false;
   activityByKey.delete(key);
+  if(origin==='indexed Bloch script hash')evidenceByKey.delete(key);
   records.set(key,{
     key,asset,address,baseUnits:balance.base_units,decimals:balance.decimals,
     unit:balance.unit,block:balance.block||null,scope:balance.scope||'source reported',
@@ -138,6 +142,62 @@ function renderDetail(record){
     detail.append(heading,notes);
   }
   if(record.asset==='USDT'||record.asset==='USDC')renderTokenActivity(record);
+  if(record.asset==='BTC'||record.asset==='BLCH')renderObservedActivity(record);
+}
+function renderObservedActivity(record){
+  const panel=document.createElement('section');panel.className='oculum-activity';
+  const heading=document.createElement('h4');heading.textContent=record.asset==='BTC'?'Observed Bitcoin transaction page':'Bloch script history';
+  panel.append(heading);
+  const state=evidenceByKey.get(record.key);
+  if(!state&&record.origin==='indexed Bloch script hash'){
+    const note=document.createElement('p');note.textContent='Loading a separate bounded script-history query…';panel.append(note);
+    const request={status:'loading'};evidenceByKey.set(record.key,request);
+    loadIndexedBlochEvidence(record,request);
+  }else if(state?.status==='error'){
+    const note=document.createElement('p');note.textContent=`History unavailable: ${state.error}. The indexed balance above remains a separate source observation.`;panel.append(note);
+  }else if(state?.status==='loaded'){
+    const data=state.data;
+    const edges=Array.isArray(data.edges)?data.edges:[];
+    const note=document.createElement('p');
+    note.textContent=record.asset==='BTC'
+      ?`${data.activity?.confirmed_tx_count??'—'} source-reported confirmed address transactions; ${edges.length} directed input/output observations returned from ${data.observation?.coverage||'a bounded page'}. Retrieved ${observedTime(data.observation?.retrieved_at)}. Inputs do not prove sender ownership.`
+      :`${data.activity?.bounded_events??0} events in this bounded script-history response${Number.isSafeInteger(data.activity?.total_source_reported)?` of ${data.activity.total_source_reported} source-reported total`:''}. Retrieved ${observedTime(data.observation?.retrieved_at)}. History and the ranked balance are separate moving-chain observations.`;
+    panel.append(note);
+    if(edges.length){
+      const list=document.createElement('ol');
+      for(const edge of edges.slice(0,12)){
+        const item=document.createElement('li');
+        const title=document.createElement('strong');
+        const label={observed_input_prevout:'Input prevout referenced',created_output:'Output created',
+          observed_created_output:'Script output created',observed_spent_outpoint_reference:'Script outpoint spent'}[edge.kind]||'Observed transaction edge';
+        title.textContent=`${label} · ${formattedAmount(edge.amount_base_units,record.asset,8)}`;
+        const tx=document.createElement('span');tx.textContent=`Tx ${edge.txid} · block ${edge.block?.height??'—'}`;
+        const path=document.createElement('small');path.textContent=`${edge.from} → ${edge.to}`;
+        item.append(title,tx,path);list.append(item);
+      }
+      panel.append(list);
+      if(edges.length>12){const more=document.createElement('p');more.textContent=`Showing 12 of ${edges.length} returned edges. The source response is already bounded and is not a complete transaction history.`;panel.append(more);}
+    }else{
+      const empty=document.createElement('p');empty.textContent='No transaction edges were returned in this bounded source view. This does not establish that the identifier has no history.';panel.append(empty);
+    }
+  }else{
+    const note=document.createElement('p');note.textContent='No bounded transaction evidence was returned with this balance.';panel.append(note);
+  }
+  detail.append(panel);
+}
+async function loadIndexedBlochEvidence(record,request){
+  try{
+    const query=new URLSearchParams({network:'bloch',asset:'BLCH',address:record.address});
+    const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
+    const data=await response.json();
+    if(!response.ok||data.status!=='source-reported')throw new Error(data.error||`HTTP ${response.status}`);
+    if(evidenceByKey.get(record.key)!==request)return;
+    evidenceByKey.set(record.key,{status:'loaded',data});
+  }catch(error){
+    if(evidenceByKey.get(record.key)!==request)return;
+    evidenceByKey.set(record.key,{status:'error',error:error.message});
+  }
+  if(selectedKey===record.key)renderDetail(record);
 }
 function renderTokenActivity(record){
   const panel=document.createElement('section');panel.className='oculum-activity';
@@ -341,6 +401,7 @@ async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
   if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
   if(asset==='BLCH'&&blochIndex)clearBlochRecords();
   if(!addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:asset==='BLCH'?'queried script hash':'queried address',independentVerification:data.independent_verification}))throw new Error('Asset sample capacity was reached.');
+  if(asset==='BTC'||asset==='BLCH')evidenceByKey.set(recordKey(asset,data.address),{status:'loaded',data});
   let enriched=0;
   if(includeNeighbors){
     for(const node of data.nodes||[]){

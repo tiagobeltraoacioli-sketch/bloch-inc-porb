@@ -25,6 +25,11 @@ can change during a reorganization. A manual Bloch script lookup returns to a
 queried sample, so snapshots at different anchors are never presented as one
 indexed ranking.
 
+Selecting a Bloch indexed point fetches up to 12 separate script-history
+events from the public archival lookup. The history observation does not change
+the ranked snapshot balance or its block anchor. Created outputs and spent
+outpoint references are displayed as transaction edges, not ownership claims.
+
 ## Bitcoin and Ethereum queries
 
 BTC, ETH, USDT, and USDC currently sort at most 64 identifiers queried in the
@@ -34,6 +39,10 @@ provides per-address Bitcoin aggregates, but no global balance ranking. The
 [Ethereum JSON-RPC API](https://ethereum.org/developers/docs/apis/json-rpc/)
 supports balance and log reads for specified accounts or filters, not a
 complete public holder list. Ethereum token balances are contract specific.
+For a queried Bitcoin address, Oculum displays the first bounded page of
+source-reported confirmed transaction input/output edges separately from the
+address aggregate. An input prevout is a transaction reference, not proof that
+the address owner initiated or controlled every input.
 
 The private holder-candidate index can rank saved successful lookups. BTC and
 BLCH samples can combine retrieval times. Ethereum candidates can be compared
