@@ -77,6 +77,38 @@
       transactions_without_block:transactionsWithoutBlock,unplaced_edges:unplacedEdges};
   }
 
+  function tokenTransactionActivity(events,rootAddress){
+    const transactions=new Map();
+    let eventsWithoutHash=0;
+    for(const event of events){
+      const hash=event.transaction_hash;
+      if(typeof hash!=='string'||!/^0x[0-9a-fA-F]{64}$/.test(hash)){
+        eventsWithoutHash++;continue;
+      }
+      const key=hash.toLowerCase();
+      if(!transactions.has(key))transactions.set(key,{transaction_hash:key,
+        block_number:event.block_number,block_hash:event.block_hash,
+        transaction_index:event.transaction_index,event_count:0,
+        groups:{incoming:{count:0,base_units:'0'},outgoing:{count:0,base_units:'0'},self:{count:0,base_units:'0'}},
+        peer_addresses:[]});
+      const row=transactions.get(key);
+      if(row.block_number!==event.block_number||row.block_hash!==event.block_hash
+        ||row.transaction_index!==event.transaction_index)
+        throw new Error('Conflicting token transaction anchor');
+      row.event_count++;
+      const group=row.groups[event.direction];
+      group.count++;
+      group.base_units=(BigInt(group.base_units)+amount(event.amount_base_units)).toString();
+      const peer=event.direction==='incoming'?event.from?.toLowerCase():event.direction==='outgoing'?event.to?.toLowerCase():null;
+      if(peer&&peer!==rootAddress&&!row.peer_addresses.includes(peer))row.peer_addresses.push(peer);
+    }
+    const rows=[...transactions.values()].sort((a,b)=>b.block_number-a.block_number
+      ||b.transaction_index-a.transaction_index||a.transaction_hash.localeCompare(b.transaction_hash));
+    for(const row of rows)row.peer_addresses.sort();
+    return {transactions:rows,events_without_hash:eventsWithoutHash,
+      multi_log_transactions:rows.filter(row=>row.event_count>1).length};
+  }
+
   function compareTokenAnchors(wallet, activity) {
     const contract=wallet?.balance?.contract;
     const activityContract=activity?.contract;
@@ -184,12 +216,13 @@
     }
     for(const direction of Object.keys(groups))groups[direction].base_units=totals[direction].toString();
     const block_activity=tokenBlockActivity(events,data.tokenObservation?.block_window);
+    const transaction_activity=tokenTransactionActivity(events,rootAddress);
     const peer_activity=[...peers.values()].sort((left,right)=>right.event_count-left.event_count
       ||(left.address<right.address?-1:left.address>right.address?1:0));
     return {kind:'erc20_transfer_logs',asset,source,
       returned_events:events.length,observed_other_identifiers:peers.size,
       block_range:data.tokenObservation?.block_window||blockRange(events.map(event=>event.block_number)),
-      groups,block_activity,peer_activity,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
+      groups,block_activity,transaction_activity,peer_activity,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
       caveat:'Only returned Transfer logs are counted. These amounts are not a complete transaction history or a balance reconciliation.'};
   }
 

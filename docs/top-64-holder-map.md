@@ -63,6 +63,13 @@ the source-record list, including empty ranges; it does not change the full
 constellation or extend the query window. Counts and amounts use exact integer
 base units, and no AML classification is inferred.
 
+Returned token logs are also grouped by transaction hash. Each transaction row
+keeps incoming, outgoing, and self log counts and exact amounts separate, with
+the distinct other addresses observed in those logs. Selecting a transaction
+filters the log list and can be combined with the block-range and address
+filters. This is a grouping of returned events, not a net transfer, owner
+attribution, or complete transaction trace.
+
 Token balance and log calls are separate. The Constellation displays each
 source-reported finalized head, block hash, and retrieval time. It accepts the
 log response only if the token contract matches the balance contract. A

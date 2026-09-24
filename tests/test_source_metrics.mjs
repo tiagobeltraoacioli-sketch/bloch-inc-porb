@@ -117,6 +117,29 @@ test('ERC-20 peer ledger separates exact incoming and outgoing observations',()=
   assert.throws(()=>summarizeObservation(data),/Invalid token direction/);
 });
 
+test('ERC-20 transaction ledger groups returned logs without netting directions',()=>{
+  const root='0x'+'a'.repeat(40),peer='0x'+'b'.repeat(40),second='0x'+'c'.repeat(40);
+  const hash='0x'+'d'.repeat(64),other='0x'+'e'.repeat(64),blockHash='0x'+'f'.repeat(64);
+  const event=(transaction_hash,direction,from,to,value,index)=>({transaction_hash,direction,from,to,
+    amount_base_units:value,block_number:100,block_hash:blockHash,transaction_index:index});
+  const data={asset:'USDC',address:root,nodes:[],edges:[],tokenObservation:{block_window:{from:100,to:100}},
+    tokenActivity:{events:[event(hash,'incoming',peer,root,'9007199254740993',1),
+      event(hash,'outgoing',root,second,'7',1),event(hash,'self',root,root,'3',1),
+      event(other,'incoming',peer,root,'5',2)]}};
+  const result=summarizeObservation(data);
+  assert.equal(result.transaction_activity.transactions.length,2);
+  assert.equal(result.transaction_activity.multi_log_transactions,1);
+  const row=result.transaction_activity.transactions.find(item=>item.transaction_hash===hash);
+  assert.equal(row.event_count,3);
+  assert.equal(row.groups.incoming.base_units,'9007199254740993');
+  assert.equal(row.groups.outgoing.base_units,'7');
+  assert.equal(row.groups.self.base_units,'3');
+  assert.deepEqual(row.peer_addresses,[peer,second]);
+  data.tokenActivity.events[1].block_number=101;
+  data.tokenObservation.block_window.to=101;
+  assert.throws(()=>summarizeObservation(data),/Conflicting token transaction anchor/);
+});
+
 test('ERC-20 block timeline preserves exact amounts, empty windows, and bounded scope',()=>{
   const data={asset:'USDT',address:'0xroot',nodes:[],edges:[],
     tokenActivity:{events:[

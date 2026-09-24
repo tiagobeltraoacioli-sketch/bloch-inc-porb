@@ -9,6 +9,7 @@ let selectedRealTransactionId=null;
 let selectedRealEventId=null;
 let selectedRealPeerAddress=null;
 let selectedTokenBlockBucket=null;
+let selectedTokenTransactionHash=null;
 let selectedUtxoBlockHeight=null;
 let realGraphViewCache=null;
 let realKeyboardIndex=0;
@@ -89,6 +90,7 @@ function setDataMode(mode,detail){
     selectedRealEventId=null;
     selectedRealPeerAddress=null;
     selectedTokenBlockBucket=null;
+    selectedTokenTransactionHash=null;
     selectedUtxoBlockHeight=null;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
@@ -148,6 +150,8 @@ function renderSourceMetrics(data){
     }
   }else if(metrics.kind==='erc20_transfer_logs'){
     add('Transfer logs',String(metrics.returned_events),'Returned in the bounded finalized-block window');
+    add('Observed transactions',String(metrics.transaction_activity.transactions.length),'Distinct transaction hashes among returned logs');
+    add('Multiple logs',String(metrics.transaction_activity.multi_log_transactions),'Returned transactions with more than one Transfer log');
     add('Other addresses',String(metrics.observed_other_identifiers),'Seen in returned logs; no owner grouping');
     const anchors=data.tokenAnchorComparison;
     if(anchors){
@@ -220,6 +224,32 @@ function renderSourceMetrics(data){
     }
     timeline.append(title,description,controls);sourceMetricsPanel.append(timeline);
   }
+  if(metrics.kind==='erc20_transfer_logs'&&metrics.transaction_activity.transactions.length){
+    const panel=document.createElement('div');panel.className='source-peer-ledger';
+    const title=document.createElement('h4');title.textContent='Transactions in returned logs';
+    const description=document.createElement('p');
+    description.textContent='Grouped by source-reported transaction hash. Directions and amounts stay separate. Select one to filter its Transfer logs; the graph and JSON export retain the full bounded response.';
+    const list=document.createElement('div');list.className='source-peer-ledger-list';
+    const all=document.createElement('button');all.type='button';all.textContent='All returned transactions';
+    all.setAttribute('aria-pressed',String(!selectedTokenTransactionHash));
+    all.addEventListener('click',()=>filterTokenTransaction(null));list.append(all);
+    for(const transaction of metrics.transaction_activity.transactions){
+      const button=document.createElement('button');button.type='button';
+      button.dataset.tokenTransaction=transaction.transaction_hash;
+      button.setAttribute('aria-pressed',String(transaction.transaction_hash===selectedTokenTransactionHash));
+      const name=document.createElement('strong');name.textContent=`${transaction.transaction_hash} · block ${transaction.block_number}`;
+      const count=document.createElement('span');count.textContent=`${transaction.event_count} returned ${transaction.event_count===1?'log':'logs'} · ${transaction.peer_addresses.length} other ${transaction.peer_addresses.length===1?'address':'addresses'}`;
+      button.append(name,count);
+      for(const [direction,label] of [['incoming','To queried address'],['outgoing','From queried address'],['self','Self logs']]){
+        const group=transaction.groups[direction];
+        if(!group.count)continue;
+        const detail=document.createElement('small');detail.textContent=`${label} ${group.count}: ${formatObservedBalance(group.base_units,data.asset,6)}`;
+        button.append(detail);
+      }
+      button.addEventListener('click',()=>filterTokenTransaction(transaction.transaction_hash));list.append(button);
+    }
+    panel.append(title,description,list);sourceMetricsPanel.append(panel);
+  }
   if(metrics.kind==='erc20_transfer_logs'&&metrics.peer_activity.length){
     const panel=document.createElement('div');panel.className='source-peer-ledger';
     const title=document.createElement('h4');title.textContent='Observed addresses in returned logs';
@@ -261,6 +291,13 @@ function filterTokenPeer(address){
   if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
   draw();
 }
+function filterTokenTransaction(hash){
+  selectedTokenTransactionHash=hash;
+  selectedRealEventId=null;
+  liveTransactionDetail.hidden=true;
+  if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
+  draw();
+}
 function filterUtxoBlock(height){
   selectedUtxoBlockHeight=height;
   selectedRealTransactionId=null;
@@ -280,9 +317,11 @@ function renderLiveSourceRecords(data){
     const shown=activity.events.filter(event=>(!selectedTokenBlockBucket
       ||event.block_number>=selectedTokenBlockBucket.from&&event.block_number<=selectedTokenBlockBucket.to)
       &&(!selectedRealPeerAddress||event.from?.toLowerCase()===selectedRealPeerAddress
-        ||event.to?.toLowerCase()===selectedRealPeerAddress));
+        ||event.to?.toLowerCase()===selectedRealPeerAddress)
+      &&(!selectedTokenTransactionHash||event.transaction_hash?.toLowerCase()===selectedTokenTransactionHash));
     heading.className='live-source-record';
-    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${selectedTokenBlockBucket||selectedRealPeerAddress?`Showing ${shown.length} for the selected ${selectedTokenBlockBucket?'block range':''}${selectedTokenBlockBucket&&selectedRealPeerAddress?' and ':''}${selectedRealPeerAddress?'address':''}. `:''}The balance above was queried separately. Peer balances are unknown.`;
+    const filters=[selectedTokenBlockBucket&&'block range',selectedRealPeerAddress&&'address',selectedTokenTransactionHash&&'transaction'].filter(Boolean);
+    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${filters.length?`Showing ${shown.length} for the selected ${filters.join(', ')}. `:''}The balance above was queried separately. Peer balances are unknown.`;
     list.append(heading);
     for(const event of shown.slice().reverse()){
       const row=document.createElement('button');row.type='button';row.className='live-source-record';
@@ -460,6 +499,7 @@ async function loadLiveAddress(){
   selectedRealEventId=null;
   selectedRealPeerAddress=null;
   selectedTokenBlockBucket=null;
+  selectedTokenTransactionHash=null;
   selectedUtxoBlockHeight=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
