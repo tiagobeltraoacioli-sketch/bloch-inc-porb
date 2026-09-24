@@ -2,6 +2,7 @@ const canvas = document.getElementById('evidence-constellation');
 const context = canvas.getContext('2d');
 let realObservation=null;
 let realRequest=0;
+let realAddressTargets=[];
 const sourceStatus = document.createElement('details');
 sourceStatus.className = 'source-status';
 sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>synthetic map · optional live lookup</span></summary>
@@ -48,7 +49,11 @@ function assetForLiveAddress(address){
 async function loadLiveAddress(){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
-  if(!asset){setDataMode('synthetic','Enter a Bitcoin or Ethereum mainnet address. For USDT or USDC, choose that asset filter first. BLCH live balances require a complete finalized state source.');return;}
+  if(!asset){
+    realObservation=null;clearWallet();
+    setDataMode('synthetic','Enter a Bitcoin or Ethereum mainnet address. For USDT or USDC, choose that asset filter first. BLCH live balances require a complete finalized state source.');
+    draw();return;
+  }
   const requestId=++realRequest;
   liveButton.disabled=true;
   setDataMode('loading',`Requesting ${asset} address facts from the configured public-chain source…`);
@@ -82,8 +87,13 @@ async function loadLiveAddress(){
     document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
     const list=document.getElementById('transaction-list');list.replaceChildren();
     (data.nodes||[]).slice(0,40).forEach(node=>{
-      const row=document.createElement('div');row.className='live-source-record';
-      row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}`;
+      const row=node.kind==='address'&&node.address?document.createElement('button'):document.createElement('div');
+      row.className='live-source-record';
+      row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}${node.balance?.base_units?` · ${formatObservedBalance(node.balance.base_units,data.asset,node.balance.decimals)}`:''}`;
+      if(row.tagName==='BUTTON'){
+        row.type='button';
+        row.addEventListener('click',()=>inspectRealAddress(node.address));
+      }
       list.append(row);
     });
     if(!list.childElementCount)list.textContent='No transaction index is configured for this address. Balance source and block anchor are shown above.';
@@ -92,11 +102,18 @@ async function loadLiveAddress(){
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
+    clearWallet();
     setDataMode('synthetic',`Public-chain lookup unavailable: ${error.message}. The map remains a synthetic preview.`);
     draw();
   }finally{if(requestId===realRequest)liveButton.disabled=false;}
 }
 liveButton.addEventListener('click',loadLiveAddress);
+function inspectRealAddress(address){
+  const input=document.getElementById('record-search');
+  input.value=address;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  loadLiveAddress();
+}
 document.getElementById('record-search').addEventListener('keydown',event=>{if(event.key==='Enter'&&assetForLiveAddress(event.currentTarget.value.trim())){event.preventDefault();loadLiveAddress();}});
 const assetKeys = ['btc', 'eth', 'usdt', 'usdc', 'blch'];
 const colors = {btc:'#e9c985',eth:'#b4d7a4',usdt:'#87c9ab',usdc:'#c6ced1',blch:'#baff28'};
@@ -415,6 +432,7 @@ function drawRealObservation(observation){
   const satellites=nodes.filter(node=>node.address!==observation.address).slice(0,36);
   const orbit=Math.max(80,Math.min(width*.34,height*.34,225));
   const positions=new Map();
+  realAddressTargets=[];
   satellites.forEach((node,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/Math.max(1,satellites.length);
     const radius=orbit*(index%3===0?.76:index%3===1?.9:1.08);
@@ -428,10 +446,14 @@ function drawRealObservation(observation){
   }
   satellites.forEach(node=>{
     const p=positions.get(node.id);
-    context.fillStyle='#d0d9ca';context.globalAlpha=.75;
-    if(node.kind==='transaction')context.fillRect(p.x-3,p.y-3,6,6);
-    else {context.beginPath();context.arc(p.x,p.y,3.5,0,Math.PI*2);context.fill();}
-    context.globalAlpha=1;
+    if(node.kind==='transaction'){
+      context.fillStyle='#d0d9ca';context.globalAlpha=.75;context.fillRect(p.x-3,p.y-3,6,6);context.globalAlpha=1;
+    }else if(node.kind==='address'){
+      const radius=node.balance?.base_units?balanceSize(node.balance.base_units,observation.asset):5;
+      if(node.balance?.base_units)star(p.x,p.y,radius,colors[observation.asset?.toLowerCase()]||'#baff28',.8);
+      else {context.beginPath();context.arc(p.x,p.y,radius,0,Math.PI*2);context.strokeStyle='#aab5a7';context.lineWidth=1.4;context.stroke();}
+      realAddressTargets.push({address:node.address,p,radius});
+    }
   });
   const radius=balanceSize(observation.balance?.base_units,observation.asset);
   star(center.x,center.y,radius,colors[observation.asset?.toLowerCase()]||'#baff28');
@@ -797,7 +819,13 @@ function renderList() {
   });
 }
 canvas.addEventListener('click',event=>{
-  if(realObservation)return;
+  if(realObservation){
+    const rect=canvas.getBoundingClientRect();
+    const x=event.clientX-rect.left,y=event.clientY-rect.top;
+    const hit=realAddressTargets.find(target=>Math.hypot(x-target.p.x,y-target.p.y)<Math.max(13,target.radius+5));
+    if(hit)inspectRealAddress(hit.address);
+    return;
+  }
   const rect=canvas.getBoundingClientRect();const x=event.clientX-rect.left,y=event.clientY-rect.top;
   const txHit=transactionDots.find(({p})=>Math.hypot(x-p.x,y-p.y)<12);
   if(txHit && selectedWallet){selectTransaction(selectedWallet,txHit.tx);return;}
@@ -838,6 +866,7 @@ document.querySelectorAll('[data-constellation-asset]').forEach(button=>button.a
 }));
 document.getElementById('record-search').addEventListener('input',event=>{
   realRequest++;
+  liveButton.disabled=false;
   if(realObservation){realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; enter a mainnet address and load it to view public-chain facts.');}
   search=event.target.value.trim().toLowerCase();
   keyboardWalletIndex=0;
@@ -847,7 +876,7 @@ document.getElementById('record-search').addEventListener('input',event=>{
   else {clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();}
 });
 document.getElementById('clear-wallet-search').addEventListener('click',()=>{
-  realRequest++;realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; no public-chain address is loaded.');
+  realRequest++;liveButton.disabled=false;realObservation=null;setDataMode('synthetic','Generated example wallets and transfers; no public-chain address is loaded.');
   const input=document.getElementById('record-search');input.value='';search='';document.getElementById('wallet-browser').open=false;clearWallet();renderSearchStatus();renderList();updateSearchUrl();draw();input.focus();
 });
 const pauseButton=document.getElementById('pause-constellation');

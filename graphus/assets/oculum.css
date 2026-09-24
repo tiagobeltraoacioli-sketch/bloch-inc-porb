@@ -1,0 +1,97 @@
+/* Oculum uses the shared Bloch Inc palette and keeps exact values outside the canvas. */
+.oculum-intro { position: relative; isolation: isolate; overflow: hidden; padding: 108px var(--brand-pad) 96px; background: radial-gradient(circle at 78% 45%, #638f2840, transparent 34%), #050706; border-bottom: 1px solid var(--line); }
+.oculum-intro::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: linear-gradient(#2631294d 1px, transparent 1px), linear-gradient(90deg, #2631294d 1px, transparent 1px); background-size: 72px 72px; mask-image: linear-gradient(90deg, #000 0, transparent 78%); opacity: .45; }
+.oculum-intro h1 { max-width: 1100px; margin: 1.3rem 0 1.7rem; color: var(--white); font-size: clamp(4.3rem, 9.2vw, 10rem); font-weight: 620; letter-spacing: -.078em; line-height: .89; }
+.oculum-intro h1 em { font-style: normal; color: var(--brand-lime); }
+.oculum-intro > p:last-child { max-width: 790px; color: #bdc9ba; font-size: clamp(1.02rem, 1.5vw, 1.22rem); line-height: 1.65; }
+
+.oculum-workspace { padding: 86px var(--brand-pad) 115px; background: #0a0e0a; }
+.oculum-workspace-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .65fr); gap: 2rem; align-items: end; margin-bottom: 2.4rem; }
+.oculum-workspace-heading h2, .oculum-lower h2, .oculum-closing h2 { margin: .9rem 0 0; color: var(--white); font-size: clamp(2.45rem, 4.1vw, 4.7rem); line-height: .98; letter-spacing: -.06em; font-weight: 580; }
+.oculum-workspace-heading > p { max-width: 600px; margin: 0 0 .25rem; color: #b4c0b0; line-height: 1.6; }
+.oculum-form { display: flex; gap: .7rem; align-items: end; flex-wrap: wrap; padding: 1.15rem; border: 1px solid #40503f; background: #121914; }
+.oculum-field { display: grid; gap: .45rem; min-width: 0; }
+.oculum-field-asset { flex: 0 1 245px; }
+.oculum-field-address { flex: 1 1 320px; }
+.oculum-field label { color: #bdd0b5; font: .66rem var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.oculum-field select, .oculum-field input { box-sizing: border-box; width: 100%; min-height: 49px; padding: .75rem .85rem; border: 1px solid #526648; border-radius: 0; background: #070b07; color: var(--white); font: .84rem var(--mono); }
+.oculum-field input::placeholder { color: #879786; }
+.oculum-field select { cursor: pointer; }
+.oculum-form button { min-height: 49px; padding: .75rem 1.2rem; border: 1px solid var(--brand-lime); border-radius: 0; background: var(--brand-lime); color: var(--brand-ink); font: 700 .76rem var(--body); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.oculum-form button:hover, .oculum-form button:focus-visible { background: #d1ff6a; }
+.oculum-form button:disabled { opacity: .55; cursor: progress; }
+.oculum-form button span { margin-left: .6rem; }
+.oculum-source { display: flex; gap: .85rem; align-items: flex-start; padding: .95rem 1.2rem; border: 1px solid #40503f; border-top: 0; background: #182118; color: #d8e7d0; }
+.oculum-source-dot { flex: 0 0 8px; width: 8px; height: 8px; margin-top: .38rem; border-radius: 50%; background: var(--brand-lime); box-shadow: 0 0 0 4px #34492b; }
+.oculum-source strong { display: block; font: 700 .76rem var(--body); }
+.oculum-source p { margin: .2rem 0 0; color: #b2c2ad; font-size: .76rem; line-height: 1.5; }
+.oculum-source[data-state="error"] { border-color: #94775b; background: #2a201a; }
+.oculum-source[data-state="error"] .oculum-source-dot { background: #efaf83; box-shadow: 0 0 0 4px #4c382b; }
+
+.oculum-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); min-height: 590px; }
+.oculum-map-panel { display: flex; flex-direction: column; min-width: 0; border: 1px solid #40503f; border-top: 0; background: radial-gradient(circle at 55% 44%, #182d13 0, #090e0a 47%, #050806 100%); }
+.oculum-map-top, .oculum-map-bottom { display: flex; justify-content: space-between; gap: 1rem; padding: 1.15rem 1.35rem; color: #aebca8; font: .63rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.oculum-map-top { border-bottom: 1px solid #243424; }
+.oculum-map-top span:first-child { color: var(--brand-lime); }
+.oculum-map-bottom { border-top: 1px solid #243424; }
+.oculum-map-bottom b { color: var(--white); font-weight: 700; }
+.oculum-canvas-wrap { position: relative; flex: 1; min-height: 490px; overflow: hidden; }
+.oculum-canvas-wrap::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(#84b46930 .7px, transparent .7px); background-size: 28px 28px; opacity: .55; }
+#oculum-canvas { position: relative; display: block; width: 100%; height: 100%; min-height: 490px; cursor: crosshair; }
+.oculum-empty { position: absolute; top: 50%; left: 50%; width: min(340px, calc(100% - 40px)); transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.oculum-empty[hidden] { display: none; }
+.oculum-empty > span { display: block; margin-bottom: .5rem; color: var(--brand-lime); font-size: 3.5rem; text-shadow: 0 0 36px #baff28aa; }
+.oculum-empty strong { color: var(--white); font-size: 1.3rem; }
+.oculum-empty p { color: #aab8a5; font-size: .85rem; line-height: 1.55; }
+.oculum-detail-panel { min-width: 0; padding: 1.6rem; border: 1px solid #40503f; border-top: 0; border-left: 0; background: #121914; }
+.oculum-detail-panel h2 { margin: 1.25rem 0 1.2rem; color: var(--white); font-size: 2rem; letter-spacing: -.04em; }
+#oculum-detail { overflow-wrap: anywhere; color: #e8f0e3; font-size: .82rem; line-height: 1.65; }
+#oculum-detail p { color: #b9c8b2; }
+#oculum-detail dl { margin: 0; }
+#oculum-detail dl > div { padding: .75rem 0; border-top: 1px solid #40503f; }
+#oculum-detail dt { color: #a8b9a0; font: .62rem var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+#oculum-detail dd { margin: .35rem 0 0; color: var(--white); }
+#oculum-detail a { color: var(--brand-lime); overflow-wrap: anywhere; }
+.oculum-detail-note { margin-top: 1.8rem; padding: 1rem; border-left: 2px solid var(--brand-lime); background: #1c2819; }
+.oculum-detail-note strong { color: var(--brand-lime); font-size: .8rem; }
+.oculum-detail-note p { margin: .4rem 0 0; color: #b9c8b3; font-size: .75rem; line-height: 1.6; }
+
+.oculum-lower { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 1rem; margin-top: 1rem; }
+.oculum-ranking, .oculum-coverage { min-width: 0; padding: 2rem; border: 1px solid #40503f; background: #121914; }
+.oculum-lower h2 { font-size: clamp(1.9rem, 2.5vw, 2.8rem); }
+.oculum-lower-heading > p:last-child, #oculum-coverage p { max-width: 620px; color: #b7c6b1; font-size: .8rem; line-height: 1.6; }
+.oculum-list { display: grid; gap: .45rem; margin-top: 1.5rem; max-height: 480px; overflow-y: auto; }
+.oculum-list-empty { padding: 1.1rem; border: 1px dashed #526648; color: #b4c2af; font-size: .82rem; }
+.oculum-list button { display: grid; gap: .25rem; width: 100%; padding: .85rem 1rem; border: 1px solid #435840; background: #192719; color: var(--white); text-align: left; cursor: pointer; }
+.oculum-list button:hover, .oculum-list button:focus-visible, .oculum-list button.selected, .oculum-list button[aria-pressed="true"] { border-color: var(--brand-lime); background: #263c20; }
+.oculum-list button strong, .oculum-list button span { overflow-wrap: anywhere; }
+.oculum-list button small { color: #b3c7a9; }
+.oculum-scale { display: flex; align-items: center; gap: .9rem; margin-top: 1.5rem; padding-top: 1.1rem; border-top: 1px solid #40503f; }
+.oculum-scale-small, .oculum-scale-large { flex: 0 0 auto; display: block; border-radius: 50%; background: var(--brand-lime); box-shadow: 0 0 14px #baff28a0; }
+.oculum-scale-small { width: 9px; height: 9px; }
+.oculum-scale-large { width: 24px; height: 24px; box-shadow: 0 0 25px #baff28bb; }
+.oculum-scale p { margin: 0 0 0 .4rem; color: #b7c6b1; font-size: .75rem; line-height: 1.5; }
+.oculum-closing { padding: 110px var(--brand-pad); background: radial-gradient(circle at 50% 100%, #31591d 0, transparent 55%), #0d150c; text-align: center; }
+.oculum-closing h2 { margin: 1rem 0; }
+.oculum-closing > p:not(.section-index) { max-width: 620px; margin: 0 auto 2rem; color: #b7c7b0; line-height: 1.6; }
+
+@media (max-width: 1100px) {
+  .oculum-workspace-heading { grid-template-columns: 1fr; gap: 1rem; }
+  .oculum-grid { grid-template-columns: 1fr; }
+  .oculum-detail-panel { border-top: 0; border-left: 1px solid #40503f; }
+}
+@media (max-width: 760px) {
+  .oculum-intro { padding: 82px 1rem 74px; }
+  .oculum-intro h1 { font-size: clamp(3.6rem, 14vw, 6rem); }
+  .oculum-workspace { padding: 70px 1rem 85px; }
+  .oculum-form { padding: .8rem; }
+  .oculum-field, .oculum-form button { flex: 1 1 100%; }
+  .oculum-map-top, .oculum-map-bottom { flex-wrap: wrap; padding: .85rem; font-size: .58rem; }
+  .oculum-canvas-wrap, #oculum-canvas { min-height: 380px; }
+  .oculum-detail-panel, .oculum-ranking, .oculum-coverage { padding: 1.2rem; }
+  .oculum-lower { grid-template-columns: 1fr; }
+  .oculum-closing { padding: 82px 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oculum-intro::before { animation: none; }
+}

@@ -6,6 +6,9 @@ const TOKEN_CONTRACTS = Object.freeze({
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_TRANSACTIONS = 8;
 const MAX_TRANSACTION_ENDPOINTS = 24;
+const MAX_NEIGHBOR_BALANCES = 6;
+const NEIGHBOR_FETCH_CONCURRENCY = 3;
+const NEIGHBOR_FETCH_TIMEOUT_MS = 4000;
 
 function failure(code, status = 502) {
   return {status, body: {error: code}};
@@ -72,8 +75,8 @@ async function readJson(response) {
   catch { throw new Error('invalid_source_response'); }
 }
 
-async function fetchJson(fetcher, url, init = {}) {
-  const response = await fetcher(url, {signal: AbortSignal.timeout(9000), ...init});
+async function fetchJson(fetcher, url, init = {}, timeoutMs = 9000) {
+  const response = await fetcher(url, {signal: AbortSignal.timeout(timeoutMs), ...init});
   return readJson(response);
 }
 
@@ -117,16 +120,52 @@ function transactionEvidence(address, transactions) {
   return {nodes: [...nodes.values()], edges};
 }
 
+function confirmedAddressBalance(summary, address, retrievedAt) {
+  if (summary?.address !== address) throw new Error('source_address_mismatch');
+  const chain = summary.chain_stats;
+  if (!chain || !safeInteger(chain.funded_txo_sum) || !safeInteger(chain.spent_txo_sum)) {
+    throw new Error('invalid_source_response');
+  }
+  const amount = BigInt(chain.funded_txo_sum) - BigInt(chain.spent_txo_sum);
+  if (amount < 0n) throw new Error('invalid_source_amount');
+  return {
+    base_units: amount.toString(), unit: 'sat', scope: 'source_confirmed_address_aggregate',
+    retrieved_at: retrievedAt,
+  };
+}
+
+async function enrichBitcoinNeighbors(address, evidence, fetcher, now) {
+  const candidates = evidence.nodes
+    .filter(node => node.kind === 'address' && node.address !== address)
+    .sort((left, right) => left.address < right.address ? -1 : left.address > right.address ? 1 : 0)
+    .slice(0, MAX_NEIGHBOR_BALANCES);
+  let next = 0;
+  let enriched = 0;
+  async function worker() {
+    while (next < candidates.length) {
+      const node = candidates[next++];
+      try {
+        const endpoint = `${BITCOIN_API}/address/${encodeURIComponent(node.address)}`;
+        const summary = await fetchJson(fetcher, endpoint, {}, NEIGHBOR_FETCH_TIMEOUT_MS);
+        node.balance = confirmedAddressBalance(summary, node.address, now().toISOString());
+        enriched++;
+      } catch {
+        node.balance = null;
+      }
+    }
+  }
+  await Promise.all(Array.from({length: Math.min(NEIGHBOR_FETCH_CONCURRENCY, candidates.length)}, () => worker()));
+  return {attempted: candidates.length, enriched};
+}
+
 async function bitcoinWallet(address, fetcher, now) {
   const endpoint = `${BITCOIN_API}/address/${encodeURIComponent(address)}`;
   const summary = await fetchJson(fetcher, endpoint);
-  if (summary?.address !== address) throw new Error('source_address_mismatch');
+  const summaryRetrievedAt = now().toISOString();
+  const rootBalance = confirmedAddressBalance(summary, address, summaryRetrievedAt);
   const chain = summary.chain_stats;
   const mempool = summary.mempool_stats;
-  if (!chain || !mempool || !safeInteger(chain.funded_txo_sum) || !safeInteger(chain.spent_txo_sum)
-      || !safeInteger(chain.tx_count) || !safeInteger(mempool.tx_count)) throw new Error('invalid_source_response');
-  const balance = BigInt(chain.funded_txo_sum) - BigInt(chain.spent_txo_sum);
-  if (balance < 0n) throw new Error('invalid_source_amount');
+  if (!mempool || !safeInteger(chain.tx_count) || !safeInteger(mempool.tx_count)) throw new Error('invalid_source_response');
   let evidence = {nodes: [{id: `bitcoin:address:${address}`, kind: 'address', address}], edges: []};
   let transactionCoverage = 'unavailable';
   try {
@@ -137,18 +176,26 @@ async function bitcoinWallet(address, fetcher, now) {
   } catch {
     // Balance remains available if the optional transaction page fails.
   }
+  const rootNode = evidence.nodes.find(node => node.kind === 'address' && node.address === address);
+  rootNode.balance = rootBalance;
+  const neighborhood = await enrichBitcoinNeighbors(address, evidence, fetcher, now);
   return {
     status: 'source-reported', independent_verification: false,
     network: 'bitcoin-mainnet', asset: 'BTC', address,
-    balance: {base_units: balance.toString(), unit: 'sat', scope: 'source_confirmed_address_aggregate', block: null},
+    balance: {base_units: rootBalance.base_units, unit: 'sat', scope: rootBalance.scope, block: null},
     activity: {confirmed_tx_count: chain.tx_count, mempool_tx_count: mempool.tx_count},
     observation: {
       source_id: 'blockstream-esplora', source_url: endpoint,
-      retrieved_at: now().toISOString(), coverage: transactionCoverage,
+      retrieved_at: summaryRetrievedAt, coverage: transactionCoverage,
+      neighborhood: {
+        selection: 'first_6_unique_non_query_address_nodes_in_lexicographic_order',
+        attempted: neighborhood.attempted, enriched: neighborhood.enriched,
+      },
       limitations: [
         'Balance is the source-reported confirmed aggregate for one address, not a multi-address wallet or owner.',
         'The balance is not independently reconciled to a locally validated UTXO set or pinned to one block.',
         'The displayed transaction page is incomplete history; inputs and outputs do not establish sender ownership.',
+        'Neighbor balances are separately queried address aggregates at their own retrieval times; they do not share a chain snapshot.',
         'Querying this public API discloses the searched address to its operator.',
       ],
     },

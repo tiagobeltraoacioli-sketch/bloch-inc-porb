@@ -247,3 +247,6 @@ body[data-constellation-mode="source-reported"] .motif-panel,
 body[data-constellation-mode="source-reported"] .network-evidence,
 body[data-constellation-mode="source-reported"] .record-list { display: none; }
 .live-source-record { padding: 0.6rem 0; border-bottom: 1px solid rgba(200, 221, 189, 0.16); overflow-wrap: anywhere; }
+.live-source-record:is(button) { display: block; width: 100%; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.live-source-record:is(button):hover,
+.live-source-record:is(button):focus-visible { color: var(--brand-lime); }

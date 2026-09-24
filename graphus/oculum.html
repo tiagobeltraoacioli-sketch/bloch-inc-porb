@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050706">
+  <meta name="description" content="Graphus Oculum is a wallet-address heat map. Inspect source-reported held amounts for addresses you query, with source coverage and no person labels or public AML scores.">
+  <title>Graphus Oculum — Bloch Inc</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="stylesheet" href="assets/silver.css">
+  <link rel="stylesheet" href="assets/bloch-brand.css?v=20260923">
+  <link rel="stylesheet" href="assets/oculum.css?v=20260923">
+  <script src="assets/oculum.js" defer></script>
+  <script src="assets/brand.js?v=20260923" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="Graphus home"><img src="assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-divider"></span><span>GRAPHUS</span></a>
+    <nav aria-label="Main navigation"><a href="/">Overview</a><a href="constellation.html">Constellation</a><a href="oculum.html" aria-current="page">Oculum</a><a href="map.html">System map</a><a class="nav-contact" href="https://blochinc.xyz/">Bloch Inc <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="oculum-intro">
+      <p class="section-index">GRAPHUS / OCULUM / ADDRESS HEAT MAP</p>
+      <h1>See what<br><em>each point holds.</em></h1>
+      <p>Query public-chain addresses and inspect their source-reported held amounts in a constellation of light. One point represents one network and asset scoped address. Larger, brighter points hold more of that asset within the addresses you have queried. Position is visual layout, not geography or ownership.</p>
+    </section>
+
+    <section class="oculum-workspace" aria-labelledby="oculum-workspace-title">
+      <div class="oculum-workspace-heading">
+        <div><p class="section-index">01 / BUILD A SAMPLE</p><h2 id="oculum-workspace-title">Add addresses.<br>Read the source.</h2></div>
+        <p>Oculum ranks only the addresses currently queried in this session. It is not a list of the largest holders on any chain, token, or exchange. No names, identities, geolocation, or AML scores appear here.</p>
+      </div>
+      <form id="oculum-form" class="oculum-form">
+        <div class="oculum-field oculum-field-asset"><label for="oculum-asset">Asset</label><select id="oculum-asset" name="asset"><option value="btc">BTC / Bitcoin</option><option value="eth">ETH / Ethereum</option><option value="usdt">USDT / Ethereum ERC-20</option><option value="usdc">USDC / Ethereum ERC-20</option><option value="blch" disabled>BLCH / source pending</option></select></div>
+        <div class="oculum-field oculum-field-address"><label for="oculum-address">Address</label><input id="oculum-address" name="address" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a public address" required></div>
+        <button id="oculum-add" type="submit">Add address <span aria-hidden="true">↗</span></button>
+      </form>
+      <div class="oculum-source" id="oculum-source-status" role="status" aria-live="polite"><span class="oculum-source-dot" aria-hidden="true"></span><div><strong>Awaiting a query</strong><p>Source, network, observed time, and coverage appear with each result. BLCH held amount is unavailable until a verified balance source is connected.</p></div></div>
+
+      <div class="oculum-grid">
+        <div class="oculum-map-panel">
+          <div class="oculum-map-top"><span>OCULUM / HOLDER HEAT MAP</span><span id="oculum-count">0 addresses</span></div>
+          <div class="oculum-canvas-wrap"><canvas id="oculum-canvas" tabindex="0" role="img" aria-label="Heat map of queried addresses; use the ranked list below for exact balances and source details.">Your browser cannot display the heat map. Use the ranked address list below.</canvas><div class="oculum-empty" id="oculum-empty"><span aria-hidden="true">✦</span><strong>Your map begins with an address.</strong><p>Search BTC, ETH, USDT, or USDC to create a source-aware sample.</p></div></div>
+          <div class="oculum-map-bottom"><span>POINT SIZE + GLOW <b>HELD AMOUNT</b></span><span>WITHIN ASSET · WITHIN QUERIED SAMPLE</span></div>
+        </div>
+        <aside class="oculum-detail-panel" aria-labelledby="oculum-detail-title">
+          <p class="section-index">SELECTED ADDRESS / SOURCE FACTS</p>
+          <h2 id="oculum-detail-title">Follow the light.</h2>
+          <div id="oculum-detail" aria-live="polite"><p>Select an address point or a row in the ranked list to inspect its held amount, source, observation time, and coverage.</p></div>
+          <div class="oculum-detail-note"><strong>Interpretation</strong><p>An address is a network reference, not a person or proof of common ownership. A BTC address amount depends on the source's UTXO view; token balances depend on the identified contract and block. Source coverage and freshness limit every comparison.</p></div>
+        </aside>
+      </div>
+
+      <div class="oculum-lower">
+        <section class="oculum-ranking" aria-labelledby="oculum-ranking-title"><div class="oculum-lower-heading"><p class="section-index">02 / EXACT VALUES</p><h2 id="oculum-ranking-title">Queried sample ranking</h2><p>Ordered by held amount within each asset. Assets use different native units and cannot be pooled into one balance ranking.</p></div><div id="oculum-list" class="oculum-list" aria-live="polite"><p class="oculum-list-empty">No addresses have been added. Query an address to see its source-reported balance here.</p></div></section>
+        <section class="oculum-coverage" aria-labelledby="oculum-coverage-title"><div class="oculum-lower-heading"><p class="section-index">03 / SOURCE BOUNDARY</p><h2 id="oculum-coverage-title">Know what is covered.</h2></div><div id="oculum-coverage" aria-live="polite"><p>BTC, ETH, USDT, and USDC lookups are bounded to the connected source's supported network, contract, and observation time. BLCH is pending a verified held-balance source. Results are not an exhaustive holder index.</p></div><div class="oculum-scale"><span class="oculum-scale-small" aria-hidden="true"></span><span class="oculum-scale-large" aria-hidden="true"></span><p>Point size and glow encode held amount relative to other queried addresses for the same asset. They do not encode transaction activity, risk, or a cross-chain value estimate.</p></div></section>
+      </div>
+    </section>
+    <section class="oculum-closing"><p class="section-index">GRAPHUS OF BLOCH INC</p><h2>Evidence before inference.</h2><p>Every visible amount should carry its source and coverage. The heat map is a way to inspect a bounded sample, never an identity claim.</p><a class="button secondary" href="constellation.html">Explore transaction relationships <span aria-hidden="true">↗</span></a></section>
+  </main>
+  <footer><span>© 2026 Bloch Inc · Graphus Oculum</span><span>Queried addresses only · No public AML scores</span><a href="https://blochinc.xyz/">blochinc.xyz ↗</a></footer>
+</body>
+</html>

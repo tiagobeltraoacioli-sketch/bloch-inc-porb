@@ -22,7 +22,8 @@ test('Bitcoin address balance is exact and transaction edges remain observations
       vin: [{prevout: {scriptpubkey_address: btcAddress, value: 3000}}],
       vout: [{scriptpubkey_address: otherAddress, value: 2700}],
     }]);
-    return reply({address: btcAddress, chain_stats: {funded_txo_sum: 12000, spent_txo_sum: 2000, tx_count: 3}, mempool_stats: {tx_count: 1}});
+    const address = url.endsWith(otherAddress) ? otherAddress : btcAddress;
+    return reply({address, chain_stats: {funded_txo_sum: 12000, spent_txo_sum: 2000, tx_count: 3}, mempool_stats: {tx_count: 1}});
   };
   const result = await queryChainWallet({network: 'bitcoin', address: btcAddress, fetcher, now});
   assert.equal(result.status, 200);
@@ -35,7 +36,46 @@ test('Bitcoin address balance is exact and transaction edges remain observations
   assert.equal(result.body.edges[1].kind, 'created_output');
   assert.equal(result.body.edges[1].amount_base_units, '2700');
   assert.equal(result.body.observation.retrieved_at, '2026-09-23T12:00:00.000Z');
-  assert.equal(calls.length, 2);
+  assert.equal(result.body.observation.neighborhood.enriched, 1);
+  assert.equal(result.body.nodes.find(node => node.address === otherAddress).balance.base_units, '10000');
+  assert.equal(calls.length, 3);
+});
+
+test('Bitcoin neighbor enrichment is six-address bounded, deterministic and three-way concurrent', async () => {
+  const neighbors = 'BCDEFGHJKL'.split('').map(letter => `1${'A'.repeat(24)}${letter}`);
+  const requested = [];
+  let active = 0;
+  let maximumActive = 0;
+  let tick = 0;
+  const clock = () => new Date(Date.UTC(2026, 8, 23, 12, 0, tick++));
+  const fetcher = async url => {
+    if (url.endsWith('/txs/chain')) return reply([{
+      txid: 'c'.repeat(64),
+      status: {confirmed: true, block_height: 880000, block_hash: 'd'.repeat(64), block_time: 1735689600},
+      vin: [{prevout: {scriptpubkey_address: btcAddress, value: 5000}}],
+      vout: neighbors.map(address => ({scriptpubkey_address: address, value: 100})),
+    }]);
+    const address = url.slice(url.lastIndexOf('/') + 1);
+    if (address !== btcAddress) {
+      requested.push(address);
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active--;
+    }
+    return reply({address, chain_stats: {funded_txo_sum: 10000, spent_txo_sum: 1000, tx_count: 2}, mempool_stats: {tx_count: 0}});
+  };
+  const result = await queryChainWallet({network: 'bitcoin', address: btcAddress, fetcher, now: clock});
+  assert.equal(result.status, 200);
+  assert.deepEqual(requested, neighbors.slice(0, 6));
+  assert.ok(maximumActive <= 3 && maximumActive >= 2);
+  assert.deepEqual(result.body.observation.neighborhood, {
+    selection: 'first_6_unique_non_query_address_nodes_in_lexicographic_order', attempted: 6, enriched: 6,
+  });
+  const enriched = result.body.nodes.filter(node => node.address && node.address !== btcAddress && node.balance);
+  assert.equal(enriched.length, 6);
+  assert.equal(new Set(enriched.map(node => node.balance.retrieved_at)).size, 6);
+  assert.equal(result.body.nodes.filter(node => node.address && node.address !== btcAddress && !node.balance).length, 4);
 });
 
 test('Bitcoin reports balance even when bounded transaction evidence is unavailable', async () => {
@@ -47,6 +87,62 @@ test('Bitcoin reports balance even when bounded transaction evidence is unavaila
   assert.equal(result.body.balance.base_units, '5');
   assert.equal(result.body.observation.coverage, 'unavailable');
   assert.deepEqual(result.body.edges, []);
+});
+
+test('failed neighbor lookup never becomes a zero balance or a failed root query', async () => {
+  const fetcher = async url => {
+    if (url.endsWith('/txs/chain')) return reply([{
+      txid: 'a'.repeat(64), status: {confirmed: true, block_height: 1, block_hash: 'b'.repeat(64), block_time: 1},
+      vin: [], vout: [{scriptpubkey_address: otherAddress, value: 100}],
+    }]);
+    if (url.endsWith(otherAddress)) return reply({error: 'temporary outage'}, 503);
+    return reply({address: btcAddress, chain_stats: {funded_txo_sum: 100, spent_txo_sum: 0, tx_count: 1}, mempool_stats: {tx_count: 0}});
+  };
+  const result = await queryChainWallet({network: 'bitcoin', address: btcAddress, fetcher, now});
+  assert.equal(result.status, 200);
+  assert.equal(result.body.balance.base_units, '100');
+  assert.equal(result.body.nodes.find(node => node.address === otherAddress).balance, null);
+  assert.equal(result.body.observation.neighborhood.attempted, 1);
+  assert.equal(result.body.observation.neighborhood.enriched, 0);
+});
+
+test('Bitcoin balances preserve exact safe integer satoshis and reject imprecise source numbers', async () => {
+  const base = {
+    address: btcAddress,
+    chain_stats: {funded_txo_sum: Number.MAX_SAFE_INTEGER, spent_txo_sum: Number.MAX_SAFE_INTEGER - 2, tx_count: 0},
+    mempool_stats: {tx_count: 0},
+  };
+  const valid = await queryChainWallet({
+    network: 'bitcoin', address: btcAddress, now,
+    fetcher: async url => reply(url.endsWith('/txs/chain') ? [] : base),
+  });
+  assert.equal(valid.status, 200);
+  assert.equal(valid.body.balance.base_units, '2');
+  assert.equal(valid.body.nodes.find(node => node.address === btcAddress).balance.base_units, '2');
+
+  const invalid = await queryChainWallet({
+    network: 'bitcoin', address: btcAddress, now,
+    fetcher: async () => reply({...base, chain_stats: {...base.chain_stats, funded_txo_sum: Number.MAX_SAFE_INTEGER + 1}}),
+  });
+  assert.deepEqual(invalid, {status: 502, body: {error: 'chain_source_unavailable'}});
+});
+
+test('unsafe neighbor source number leaves only that neighbor balance unavailable', async () => {
+  const fetcher = async url => {
+    if (url.endsWith('/txs/chain')) return reply([{
+      txid: 'a'.repeat(64), status: {confirmed: true, block_height: 1, block_hash: 'b'.repeat(64), block_time: 1},
+      vin: [], vout: [{scriptpubkey_address: otherAddress, value: 100}],
+    }]);
+    const address = url.endsWith(otherAddress) ? otherAddress : btcAddress;
+    return reply({address, chain_stats: {funded_txo_sum: address === otherAddress ? Number.MAX_SAFE_INTEGER + 1 : 7, spent_txo_sum: 0, tx_count: 1}, mempool_stats: {tx_count: 0}});
+  };
+  const result = await queryChainWallet({network: 'bitcoin', address: btcAddress, fetcher, now});
+  assert.equal(result.status, 200);
+  assert.equal(result.body.balance.base_units, '7');
+  assert.equal(result.body.nodes.find(node => node.address === otherAddress).balance, null);
+  assert.deepEqual(result.body.observation.neighborhood, {
+    selection: 'first_6_unique_non_query_address_nodes_in_lexicographic_order', attempted: 1, enriched: 0,
+  });
 });
 
 test('Ethereum token balance uses the same source-reported finalized block and fixed contract', async () => {
