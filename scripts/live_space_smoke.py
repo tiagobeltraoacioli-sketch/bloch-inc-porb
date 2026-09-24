@@ -42,5 +42,11 @@ for network in ("bitcoin", "ethereum", "bloch"):
     transaction = get("tx", network=network, query=txid)
     wallet = get("address", network=network, query=address, asset={"bitcoin": "BTC", "ethereum": "ETH", "bloch": "BLCH"}[network])
     assert transaction["transaction"]
+    if network == "bitcoin" and not transaction["facts"]["coinbase"]:
+        assert transaction["facts"]["virtual_size_vb"] == (transaction["transaction"]["weight"] + 3) // 4
+        assert transaction["facts"]["fee_rate_sat_vb"] is not None
+    if network == "ethereum" and transaction["receipt"]:
+        receipt = transaction["receipt"]
+        assert transaction["gas_fee_wei"] == str(int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16))
     assert wallet["wallet"]["balance"]["base_units"].isdigit()
     print(network, "head", block_query, "tx", txid[:14], "balance", wallet["wallet"]["balance"]["base_units"][:18])
