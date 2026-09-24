@@ -14,5 +14,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_space_science.mjs
+      - run: node --test tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_space_science.mjs
       - run: node --check site/portal/portal.js
+      - run: node --check site/portal/explorer.js

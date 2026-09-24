@@ -11,6 +11,8 @@ The user requested an invitation-only portal for Bitcoin, Ethereum and Bloch, wi
 - A collection reads 1–4 source pages, up to 1,200 references and 4,000 records. Capacity stops preserve completed pages with an explicit reason. Source errors and conflicting events fail closed; repeated events are deduplicated and conflicting block hashes rejected.
 - The latest 50 analyses per organization preserve exact source amounts, model version, dataset SHA-256, observation times, block anchors and individual wallet/script results. Ordered database parts keep each value below D1's size limit; deletion cascades to those parts.
 - Collection is on request, not an exhaustive background index. Space and Graphus windows are generated separately; their heads, graph samples and telemetry are not one atomic cross-network snapshot.
+- The interactive graph supports pointer/keyboard selection of references and directed connections, pan/zoom, selected neighborhoods, and search across all loaded references and transaction hashes (including hashes stored only on account-chain records). Selected references synchronize with the score scatter/table. Paginated records retain exact amounts, direction, transaction IDs and block anchors.
+- Drawing is bounded to 160 references and 600 directed connections, with selected references and neighbors prioritized. Search covers the entire saved sample; record inspection is paginated in groups of 20. Missing search results mean only absence from that sample. Explicit links query a public reference in Graphus or Oculum; private scores, run IDs and credentials are never included in those links.
 
 ## Model contract
 
@@ -93,4 +95,12 @@ Latest verified source samples (not full-chain totals):
 
 Bloch's 19-reference cohort does not meet the 20-reference Red threshold; Red remains null and Blue remains available. Space returned 30 Bitcoin block observations, 48 Ethereum fee/gas observations and 97 Bloch telemetry observations. Historical AR(1) evaluation was available for Bitcoin and Ethereum; Bloch lacked the required stable-coverage fitting segment. No missing model output was fabricated.
 
-Source APIs can return transient 502 errors. Public reads use up to two attempts with a 20-second request deadline and bounded response bodies. Redirects use the Workers-supported manual mode and non-success responses are rejected. The application is available at `https://rednblue-space.pages.dev/portal/`. The custom domain was attached, but DNS creation returned HTTP 403 with the available Pages credential; activation requires the zone's proxied CNAME `rednblue.space` → `rednblue-space.pages.dev`.
+Source APIs can return transient 502 errors. Public reads use up to two attempts with a 20-second request deadline and bounded response bodies. Redirects use the Workers-supported manual mode and non-success responses are rejected. The application is available at `https://rednblue.space/portal/`, with `https://rednblue-space.pages.dev/portal/` as an alternate address.
+
+### Interactive graph and access update — 2026-09-24
+
+The custom domain now responds successfully over HTTPS at `https://rednblue.space/portal/`. The public AML landing page now directs visitors there from its header, primary hero action and a dedicated portal access section.
+
+The graph update passed 21 model, graph search, source, authorization and time-series checks, plus local WebKit interaction checks for nodes, keyboard connections, exact/partial reference search, transaction search, direction filters, pagination, evidence inspection, empty results, and mobile layout.
+
+Deploy the public AML landing independently: `python3 scripts/build_aml_landing.py` creates a temporary directory containing only the public landing assets and its own `wrangler.toml`. In that directory, run `wrangler pages deploy public --project-name aml-blochinc --branch main`. Its `/portal` paths redirect to the custom BI-PoRB domain. The private portal continues to deploy from `site/`; its Functions and D1 bindings are not included in the public landing bundle.
