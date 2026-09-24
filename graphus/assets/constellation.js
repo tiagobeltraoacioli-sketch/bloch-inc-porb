@@ -6,6 +6,7 @@ let realAddressTargets=[];
 let realTransactionTargets=[];
 let selectedRealTransactionId=null;
 let selectedRealEventId=null;
+let selectedTokenBlockBucket=null;
 let realKeyboardIndex=0;
 const syntheticCanvasHelp=document.getElementById('constellation-help').textContent;
 const sourceStatus = document.createElement('details');
@@ -53,6 +54,7 @@ function setDataMode(mode,detail){
   if(mode==='synthetic'){
     selectedRealTransactionId=null;
     selectedRealEventId=null;
+    selectedTokenBlockBucket=null;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
@@ -105,16 +107,50 @@ function renderSourceMetrics(data){
   }else if(metrics.kind==='erc20_transfer_logs'){
     add('Transfer logs',String(metrics.returned_events),'Returned in the bounded finalized-block window');
     add('Other addresses',String(metrics.observed_other_identifiers),'Seen in returned logs; no owner grouping');
+    add('Active blocks',`${metrics.block_activity.active_blocks} / ${metrics.block_activity.total_blocks}`,'Blocks with at least one returned Transfer log');
+    add('Busiest block',metrics.block_activity.busiest_block
+      ?`${metrics.block_activity.busiest_block.height} · ${metrics.block_activity.busiest_block.count} logs`:'None observed',
+      'Among returned logs in this window');
     for(const [direction,label] of [['incoming','Incoming logs'],['outgoing','Outgoing logs'],['self','Self logs']]){
       const group=metrics.groups[direction];
       add(label,formatObservedBalance(group.base_units,metrics.asset,6),`${group.count} returned ${group.count===1?'log':'logs'}`);
     }
   }else add('Activity coverage','Balance only','No transaction index is connected for this observation');
   sourceMetricsPanel.append(heading,grid);
+  if(metrics.kind==='erc20_transfer_logs'&&metrics.block_activity.buckets.length){
+    const timeline=document.createElement('div');timeline.className='source-block-timeline';
+    const title=document.createElement('h4');title.textContent='Returned logs by block range';
+    const description=document.createElement('p');description.textContent='Bars count returned logs, including empty ranges. Choose a range to filter the source-record list; the constellation still shows the full returned window.';
+    const controls=document.createElement('div');controls.className='source-block-timeline-controls';
+    const all=document.createElement('button');all.type='button';all.textContent='All returned logs';
+    all.setAttribute('aria-pressed',String(!selectedTokenBlockBucket));
+    all.addEventListener('click',()=>filterTokenBlockBucket(null));controls.append(all);
+    const peak=Math.max(1,...metrics.block_activity.buckets.map(bucket=>bucket.count));
+    for(const bucket of metrics.block_activity.buckets){
+      const button=document.createElement('button');button.type='button';
+      button.setAttribute('aria-pressed',String(selectedTokenBlockBucket?.from===bucket.from&&selectedTokenBlockBucket?.to===bucket.to));
+      const label=document.createElement('span');label.textContent=`${bucket.from}–${bucket.to} · ${bucket.count} ${bucket.count===1?'log':'logs'}`;
+      const bar=document.createElement('span');bar.className='source-block-timeline-bar';
+      const fill=document.createElement('i');fill.style.width=`${bucket.count/peak*100}%`;bar.append(fill);
+      const directions=document.createElement('small');
+      directions.textContent=`in ${bucket.groups.incoming.count} · out ${bucket.groups.outgoing.count} · self ${bucket.groups.self.count}`;
+      button.append(label,bar,directions);
+      button.addEventListener('click',()=>filterTokenBlockBucket({from:bucket.from,to:bucket.to}));
+      controls.append(button);
+    }
+    timeline.append(title,description,controls);sourceMetricsPanel.append(timeline);
+  }
   const provenance=document.createElement('p');
   provenance.textContent=`Source: ${metrics.source}. Blocks: ${metrics.block_range?`${metrics.block_range.from}–${metrics.block_range.to}`:'not supplied'}. Coverage: ${metrics.coverage}. ${metrics.caveat}`;
   sourceMetricsPanel.append(provenance);
   sourceMetricsPanel.hidden=false;
+}
+function filterTokenBlockBucket(bucket){
+  selectedTokenBlockBucket=bucket;
+  selectedRealEventId=null;
+  liveTransactionDetail.hidden=true;
+  if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
+  draw();
 }
 function renderLiveSourceRecords(data){
   const activity=data.tokenActivity;
@@ -125,10 +161,13 @@ function renderLiveSourceRecords(data){
   if(activity){
     const heading=document.createElement('p');
     const window=data.tokenObservation?.block_window;
+    const shown=selectedTokenBlockBucket
+      ?activity.events.filter(event=>event.block_number>=selectedTokenBlockBucket.from&&event.block_number<=selectedTokenBlockBucket.to)
+      :activity.events;
     heading.className='live-source-record';
-    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. The balance above was queried separately. Peer balances are unknown.`;
+    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${selectedTokenBlockBucket?`Showing ${shown.length} in selected range ${selectedTokenBlockBucket.from}–${selectedTokenBlockBucket.to}. `:''}The balance above was queried separately. Peer balances are unknown.`;
     list.append(heading);
-    for(const event of activity.events.slice(-24).reverse()){
+    for(const event of shown.slice(-24).reverse()){
       const row=document.createElement('button');row.type='button';row.className='live-source-record';
       row.dataset.eventId=event.event_id;
       row.setAttribute('aria-pressed',String(event.event_id===selectedRealEventId));
@@ -136,11 +175,12 @@ function renderLiveSourceRecords(data){
       row.addEventListener('click',()=>selectRealTokenEvent(event.event_id));
       list.append(row);
     }
-    if(activity.event_count>24){
+    if(shown.length>24){
       const note=document.createElement('p');note.className='live-source-record';
-      note.textContent=`Showing the latest 24 of ${activity.event_count} events in this 64-block-or-smaller window. Earlier activity is unknown here.`;
+      note.textContent=`Showing the latest 24 of ${shown.length} returned events in this ${selectedTokenBlockBucket?'selected range':'64-block-or-smaller window'}. Earlier activity is unknown here.`;
       list.append(note);
     }
+    if(!shown.length){const empty=document.createElement('p');empty.className='live-source-record';empty.textContent='No Transfer logs were returned in this selected range.';list.append(empty);}
   }else{
     (data.nodes||[]).slice(0,40).forEach(node=>{
       const actionable=(node.kind==='address'&&node.address)||node.kind==='transaction';
@@ -255,6 +295,7 @@ async function loadLiveAddress(){
   const requestId=++realRequest;
   selectedRealTransactionId=null;
   selectedRealEventId=null;
+  selectedTokenBlockBucket=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
   sourceMetricsPanel.hidden=true;

@@ -48,6 +48,11 @@ transaction hash, block hash and height, transaction and log indexes, contract,
 both public addresses, source, and observation scope. The matching constellation
 arrow is highlighted. The list shows at most the latest 24 events from the
 bounded response; it is not a complete token history or an ownership inference.
+The bounded metrics panel also shows active blocks, the busiest returned block,
+and up to eight block-range bars based on returned logs. Selecting a bar filters
+the source-record list, including empty ranges; it does not change the full
+constellation or extend the query window. Counts and amounts use exact integer
+base units, and no AML classification is inferred.
 
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change

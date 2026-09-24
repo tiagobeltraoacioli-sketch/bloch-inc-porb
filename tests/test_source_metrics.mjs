@@ -49,6 +49,35 @@ test('ERC-20 self logs are counted once and excluded from peer count',()=>{
   assert.equal(result.groups.incoming.base_units,'700');
   assert.equal(result.groups.self.base_units,'50');
   assert.equal(result.groups.outgoing.base_units,'0');
+  assert.equal(result.block_activity.total_blocks,4);
+  assert.equal(result.block_activity.active_blocks,2);
+  assert.deepEqual(result.block_activity.busiest_block,{height:12,count:1});
+  assert.equal(result.block_activity.buckets.find(bucket=>bucket.from===13).groups.self.base_units,'50');
+});
+
+test('ERC-20 block timeline preserves exact amounts, empty windows, and bounded scope',()=>{
+  const data={asset:'USDT',address:'0xroot',nodes:[],edges:[],
+    tokenActivity:{events:[
+      {direction:'incoming',from:'0xpeer',to:'0xroot',amount_base_units:'9007199254740993',block_number:102},
+      {direction:'outgoing',from:'0xroot',to:'0xpeer',amount_base_units:'5',block_number:102},
+      {direction:'incoming',from:'0xpeer',to:'0xroot',amount_base_units:'7',block_number:117},
+    ]},tokenObservation:{block_window:{from:100,to:115}},
+  };
+  assert.throws(()=>summarizeObservation(data),/Token event outside block window/);
+  data.tokenObservation.block_window.to=119;
+  const result=summarizeObservation(data);
+  assert.equal(result.block_activity.total_blocks,20);
+  assert.equal(result.block_activity.active_blocks,2);
+  assert.deepEqual(result.block_activity.busiest_block,{height:102,count:2});
+  assert.equal(result.block_activity.buckets[0].groups.incoming.base_units,'9007199254740993');
+  assert.equal(result.block_activity.buckets.reduce((sum,bucket)=>sum+bucket.count,0),3);
+  assert.equal(result.block_activity.buckets.filter(bucket=>bucket.count===0).length,5);
+  data.tokenActivity.events=[];
+  const empty=summarizeObservation(data);
+  assert.equal(empty.block_activity.active_blocks,0);
+  assert.equal(empty.block_activity.buckets.length,7);
+  data.tokenObservation.block_window.to=164;
+  assert.throws(()=>summarizeObservation(data),/Invalid token block window/);
 });
 
 test('native ETH balance-only view remains explicit and malformed amounts fail closed',()=>{

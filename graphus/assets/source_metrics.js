@@ -18,6 +18,37 @@
     return heights.length?{from:Math.min(...heights),to:Math.max(...heights)}:null;
   }
 
+  function tokenBlockActivity(events, reportedWindow) {
+    const range=reportedWindow||blockRange(events.map(event=>event.block_number));
+    if (!range) return {total_blocks:0,active_blocks:0,busiest_block:null,buckets:[]};
+    const {from,to}=range;
+    if (!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from<0||to<from||to-from>=64) {
+      throw new Error('Invalid token block window');
+    }
+    const width=Math.ceil((to-from+1)/8);
+    const buckets=[];
+    for(let first=from;first<=to;first+=width){
+      buckets.push({from:first,to:Math.min(to,first+width-1),count:0,
+        groups:{incoming:{count:0,base_units:'0'},outgoing:{count:0,base_units:'0'},self:{count:0,base_units:'0'}}});
+    }
+    const blockCounts=new Map();
+    for(const event of events){
+      const height=event.block_number;
+      if(!Number.isSafeInteger(height)||height<from||height>to)throw new Error('Token event outside block window');
+      const bucket=buckets[Math.floor((height-from)/width)];
+      bucket.count++;
+      const group=bucket.groups[event.direction];
+      group.count++;
+      group.base_units=(BigInt(group.base_units)+amount(event.amount_base_units)).toString();
+      blockCounts.set(height,(blockCounts.get(height)||0)+1);
+    }
+    let busiestBlock=null;
+    for(const [height,count] of [...blockCounts].sort((a,b)=>a[0]-b[0])){
+      if(!busiestBlock||count>busiestBlock.count)busiestBlock={height,count};
+    }
+    return {total_blocks:to-from+1,active_blocks:blockCounts.size,busiest_block:busiestBlock,buckets};
+  }
+
   function summarizeObservation(data) {
     if (!data || !['BTC','BLCH','ETH','USDT','USDC'].includes(data.asset)
         || !Array.isArray(data.nodes) || !Array.isArray(data.edges)
@@ -75,10 +106,11 @@
       if(event.to&&event.to.toLowerCase()!==data.address.toLowerCase())peers.add(event.to.toLowerCase());
     }
     for(const direction of Object.keys(groups))groups[direction].base_units=totals[direction].toString();
+    const block_activity=tokenBlockActivity(events,data.tokenObservation?.block_window);
     return {kind:'erc20_transfer_logs',asset,source,
       returned_events:events.length,observed_other_identifiers:peers.size,
       block_range:data.tokenObservation?.block_window||blockRange(events.map(event=>event.block_number)),
-      groups,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
+      groups,block_activity,coverage:data.tokenObservation?.coverage||'bounded Transfer log window',
       caveat:'Only returned Transfer logs are counted. These amounts are not a complete transaction history or a balance reconciliation.'};
   }
 
