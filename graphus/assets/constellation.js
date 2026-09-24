@@ -9,6 +9,7 @@ let selectedRealTransactionId=null;
 let selectedRealEventId=null;
 let selectedRealPeerAddress=null;
 let selectedTokenBlockBucket=null;
+let selectedUtxoBlockHeight=null;
 let realGraphViewCache=null;
 let realKeyboardIndex=0;
 function getRealGraphView(data){
@@ -88,6 +89,7 @@ function setDataMode(mode,detail){
     selectedRealEventId=null;
     selectedRealPeerAddress=null;
     selectedTokenBlockBucket=null;
+    selectedUtxoBlockHeight=null;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
@@ -131,6 +133,8 @@ function renderSourceMetrics(data){
     graphView.omitted?`${graphView.omitted} returned points omitted from the canvas; full bounded evidence remains in the JSON export`:'All returned source points are plotted');
   if(metrics.kind==='utxo_observations'){
     add('Transaction records',String(metrics.transaction_records),'Returned in this bounded response');
+    add('Observed blocks',String(metrics.block_activity.blocks.length),'Distinct heights among returned transaction records');
+    add('Unplaced references',String(metrics.block_activity.unplaced_edges),'Returned references without a matching block-labelled transaction record');
     add('Directed references',String(metrics.returned_edges),'Input and output references remain separate');
     add('Other identifiers',String(metrics.observed_other_identifiers),'Observed in returned records; no owner grouping');
     if(metrics.source_reported_confirmed_tx_count!==null)
@@ -165,6 +169,34 @@ function renderSourceMetrics(data){
     }
   }else add('Activity coverage','Balance only','No transaction index is connected for this observation');
   sourceMetricsPanel.append(heading,grid);
+  if(metrics.kind==='utxo_observations'&&metrics.block_activity.blocks.length){
+    const panel=document.createElement('div');panel.className='source-peer-ledger';
+    const title=document.createElement('h4');title.textContent='Returned transaction blocks';
+    const description=document.createElement('p');
+    description.textContent='Only block heights attached to returned transaction records appear here. Input references and created outputs remain separate; gaps are unknown, not zero activity. Select a block to filter the transaction list.';
+    const list=document.createElement('div');list.className='source-peer-ledger-list';
+    const all=document.createElement('button');all.type='button';all.textContent='All returned records';
+    all.setAttribute('aria-pressed',String(selectedUtxoBlockHeight===null));
+    all.addEventListener('click',()=>filterUtxoBlock(null));list.append(all);
+    const labels=metrics.asset==='BTC'
+      ?[['observed_input_prevout','Input prevouts'],['created_output','Created outputs']]
+      :[['observed_spent_outpoint_reference','Spent references'],['observed_created_output','Created outputs']];
+    for(const row of metrics.block_activity.blocks){
+      const button=document.createElement('button');button.type='button';
+      button.dataset.utxoBlock=String(row.height);
+      button.setAttribute('aria-pressed',String(row.height===selectedUtxoBlockHeight));
+      const name=document.createElement('strong');name.textContent=`Block ${row.height} · ${row.transaction_count} returned ${row.transaction_count===1?'transaction':'transactions'}`;
+      button.append(name);
+      for(const [kind,label] of labels){
+        const group=row.groups[kind];
+        const detail=document.createElement('small');
+        detail.textContent=`${label} ${group.count}: ${formatObservedBalance(group.base_units,metrics.asset)}`;
+        button.append(detail);
+      }
+      button.addEventListener('click',()=>filterUtxoBlock(row.height));list.append(button);
+    }
+    panel.append(title,description,list);sourceMetricsPanel.append(panel);
+  }
   if(metrics.kind==='erc20_transfer_logs'&&metrics.block_activity.buckets.length){
     const timeline=document.createElement('div');timeline.className='source-block-timeline';
     const title=document.createElement('h4');title.textContent='Returned logs by block range';
@@ -229,6 +261,13 @@ function filterTokenPeer(address){
   if(realObservation?.tokenActivity)renderLiveSourceRecords(realObservation);
   draw();
 }
+function filterUtxoBlock(height){
+  selectedUtxoBlockHeight=height;
+  selectedRealTransactionId=null;
+  liveTransactionDetail.hidden=true;
+  if(realObservation&&['BTC','BLCH'].includes(realObservation.asset))renderLiveSourceRecords(realObservation);
+  draw();
+}
 function renderLiveSourceRecords(data){
   const activity=data.tokenActivity;
   setText('record-related',activity
@@ -255,7 +294,14 @@ function renderLiveSourceRecords(data){
     }
     if(!shown.length){const empty=document.createElement('p');empty.className='live-source-record';empty.textContent='No Transfer logs were returned for these selected filters.';list.append(empty);}
   }else{
-    (data.nodes||[]).forEach(node=>{
+    if(selectedUtxoBlockHeight!==null){
+      const heading=document.createElement('p');heading.className='live-source-record';
+      heading.textContent=`Returned transactions at block ${selectedUtxoBlockHeight}. The graph and JSON export retain the full bounded response.`;
+      list.append(heading);
+    }
+    const shown=selectedUtxoBlockHeight===null?(data.nodes||[]):(data.nodes||[])
+      .filter(node=>node.kind==='transaction'&&node.block?.height===selectedUtxoBlockHeight);
+    shown.forEach(node=>{
       const actionable=(node.kind==='address'&&node.address)||node.kind==='transaction';
       const row=document.createElement(actionable?'button':'div');
       row.className='live-source-record';
@@ -414,6 +460,7 @@ async function loadLiveAddress(){
   selectedRealEventId=null;
   selectedRealPeerAddress=null;
   selectedTokenBlockBucket=null;
+  selectedUtxoBlockHeight=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
   sourceMetricsPanel.hidden=true;

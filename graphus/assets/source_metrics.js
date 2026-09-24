@@ -49,6 +49,34 @@
     return {total_blocks:to-from+1,active_blocks:blockCounts.size,busiest_block:busiestBlock,buckets};
   }
 
+  function utxoBlockActivity(txNodes,edges,kinds){
+    const transactions=new Map(txNodes.map(node=>[node.id,node]));
+    const rows=new Map();
+    let transactionsWithoutBlock=0,unplacedEdges=0;
+    const rowFor=height=>{
+      if(!rows.has(height))rows.set(height,{height,transaction_count:0,
+        groups:Object.fromEntries(kinds.map(kind=>[kind,{count:0,base_units:'0'}]))});
+      return rows.get(height);
+    };
+    for(const node of transactions.values()){
+      const height=node.block?.height;
+      if(!Number.isSafeInteger(height)||height<0){transactionsWithoutBlock++;continue;}
+      rowFor(height).transaction_count++;
+    }
+    for(const edge of edges){
+      const transaction=transactions.get(edge.from)||transactions.get(edge.to);
+      const height=transaction?.block?.height;
+      if(!Number.isSafeInteger(height)||height<0){unplacedEdges++;continue;}
+      if(Number.isSafeInteger(edge.block?.height)&&edge.block.height!==height)
+        throw new Error('Transaction edge block mismatch');
+      const group=rowFor(height).groups[edge.kind];
+      group.count++;
+      group.base_units=(BigInt(group.base_units)+amount(edge.amount_base_units)).toString();
+    }
+    return {blocks:[...rows.values()].sort((left,right)=>right.height-left.height),
+      transactions_without_block:transactionsWithoutBlock,unplaced_edges:unplacedEdges};
+  }
+
   function compareTokenAnchors(wallet, activity) {
     const contract=wallet?.balance?.contract;
     const activityContract=activity?.contract;
@@ -95,11 +123,12 @@
       const txNodes=data.nodes.filter(node=>node?.kind==='transaction');
       const peers=new Set(data.nodes.filter(node=>(node?.kind==='address'||node?.kind==='script_hash')
         &&node.address!==data.address).map(node=>node.address));
+      const block_activity=utxoBlockActivity(txNodes,data.edges,UTXO_KINDS[asset]);
       return {
         kind:'utxo_observations',asset,source,
         transaction_records:new Set(txNodes.map(node=>node.id)).size,
         returned_edges:data.edges.length,observed_other_identifiers:peers.size,
-        block_range:blockRange(txNodes.map(node=>node.block?.height)),groups,
+        block_range:blockRange(txNodes.map(node=>node.block?.height)),groups,block_activity,
         source_reported_confirmed_tx_count:asset==='BTC'&&Number.isSafeInteger(data.activity?.confirmed_tx_count)
           ?data.activity.confirmed_tx_count:null,
         coverage:data.observation?.coverage||'bounded source response',

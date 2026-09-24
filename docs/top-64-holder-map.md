@@ -42,6 +42,15 @@ separately within the reported block window. Native ETH remains a balance-only
 view until a transaction index is connected. Every panel states its source,
 block range, and coverage limit.
 
+For BTC and BLCH, a returned-block ledger groups only the transaction records
+and input/output references present in the bounded response. Each observed
+block row gives an exact count and separate base-unit sums for input references
+and created outputs. References that cannot be tied to a returned transaction
+with a block height are counted as unplaced, not silently assigned. Selecting a
+block filters the transaction list while the graph and JSON export keep the full
+response. Missing heights between returned blocks are unknown, not evidence of
+zero chain activity or complete address history.
+
 In a source-reported USDT or USDC query, each returned `Transfer` log in the
 source-record list can be selected. Its detail shows the exact amount, direction,
 transaction hash, block hash and height, transaction and log indexes, contract,

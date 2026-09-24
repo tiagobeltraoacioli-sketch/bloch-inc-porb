@@ -38,6 +38,9 @@ test('UTXO input references and created outputs stay separate exact sums',()=>{
   assert.deepEqual(result.block_range,{from:800000,to:800000});
   assert.equal(result.groups.observed_input_prevout.base_units,'9007199254740993');
   assert.equal(result.groups.created_output.base_units,'9007199254740992');
+  assert.equal(result.block_activity.blocks[0].height,800000);
+  assert.equal(result.block_activity.blocks[0].groups.observed_input_prevout.base_units,'9007199254740993');
+  assert.equal(result.block_activity.unplaced_edges,0);
   assert.equal(result.source_reported_confirmed_tx_count,25);
   assert.equal('total_volume' in result,false);
 });
@@ -53,6 +56,27 @@ test('Bloch script observations do not become address peers or transfer volume',
   assert.equal(result.observed_other_identifiers,0);
   assert.equal(result.groups.observed_created_output.base_units,'300');
   assert.equal(result.groups.observed_spent_outpoint_reference.base_units,'200');
+});
+
+test('UTXO block ledger keeps returned blocks separate and exposes unplaced references',()=>{
+  const data={asset:'BLCH',address:'script',
+    nodes:[{id:'script',kind:'script_hash',address:'script'},
+      {id:'tx:a',kind:'transaction',block:{height:100}},
+      {id:'tx:b',kind:'transaction',block:{height:104}},
+      {id:'tx:unknown',kind:'transaction',block:{height:null}}],
+    edges:[{from:'tx:a',to:'script',kind:'observed_created_output',amount_base_units:'9007199254740993',block:{height:100}},
+      {from:'script',to:'tx:b',kind:'observed_spent_outpoint_reference',amount_base_units:'7',block:{height:104}},
+      {from:'script',to:'tx:unknown',kind:'observed_spent_outpoint_reference',amount_base_units:'3'}],
+  };
+  const result=summarizeObservation(data);
+  assert.deepEqual(result.block_activity.blocks.map(row=>row.height),[104,100]);
+  assert.equal(result.block_activity.blocks[0].groups.observed_spent_outpoint_reference.base_units,'7');
+  assert.equal(result.block_activity.blocks[1].groups.observed_created_output.base_units,'9007199254740993');
+  assert.equal(result.block_activity.transactions_without_block,1);
+  assert.equal(result.block_activity.unplaced_edges,1);
+  assert.equal(result.groups.observed_spent_outpoint_reference.base_units,'10');
+  data.edges[0].block.height=101;
+  assert.throws(()=>summarizeObservation(data),/Transaction edge block mismatch/);
 });
 
 test('ERC-20 self logs are counted once and excluded from peer count',()=>{
