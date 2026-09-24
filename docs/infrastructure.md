@@ -54,6 +54,17 @@ rechecks transfer-scan completion, same-block balance completion, and one-to-one
 candidate balance coverage before it returns a result. This is an index
 integrity gate, not a claim that Transfer events discover every token holder.
 
+The Ethereum balance timers now materialize one mode-0600, immutable private
+top-64 JSON per token after all event-discovered candidates have same-block
+balances. They recheck the pinned block just before the atomic write. These
+files are staged for review only; they are not connected to the public map.
+The updated service units and collector module were installed on `bloch-bridge`.
+A controlled USDT/USDC service run at 10:49 UTC returned
+`waiting_for_archive_sync` for both assets and created no index files. At the
+preceding 10:46 UTC check, Bitcoin was at 798,589 of 968,387 headers with IBD
+active; Erigon had downloaded 91.71% of snapshots, reported execution block 0,
+and had about 978 GB available. The downloader's ETA applies only to snapshots.
+
 Private timers now gate further work on node readiness. The Bitcoin snapshot
 job checks `initialblockdownload=false` before exporting and wrote no ranking
 while validation was in progress. On the bridge, USDT and USDC Transfer-event

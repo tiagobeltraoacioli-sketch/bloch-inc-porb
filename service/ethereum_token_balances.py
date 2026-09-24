@@ -2,10 +2,14 @@
 
 import argparse
 import json
+import os
 import re
 import sqlite3
+import stat
+import tempfile
 import urllib.request
 from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,8 +44,40 @@ def rpc_batch(url, requests):
     return [by_id[index] for index in range(len(payload))]
 
 
-def collect(*, asset, index, rpc_url, max_accounts=10_000, call=rpc_call,
-            batch_call=rpc_batch):
+def _write_private_top(index, output, *, asset, height, block_hash, rpc_url, call):
+    index, output = Path(index), Path(output)
+    if output.parent.resolve() != index.parent.resolve() or output.resolve() == index.resolve():
+        raise ValueError("private top-64 output must share the index directory")
+    if output.exists():
+        if output.is_symlink() or stat.S_IMODE(output.stat().st_mode) != 0o600:
+            raise ValueError("private top-64 artifact permissions are invalid")
+        existing = json.loads(output.read_text())
+        if (existing.get("asset") != asset or existing.get("contract") != CONTRACTS[asset]
+                or existing.get("block_height") != height
+                or existing.get("block_hash") != block_hash
+                or existing.get("publication_status") != "private_pending_review"):
+            raise ValueError("existing private top-64 artifact does not match index")
+        return "already_built"
+    ranking = top_event_candidates(index, asset=asset)
+    if _block(call(rpc_url, "eth_getBlockByNumber", [hex(height), False])) != (height, block_hash):
+        raise ValueError("token balance block changed before private artifact write")
+    ranking["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    ranking["publication_status"] = "private_pending_review"
+    fd, temporary = tempfile.mkstemp(prefix=".token-top64-", dir=output.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            json.dump(ranking, stream, sort_keys=True)
+            stream.write("\n")
+        os.replace(temporary, output)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return "built_private"
+
+
+def collect(*, asset, index, rpc_url, max_accounts=10_000, private_top64_output=None,
+            call=rpc_call, batch_call=rpc_batch):
     if asset not in CONTRACTS or type(max_accounts) is not int or not 1 <= max_accounts <= 10_000:
         raise ValueError("unsupported asset or collection bound")
     if call(rpc_url, "eth_syncing", []) is not False:
@@ -83,16 +119,24 @@ def collect(*, asset, index, rpc_url, max_accounts=10_000, call=rpc_call,
             completed += len(addresses)
         remaining = db.execute("""SELECT count(*) FROM candidates
             WHERE address NOT IN (SELECT address FROM balances)""").fetchone()[0]
-        if remaining == 0 and _block(call(rpc_url, "eth_getBlockByNumber", [hex(height), False])) == (
-                height, block_hash):
+        if remaining == 0:
+            if _block(call(rpc_url, "eth_getBlockByNumber", [hex(height), False])) != (
+                    height, block_hash):
+                raise ValueError("token balance block changed during collection")
             with db:
                 db.execute("UPDATE metadata SET value='true' WHERE key='same_block_balance_reads_complete'")
         total = db.execute("SELECT count(*) FROM candidates").fetchone()[0]
+        artifact_status = None
+        if private_top64_output is not None:
+            artifact_status = (_write_private_top(uri, private_top64_output, asset=asset,
+                height=height, block_hash=block_hash, rpc_url=rpc_url, call=call)
+                if remaining == 0 else "waiting_for_balance_reads")
         return {"status": "event_candidate_balance_reads_complete" if remaining == 0 else "reading_balances",
                 "asset": asset, "target_height": height, "target_hash": block_hash,
                 "candidate_count": total, "balances_read": total - remaining,
                 "remaining": remaining, "read_this_run": completed,
-                "network_wide_holder_discovery_complete": False}
+                "network_wide_holder_discovery_complete": False,
+                **({"private_top64_artifact": artifact_status} if artifact_status is not None else {})}
 
 
 def top_event_candidates(index, *, asset, limit=64):
@@ -156,9 +200,11 @@ def main():
     parser.add_argument("--index", type=Path, required=True)
     parser.add_argument("--rpc-url", default="http://127.0.0.1:8545")
     parser.add_argument("--max-accounts", type=int, default=10_000)
+    parser.add_argument("--private-top64-output", type=Path)
     args = parser.parse_args()
     result = (collect(asset=args.asset, index=args.index, rpc_url=args.rpc_url,
-                      max_accounts=args.max_accounts) if args.action == "collect"
+                      max_accounts=args.max_accounts,
+                      private_top64_output=args.private_top64_output) if args.action == "collect"
               else top_event_candidates(args.index, asset=args.asset))
     print(json.dumps(result, sort_keys=True))
 

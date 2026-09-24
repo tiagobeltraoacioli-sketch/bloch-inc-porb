@@ -46,6 +46,13 @@ independent contract-state coverage proof and must not be labeled as the global
 holder ranking. The private top-64 reader rechecks both completion flags,
 compares candidate and balance row coverage, and rejects malformed addresses
 or decimal amounts before returning a ranking.
+When the last candidate balance has been read, the balance timer now writes
+`/var/lib/graphus-token-index/USDT-top64.json` or `USDC-top64.json` atomically
+with mode 0600, after a final canonical block check. The artifact is immutable
+on later timer runs and marked `private_pending_review`; no public endpoint or
+automatic publication is attached to it. A changed block anchor or incomplete
+index leaves the artifact absent and the timer retries after the source is
+repaired or resynced.
 
 References: [Erigon hardware requirements](https://docs.erigon.tech/get-started/hardware-requirements),
 [Caplin](https://docs.erigon.tech/fundamentals/caplin),

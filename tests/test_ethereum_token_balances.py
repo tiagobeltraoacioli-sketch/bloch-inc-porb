@@ -3,6 +3,7 @@
 import io
 import json
 import sqlite3
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +42,7 @@ class TokenBalanceTests(unittest.TestCase):
 
     def test_complete_same_block_reads_rank_exactly_without_global_claim(self):
         amounts = {A: 1000, B: 0, C: 999}
+        output = self.index.with_name("usdc-top64.json")
         def batch(_url, requests):
             self.assertTrue(all(params[1] == {"blockHash": BLOCK_HASH,
                                               "requireCanonical": True}
@@ -49,14 +51,28 @@ class TokenBalanceTests(unittest.TestCase):
                     for _, params in requests]
         result = collect(asset="USDC", index=self.index,
                          rpc_url="http://127.0.0.1:8545", call=self.rpc,
-                         batch_call=batch, max_accounts=2)
+                         batch_call=batch, max_accounts=2,
+                         private_top64_output=output)
         self.assertEqual(result["remaining"], 1)
+        self.assertEqual(result["private_top64_artifact"], "waiting_for_balance_reads")
+        self.assertFalse(output.exists())
         with self.assertRaisesRegex(ValueError, "incomplete"):
             top_event_candidates(self.index, asset="USDC")
         result = collect(asset="USDC", index=self.index,
                          rpc_url="http://127.0.0.1:8545", call=self.rpc,
-                         batch_call=batch, max_accounts=2)
+                         batch_call=batch, max_accounts=2,
+                         private_top64_output=output)
         self.assertEqual(result["remaining"], 0)
+        self.assertEqual(result["private_top64_artifact"], "built_private")
+        artifact = json.loads(output.read_text())
+        self.assertEqual(artifact["publication_status"], "private_pending_review")
+        self.assertEqual(artifact["block_hash"], BLOCK_HASH)
+        self.assertEqual([row["address"] for row in artifact["rows"]], [A, C])
+        self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+        repeat = collect(asset="USDC", index=self.index,
+                         rpc_url="http://127.0.0.1:8545", call=self.rpc,
+                         batch_call=batch, private_top64_output=output)
+        self.assertEqual(repeat["private_top64_artifact"], "already_built")
         ranked = top_event_candidates(self.index, asset="USDC")
         self.assertEqual([row["address"] for row in ranked["rows"]], [A, C])
         self.assertFalse(ranked["network_wide_holder_discovery_complete"])
@@ -87,6 +103,46 @@ class TokenBalanceTests(unittest.TestCase):
             db.execute("UPDATE metadata SET value='false' WHERE key='transfer_history_scan_complete'")
         with self.assertRaisesRegex(ValueError, "incomplete"):
             top_event_candidates(self.index, asset="USDC")
+
+    def test_reorg_before_artifact_write_keeps_private_output_absent(self):
+        output = self.index.with_name("usdc-top64.json")
+        block_calls = 0
+
+        def changing_rpc(url, method, params):
+            nonlocal block_calls
+            if method == "eth_getBlockByNumber":
+                block_calls += 1
+                return {"number": "0x2", "hash": BLOCK_HASH if block_calls == 1
+                        else "0x" + "f" * 64}
+            return self.rpc(url, method, params)
+
+        with self.assertRaisesRegex(ValueError, "changed during collection"):
+            collect(asset="USDC", index=self.index, rpc_url="http://127.0.0.1:8545",
+                    call=changing_rpc,
+                    batch_call=lambda _url, requests: ["0x1"] * len(requests),
+                    private_top64_output=output)
+        self.assertFalse(output.exists())
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            top_event_candidates(self.index, asset="USDC")
+
+    def test_reorg_after_index_completion_prevents_private_file(self):
+        output = self.index.with_name("usdc-top64.json")
+        block_calls = 0
+
+        def changing_rpc(url, method, params):
+            nonlocal block_calls
+            if method == "eth_getBlockByNumber":
+                block_calls += 1
+                return {"number": "0x2", "hash": BLOCK_HASH if block_calls < 3
+                        else "0x" + "f" * 64}
+            return self.rpc(url, method, params)
+
+        with self.assertRaisesRegex(ValueError, "before private artifact write"):
+            collect(asset="USDC", index=self.index, rpc_url="http://127.0.0.1:8545",
+                    call=changing_rpc,
+                    batch_call=lambda _url, requests: ["0x1"] * len(requests),
+                    private_top64_output=output)
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
