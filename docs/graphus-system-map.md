@@ -140,3 +140,13 @@ Production WebKit verified the deployed observation panel with these real bounde
 | BLCH | 844 | 49 | Constellation |
 
 All three checks verified source metadata, exact full-packet exports despite ledger filters, asset isolation, private-module boundaries and zero additional source queries during inspector navigation or handoff. Constellation exports retained the original dataset digests. The BLCH check also verified the phone dialog and export; its production screenshot was inspected. No browser page errors were reported. These samples are observations at different retrieval times, not complete network totals or continuous source-health measurements.
+
+### Native Explorer integration — 2026-09-24
+
+Graphus release `d574fa04` publishes commit `1c6df13`: the central registry at `/api/system/map` and credential-free, read-only CORS on that endpoint and `/api/chain/network`. All 27 selected API/registry/evidence/collection tests passed. Private account and analysis endpoints remain outside this public CORS contract.
+
+Explorer release `d407c8cb` publishes its commit `5e9fab4` at `https://blochl1.com/system-map`. The native React workspace loads the registry and captures directly from Graphus in the browser, avoiding a circular Explorer Worker → Graphus → Explorer indexer request. It includes module/dependency selection, source actions, bounded historical capture, exact reference filters, native graphs, source anchors, JSON export and sample comparison. Public navigation does not initiate chain captures. Private module actions open the existing authenticated portal.
+
+Production browser checks verified all 44 modules without horizontal clipping at 1,440, 1,280, 1,024 and 390 px. Separate real captures returned BTC 75 records/81 references, ETH 24/42, BLCH 844/49, USDT 193/264 and USDC 278/257. Full and filtered packets validated; inspector navigation, search and exports made no additional source requests. Explorer's release notes record exact dataset and served-bundle hashes. These are separate bounded observations, not synchronized totals.
+
+Token reads initially encountered intermittent HTTP 502 errors, including Cloudflare responses without CORS; later real browser captures succeeded. The targeted token runs completed their map/capture/export/mobile checks, but the final zero-page-errors assertion failed on access-control errors from Explorer's existing `posternlabs.com/g4rpc` header fallback. Do not describe the complete production smoke test as green. No fallback data or private scores were published.
