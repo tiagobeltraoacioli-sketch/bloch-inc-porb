@@ -122,3 +122,9 @@ footer{background:#e9edf0;border-color:#cdd5da;color:#50616e}footer a{color:#344
 .motif-pair button:hover,.motif-pair button:focus-visible{border-color:#6f9aab;background:#e8f1f4}
 @media(max-width:900px){.motif-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.motif-panel{padding:1rem}.motif-pairs{grid-template-columns:1fr}}
+.neighborhood-control{display:flex;align-items:center;gap:.45rem;min-width:0}
+.neighborhood-control label{color:#4c6573;font:.65rem var(--mono);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}
+.neighborhood-control select{min-height:38px;padding:.45rem .6rem;border:1px solid #becbd3;background:#fff;color:#294a5e;font:.7rem var(--mono);cursor:pointer}
+.neighborhood-control select:focus-visible{outline:2px solid #4c829c;outline-offset:2px}
+.neighborhood-control select:disabled{color:#8b9aa2;background:#eef1f3;cursor:not-allowed}
+@media(max-width:700px){.neighborhood-control{flex-basis:100%}}

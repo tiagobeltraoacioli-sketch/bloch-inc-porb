@@ -35,6 +35,12 @@ The public synthetic constellation also counts direct inbound and outbound peers
 
 The separate private `wallet_temporal_motifs` method uses source-provided observation timestamps, returns evidence and source IDs, and checks a caller-selected gap up to 168 hours. It fails rather than truncate when more than 500 relevant events or 100 ordered pairs are found. It reports unknown-sender events separately and explicitly marks value continuity as unproven. These bounded observations do not establish full chain coverage, and the method is not exposed through the public site.
 
+### Bounded neighborhood expansion
+
+The public synthetic map can expand a searched ETH, USDT, or USDC point from one to two graph steps. The center, immediate peers, and second-step peers occupy separate visual rings. Gray links show illustrative adjacency; transaction arrows and the existing event panels remain tied to the selected wallet. The selector stays at one step for BTC and BLCH because an input outpoint is not a directly observed sender. The preview uses only generated wallet examples and does not query a chain.
+
+The separate private `wallet_neighborhood` method expands only directly observed account-transfer references within one chain, network, asset, and explicit time window. Its output keeps event nodes, directed sender/destination links, source IDs, finality, depth, and evidence event IDs. Unknown-sender UTXO/eUTXO outputs can attach to an already reached reference but cannot expand the graph. Requests fail if they exceed two steps, 200 references, or 500 included events; callers may set lower bounds. References and proximity are neither ownership nor value-continuity claims. The private method is not exposed through the public site.
+
 ### Normalized observation adapter
 
 `GraphAnalytics.from_movements(movements, block_times=...)` converts a bounded sequence of canonical `Movement` records to the same event-centered graph. The timestamp map is keyed by `(chain, network, block_ref)` and must contain a timezone-aware **source-provided block time** for every movement. The caller must validate those timestamps and the private sample manifest against its source; the adapter does not fetch or verify either. It refuses an absent block time, an observed but unconfirmed movement, heuristic sender attribution, duplicate event keys, and direct Bitcoin/Bloch sender attribution. It never uses collection time as event time.

@@ -74,6 +74,8 @@ let search = '';
 let selectedWallet = null;
 let selectedTransaction = null;
 let activeRoute = null;
+let neighborhoodHops = 1;
+let neighborhoodLevels = new Map();
 let width = 0, height = 0, dpr = 1, tick = 0;
 let paused = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let transactionDots = [];
@@ -87,9 +89,34 @@ function magnitude(wallet) {
   const volume=wallet.volume/maxVolumeByAsset[wallet.asset];
   return Math.min(1,.5*activity+.5*volume);
 }
+const neighborhoodControl=document.createElement('div');
+neighborhoodControl.className='neighborhood-control';
+neighborhoodControl.innerHTML='<label for="neighborhood-hops">Network steps</label><select id="neighborhood-hops" disabled><option value="1">1 step</option><option value="2">2 steps</option></select>';
+document.querySelector('.constellation-controls').append(neighborhoodControl);
+const neighborhoodSelect=document.getElementById('neighborhood-hops');
+function rebuildNeighborhood(){
+  neighborhoodLevels=new Map();
+  if(!search||!selectedWallet)return;
+  neighborhoodLevels.set(selectedWallet.id,0);
+  let frontier=[selectedWallet.id];
+  for(let depth=1;depth<=neighborhoodHops;depth++){
+    const next=new Set();
+    for(const id of frontier){
+      for(const tx of walletById.get(id).transactions){
+        if(!neighborhoodLevels.has(tx.counterparty))next.add(tx.counterparty);
+      }
+    }
+    frontier=[...next].sort();
+    for(const id of frontier)neighborhoodLevels.set(id,depth);
+  }
+}
+neighborhoodSelect.addEventListener('change',()=>{
+  neighborhoodHops=Number(neighborhoodSelect.value);
+  rebuildNeighborhood();renderSearchStatus();renderList();draw();
+});
 function focusedPeers() {
   if(!search||!selectedWallet)return [];
-  return [...new Set(selectedWallet.transactions.map(tx=>tx.counterparty))].sort();
+  return [...neighborhoodLevels.keys()].filter(id=>id!==selectedWallet.id).sort();
 }
 function displayedPeers() {
   const peers=new Set(focusedPeers());
@@ -105,10 +132,14 @@ function displayed(wallet) {
 function point(wallet) {
   if(search&&selectedWallet){
     if(wallet.id===selectedWallet.id)return {x:width*.5,y:height*.5};
-    const peers=displayedPeers(),index=peers.indexOf(wallet.id);
+    const depth=neighborhoodLevels.get(wallet.id)||2;
+    const peers=displayedPeers().filter(id=>(neighborhoodLevels.get(id)||2)===depth);
+    const index=peers.indexOf(wallet.id);
     if(index>=0){
       const angle=-Math.PI*.5+index*Math.PI*2/peers.length;
-      const radius=Math.max(110,Math.min(width*.32,height*.32,205));
+      const radius=neighborhoodHops===2
+        ?Math.min(width*(depth===1?.24:.43),height*(depth===1?.26:.43),depth===1?150:235)
+        :Math.max(110,Math.min(width*.32,height*.32,205));
       return {x:width*.5+Math.cos(angle)*radius,y:height*.5+Math.sin(angle)*radius};
     }
   }
@@ -156,7 +187,7 @@ function draw() {
   }
   for (const [from,to] of relations) {
     if (!displayed(from)||!displayed(to)) continue;
-    if(search&&selectedWallet&&from.id!==selectedWallet.id&&to.id!==selectedWallet.id)continue;
+    if(search&&selectedWallet&&neighborhoodHops===1&&from.id!==selectedWallet.id&&to.id!==selectedWallet.id)continue;
     const selected=selectedWallet && (from.id===selectedWallet.id||to.id===selectedWallet.id);
     line(point(from),point(to),selected?'#9bc6e2':'#6da8c8',selected?.48:.12,selected?1.5:.8);
   }
@@ -179,7 +210,8 @@ function draw() {
     const selected=selectedWallet?.id===wallet.id;
     const level=magnitude(wallet);
     const twinkle=.62+.22*level+.12*Math.sin(tick*.023+wallet.index*2.3);
-    star(p.x,p.y,selected?12:4+level*7.2,colors[wallet.asset],selected?1:twinkle*(matchesSearch(wallet)?1:.35));
+    const depth=neighborhoodLevels.get(wallet.id)||0;
+    star(p.x,p.y,selected?12:4+level*7.2,colors[wallet.asset],selected?1:twinkle*(search?(depth===2?.75:1):(matchesSearch(wallet)?1:.35)));
     if (selected) {
       context.strokeStyle='#f5b1a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,13,0,Math.PI*2);context.stroke();
       context.fillStyle='#f2f7fb';context.font='700 12px ui-monospace, monospace';context.fillText(wallet.id,p.x+17,p.y-13);
@@ -471,11 +503,13 @@ function renderSearchStatus() {
   if(!search){status.textContent='Search a synthetic wallet ID or address to isolate its local constellation.';return;}
   const matches=wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
   if(!matches.length){status.textContent=`No synthetic wallet matches “${search}” in this asset filter.`;return;}
-  const peers=focusedPeers().length;
-  status.textContent=`${matches.length} ${matches.length===1?'match':'matches'} · ${selectedWallet.id} centered with ${peers} connected ${peers===1?'wallet':'wallets'} and ${selectedWallet.transactions.length} transaction events. Select another result below to change focus.`;
+  const direct=[...neighborhoodLevels.values()].filter(depth=>depth===1).length;
+  const second=[...neighborhoodLevels.values()].filter(depth=>depth===2).length;
+  status.textContent=`${matches.length} ${matches.length===1?'match':'matches'} · ${selectedWallet.id} centered with ${direct} immediate ${direct===1?'point':'points'} and ${second} second-step illustrative ${second===1?'point':'points'} · ${selectedWallet.transactions.length} wallet events. Select another result below to change focus.`;
 }
 function clearWallet() {
   selectedWallet=null;selectedTransaction=null;activeRoute=null;
+  neighborhoodHops=1;neighborhoodLevels=new Map();neighborhoodSelect.value='1';neighborhoodSelect.disabled=true;
   setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
   setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
   for(const id of ['record-asset','record-time','record-related','ml-inbound','ml-outbound','ml-relations','ml-window','analysis-events','analysis-direction','analysis-volume','analysis-connections','analysis-span','analysis-concentration','analysis-slope','analysis-fit'])setText(id,'—');
@@ -495,6 +529,10 @@ function clearWallet() {
 function selectWallet(wallet,updateQuery=false) {
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
   selectedWallet=wallet;selectedTransaction=null;
+  const expanded=Boolean(search&&['eth','usdt','usdc'].includes(wallet.asset));
+  if(!expanded){neighborhoodHops=1;neighborhoodSelect.value='1';}
+  neighborhoodSelect.disabled=!expanded;
+  rebuildNeighborhood();
   noteLink.href=`account.html?wallet=${encodeURIComponent(wallet.address)}`;
   setText('record-type','SYNTHETIC WALLET / '+wallet.asset.toUpperCase());
   setText('record-id',wallet.id);
@@ -533,10 +571,15 @@ function selectTransaction(wallet,tx) {
 }
 function renderList() {
   const list=document.getElementById('accessible-records');list.replaceChildren();
-  const matches=wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
+  const matches=search&&selectedWallet
+    ?wallets.filter(displayed).sort((a,b)=>(neighborhoodLevels.get(a.id)??3)-(neighborhoodLevels.get(b.id)??3)||a.id.localeCompare(b.id))
+    :wallets.filter(wallet=>visible(wallet)&&matchesSearch(wallet));
   if(!matches.length){const empty=document.createElement('p');empty.textContent='No synthetic wallets match this search and asset filter.';list.append(empty);return;}
   matches.forEach(wallet=>{
-    const button=document.createElement('button');button.type='button';button.textContent=`${wallet.id} · ${wallet.address} · ${wallet.transactions.length} tx`;
+    const button=document.createElement('button');button.type='button';
+    const depth=neighborhoodLevels.get(wallet.id);
+    const position=search&&selectedWallet?(depth===0?'focus':depth===1?'step 1':depth===2?'step 2':'route point'):null;
+    button.textContent=`${wallet.id} · ${wallet.address} · ${wallet.transactions.length} tx${position?' · '+position:''}`;
     button.addEventListener('click',()=>selectWallet(wallet,Boolean(search)));list.append(button);
   });
 }

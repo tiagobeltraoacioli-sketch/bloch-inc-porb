@@ -304,6 +304,88 @@ class GraphAnalytics:
             ],
         }
 
+    def wallet_neighborhood(self, *, chain, network, asset_id, wallet, start, end,
+                            max_hops=2, max_events=500, max_references=200):
+        """Expand directly observed references through a bounded event graph."""
+        if not isinstance(wallet, str) or not wallet:
+            raise ValueError("wallet reference required")
+        if (type(max_hops) is not int or max_hops not in (1, 2)
+                or type(max_events) is not int or not 1 <= max_events <= 500
+                or type(max_references) is not int or not 1 <= max_references <= 200):
+            raise ValueError("neighborhood bounds exceeded")
+        scoped = self._window(chain, network, asset_id, start, end)
+        adjacency = defaultdict(list)
+        for item in scoped:
+            if item.sender_attribution == "direct":
+                adjacency[item.sender].append((item.destination, item))
+                adjacency[item.destination].append((item.sender, item))
+        depths = {wallet: 0}
+        frontier = [wallet]
+        for depth in range(1, max_hops + 1):
+            next_frontier = set()
+            for reference in frontier:
+                for neighbor, _ in adjacency[reference]:
+                    if neighbor not in depths:
+                        next_frontier.add(neighbor)
+            if len(depths) + len(next_frontier) > max_references:
+                raise ValueError("neighborhood reference bound exceeded; narrow the window")
+            for reference in sorted(next_frontier):
+                depths[reference] = depth
+            frontier = sorted(next_frontier)
+        selected = sorted(
+            (item for item in scoped if
+             (item.sender_attribution == "direct"
+              and item.sender in depths and item.destination in depths
+              and min(depths[item.sender], depths[item.destination]) < max_hops)
+             or (item.sender_attribution == "unknown" and item.destination in depths)),
+            key=lambda item: (timestamp(item.observed_at), item.event_id),
+        )
+        if len(selected) > max_events:
+            raise ValueError("neighborhood event bound exceeded; narrow the window")
+        nodes = [{"id": f"reference:{reference}", "kind": "chain_reference",
+                  "reference": reference, "depth": depth, "focus": reference == wallet}
+                 for reference, depth in sorted(depths.items(), key=lambda pair: (pair[1], pair[0]))]
+        links = []
+        for item in selected:
+            event_node = f"event:{item.event_id}"
+            nodes.append({
+                "id": event_node, "kind": "observed_event", "event_id": item.event_id,
+                "observed_at": item.observed_at, "source_id": item.source_id,
+                "finality": item.finality, "amount_base_units": item.amount_base_units,
+                "sender_attribution": item.sender_attribution,
+                "transaction_id": item.transaction_id, "event_index": item.event_index,
+                "block_ref": item.block_ref, "height_or_slot": item.height_or_slot,
+            })
+            links.append({"from": event_node, "to": f"reference:{item.destination}",
+                          "kind": "observed_destination", "event_id": item.event_id})
+            if item.sender_attribution == "direct":
+                links.append({"from": f"reference:{item.sender}", "to": event_node,
+                              "kind": "direct_observed_sender", "event_id": item.event_id})
+        return {
+            "classification": "bounded_event_centered_neighborhood_not_ownership",
+            "chain": chain, "network": network, "asset_id": asset_id,
+            "focus_reference": wallet,
+            "window": {"start": start, "end_exclusive": end, "max_hops": max_hops},
+            "nodes": nodes, "links": links,
+            "summary": {
+                "references_by_depth": [
+                    {"depth": depth, "count": sum(value == depth for value in depths.values())}
+                    for depth in range(max_hops + 1)
+                ],
+                "observed_events": len(selected),
+                "direct_sender_events": sum(item.sender_attribution == "direct" for item in selected),
+                "unknown_sender_events": sum(item.sender_attribution == "unknown" for item in selected),
+            },
+            "evidence_event_ids": [item.event_id for item in selected],
+            "source_ids": sorted({item.source_id for item in selected}),
+            "caveats": [
+                "references_are_not_people_or_owners",
+                "graph_neighborhood_does_not_prove_value_continuity_or_intent",
+                "UTXO_and_eUTXO_inputs_do_not_identify_direct_senders",
+                "bounded_observations_do_not_establish_chain_coverage",
+            ],
+        }
+
     def temporal_paths(self, *, chain, network, asset_id, source_wallet, target_wallet, start, end, max_hops=3, max_paths=20):
         """Trace time-ordered direct observations; paths are associations only."""
         if not (1 <= max_hops <= 4 and 1 <= max_paths <= 100):

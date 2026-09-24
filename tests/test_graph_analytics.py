@@ -93,6 +93,45 @@ class GraphAnalyticsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "event bound exceeded"):
             graph.wallet_temporal_motifs(**arguments, max_events=3)
 
+    def test_neighborhood_expands_direct_events_with_evidence_and_asset_scope(self):
+        arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="a",
+                         start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        one = self.graph.wallet_neighborhood(**arguments, max_hops=1)
+        two = self.graph.wallet_neighborhood(**arguments, max_hops=2)
+        self.assertEqual(one["evidence_event_ids"], ["e1"])
+        self.assertEqual(two["evidence_event_ids"], ["e1", "e2", "e4"])
+        self.assertEqual(two["summary"]["references_by_depth"], [
+            {"depth": 0, "count": 1}, {"depth": 1, "count": 1}, {"depth": 2, "count": 2},
+        ])
+        self.assertEqual(len(two["links"]), 6)
+        self.assertEqual(two["source_ids"], ["synthetic-fixture"])
+        self.assertNotIn("usdt1", str(two))
+        self.assertEqual(two, GraphAnalytics(reversed(self.graph.events)).wallet_neighborhood(**arguments))
+
+    def test_neighborhood_never_traverses_unknown_utxo_senders(self):
+        graph = GraphAnalytics([
+            event("btc1", None, "b", 500, 1, chain="bitcoin", asset="btc", attribution="unknown"),
+            event("btc2", None, "c", 300, 2, chain="bitcoin", asset="btc", attribution="unknown"),
+        ])
+        report = graph.wallet_neighborhood(
+            chain="bitcoin", network="mainnet", asset_id="btc", wallet="b",
+            start="2026-09-01T00:00:00Z", end="2026-09-03T00:00:00Z")
+        self.assertEqual(report["evidence_event_ids"], ["btc1"])
+        self.assertEqual(report["summary"]["references_by_depth"], [
+            {"depth": 0, "count": 1}, {"depth": 1, "count": 0}, {"depth": 2, "count": 0},
+        ])
+        self.assertEqual([link["kind"] for link in report["links"]], ["observed_destination"])
+
+    def test_neighborhood_fails_closed_on_reference_and_event_bounds(self):
+        arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="b",
+                         start="2026-09-01T00:00:00Z", end="2026-09-06T00:00:00Z")
+        with self.assertRaisesRegex(ValueError, "reference bound exceeded"):
+            self.graph.wallet_neighborhood(**arguments, max_references=2)
+        with self.assertRaisesRegex(ValueError, "event bound exceeded"):
+            self.graph.wallet_neighborhood(**arguments, max_events=2)
+        with self.assertRaisesRegex(ValueError, "neighborhood bounds exceeded"):
+            self.graph.wallet_neighborhood(**arguments, max_hops=True)
+
     def test_duplicate_events_and_heuristic_sender_are_rejected(self):
         with self.assertRaises(ValueError):
             GraphAnalytics([event("same", "a", "b", 1, 1), event("same", "a", "c", 1, 1)])
