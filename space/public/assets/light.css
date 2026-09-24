@@ -44,6 +44,8 @@ html[data-theme="light"] .metric small,html[data-theme="light"] .source-line{col
 html[data-theme="light"] .result-section{background:#f2f6ee}
 html[data-theme="light"] .text-button,html[data-theme="light"] .record-row button,html[data-theme="light"] .field a,html[data-theme="light"] .row-link{color:#315900}
 html[data-theme="light"] .record-id{border-color:#b7d596;background:#eff9dd;color:#254600}
+html[data-theme="light"] .record-actions button{border-color:#91aa83;background:#f4f9ec;color:#315900}
+html[data-theme="light"] .record-actions button:hover{border-color:#4f7c21;background:#eaf8d6}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}
 html[data-theme="light"] .record-row{border-color:#d3dfce;background:#f7faf4}
 html[data-theme="light"] .record-row small,html[data-theme="light"] .record-row>span{color:#4d5c4a}

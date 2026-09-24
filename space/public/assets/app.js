@@ -45,6 +45,22 @@ function row(label,detail,side='',action=null) {const item=element('div','record
 function card(kicker,title) {const section=element('section','result-card');section.append(element('p','eyebrow',kicker),element('h3','',title));return section;}
 function fields(container, entries) {const list=element('dl','field-grid');for(const [label,value] of entries){const item=element('div','field');item.append(element('dt','',label),element('dd','',value??'—'));list.append(item);}container.append(list);}
 function provenance(data, additional=[]) {const section=card('SOURCE / SCOPE','How this answer was made');const list=element('div','provenance');for(const [label,value] of [['Source',data.source],['Retrieved',time(data.retrieved_at)],['Independent verification',data.independent_verification?'Yes':'No'],['Boundary',data.note],...additional]){const box=element('div');box.append(element('span','',label),element('strong','',value??'—'));list.append(box);}section.append(list);return section;}
+async function copyRecordText(value,button){
+  const original=button.textContent;
+  try{
+    if(!navigator.clipboard?.writeText)throw new Error('clipboard_unavailable');
+    await navigator.clipboard.writeText(value);
+    button.textContent='Copied ✓';
+  }catch{button.textContent='Copy unavailable';}
+  setTimeout(()=>{button.textContent=original;},2300);
+}
+function recordIdentity(value){
+  const container=element('div','record-identity');container.append(element('div','record-id',value));
+  const actions=element('div','record-actions');
+  const copyId=element('button','','Copy ID');copyId.type='button';copyId.setAttribute('aria-live','polite');copyId.addEventListener('click',()=>copyRecordText(value,copyId));
+  const copyLink=element('button','','Copy link');copyLink.type='button';copyLink.setAttribute('aria-live','polite');copyLink.addEventListener('click',()=>copyRecordText(new URL(`${location.pathname}${location.search}`,'https://bloch.space').href,copyLink));
+  actions.append(copyId,copyLink);container.append(actions);return container;
+}
 function openRecord(kind,query,asset) {$('#search-kind').value=kind;$('#search-input').value=query;if(state.network==='ethereum'&&asset)$('#search-asset').value=asset;search(kind,query,asset);}
 
 function renderHolders(page) {
@@ -154,7 +170,7 @@ function renderAddress(data,query,asset) {
   const wallet=data.wallet||{},balance=wallet.balance||{},observed=wallet.observation||{};
   const unit=asset==='BTC'?'BTC':asset==='ETH'?'ETH':asset==='BLCH'?'BLCH':asset;
   const left=card(`${state.network.toUpperCase()} / ${asset} / ADDRESS`,`Public reference`);
-  left.append(element('div','record-id',wallet.address||query));
+  left.append(recordIdentity(wallet.address||query));
   fields(left,[['Source-reported balance',`${decimal(balance.base_units,assetDecimals[asset])} ${unit}`],['Exact base units',`${balance.base_units??'—'} ${balance.unit??''}`],['Balance scope',balance.scope],['Block height',balance.block?.height==null?'Not pinned':count(balance.block.height)],['Observed transactions',wallet.activity?.confirmed_tx_count??wallet.activity?.bounded_events??'Bounded or unavailable'],['Mempool transactions',wallet.activity?.mempool_tx_count??'—']]);
   left.append(element('h4','subhead','Observed relationships'),graph(wallet,data.token_activity,asset));
   if(data.utxos?.items?.length){left.append(element('h4','subhead',`Unspent outputs / showing ${data.utxos.items.length} of ${count(data.utxos.total)}`));const list=element('div','record-list');for(const output of data.utxos.items){const txid=output.txid;list.append(row(`${compact(txid)}:${output.vout}`,output.status?.confirmed?'Source confirmed':data.utxos.as_of_slot?`Indexed at slot ${count(data.utxos.as_of_slot)}`:'Source status unavailable',`${decimal(output.value??output.value_sat,8)} ${unit}`,()=>openRecord('tx',txid)));}left.append(list);}
@@ -169,7 +185,7 @@ function renderBlock(data,query) {
   const id=block.id||block.hash||block.block_id||query;
   const height=network==='ethereum'?hexNumber(block.number):count(block.height);
   const left=card(`${network.toUpperCase()} / BLOCK`,`Block ${network==='bloch'?'at slot '+count(block.slot):'#'+height}`);
-  left.append(element('div','record-id',id));
+  left.append(recordIdentity(id));
   const values=network==='bitcoin'?[['Height',height],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Size',`${count(block.size)} bytes`],['Weight',count(block.weight)],['Merkle root',block.merkle_root],['Previous block',block.previousblockhash],['Best chain',data.status?.in_best_chain?'Yes':'No']]
     :network==='ethereum'?[['Height',height],['Timestamp',time(Number(BigInt(block.timestamp)))],['Transactions',count(data.total_transactions)],['Finalized checkpoint',count(data.finalized_height)],['Gas used',hexNumber(block.gasUsed)],['Gas limit',hexNumber(block.gasLimit)],['Base fee',block.baseFeePerGas?`${decimal(BigInt(block.baseFeePerGas).toString(),9)} gwei`:'—'],['Parent hash',block.parentHash]]
     :[['Height',height],['Slot',count(block.slot)],['Epoch',count(block.epoch)],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Attestations',count(block.attestation_count)],['Finality',block.finality||'—'],['Proposer index',count(block.proposer_index)],['State root',block.state_root],['Parent',block.parent]];
@@ -184,7 +200,7 @@ function renderBlock(data,query) {
 function renderTransaction(data,query) {
   const tx=data.transaction||{},network=state.network;
   const id=tx.txid||tx.hash||query;
-  const left=card(`${network.toUpperCase()} / TRANSACTION`,'Transaction detail');left.append(element('div','record-id',id));
+  const left=card(`${network.toUpperCase()} / TRANSACTION`,'Transaction detail');left.append(recordIdentity(id));
   const ethReceipt=data.receipt_status==='available'?data.receipt:null;
   const receiptLabel={available:'Matches transaction',pending:'Pending',missing:'Missing for mined transaction',source_unavailable:'Source unavailable',inconsistent:'Block identity mismatch'}[data.receipt_status]||'Unavailable';
   const ethFinality=data.position?.finality_relation==='at_or_below_reported_checkpoint'?'At or below reported checkpoint':data.position?.finality_relation==='above_reported_checkpoint'?'Above reported checkpoint':'Unavailable';

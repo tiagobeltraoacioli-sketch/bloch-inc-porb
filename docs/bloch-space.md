@@ -38,6 +38,9 @@ exact base-unit strings in source responses; decimal rendering is a view only.
 Observed graph points can open their source address, Bloch script reference, or
 transaction with a pointer or keyboard. A point is interactive only when the
 source supplied a valid identifier for that network.
+Record views provide copy controls for the exact identifier and a canonical
+`bloch.space` link. The link preserves the network, record type, asset for
+addresses, and block transaction page offset.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source
