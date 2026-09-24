@@ -14,7 +14,7 @@ const server=createServer(async(req,res)=>{
       const response=await handlePortal({request,env:test.env,fetcher:async url=>{const u=new URL(url);if(u.pathname==='/api/chain/network'){const {sourceGraph}=await import('../tests/porb_helpers.mjs');return Response.json(sourceGraph(u.searchParams.get('asset'),Number(u.searchParams.get('cursor')||100)));}if(u.pathname==='/api/overview')return Response.json({network:u.searchParams.get('network'),source:'Browser test fixture',retrieved_at:'2026-09-24T12:00:00Z',head:{height:100}});if(u.pathname==='/api/series')return Response.json({network:'ethereum',source:'Browser test fixture',retrieved_at:'2026-09-24T12:00:00Z',fee_history:{oldest_height:'100',gas_used_ratio:Array.from({length:48},(_,i)=>.5+Math.sin(i)*.2),base_fee_wei:Array.from({length:48},(_,i)=>String(1000000000+i*1000000))}});throw new Error('Unexpected source');}});
       res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
     }
-    const path=resolve(root,'.'+decodeURIComponent(req.url.split('?')[0])+(req.url.endsWith('/')?'index.html':''));if(!path.startsWith(root+'/')){res.writeHead(404);res.end();return;}
+    const path=resolve(root,'.'+decodeURIComponent(req.url.split('?')[0])+(req.url.split('?')[0].endsWith('/')?'index.html':''));if(!path.startsWith(root+'/')){res.writeHead(404);res.end();return;}
     res.setHeader('content-type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png'})[extname(path)]||'text/plain');res.end(await readFile(path));
   }catch{res.writeHead(500);res.end('Test server error');}
 });
@@ -24,7 +24,7 @@ page.on('pageerror',e=>errors.push(e.message));
 try{
   await page.goto(base+'/index.html');assert.equal(await page.locator('.portal-access a').getAttribute('href'),'https://rednblue.space/portal/');
   assert.equal(await page.locator('.hero-actions a').first().getAttribute('href'),'https://rednblue.space/portal/');
-  await page.goto(base+'/portal/');await page.locator('#auth-form input[name=email]').fill(credentials.email);await page.locator('#auth-form input[name=password]').fill(credentials.password);await page.click('#auth-submit');await page.waitForSelector('#workspace:not([hidden])');
+  await page.goto(base+'/portal/?view=analyses');await page.locator('#auth-form input[name=email]').fill(credentials.email);await page.locator('#auth-form input[name=password]').fill(credentials.password);await page.click('#auth-submit');await page.waitForSelector('#workspace:not([hidden])');assert.equal(await page.locator('#view-analyses').isVisible(),true);
   await page.waitForFunction(()=>document.querySelectorAll('.network-card').length===3);
   await page.click('[data-view=analyses]');await page.selectOption('#collect-form [name=asset]','ETH');await page.click('#collect-form button');await page.waitForSelector('#analysis-result:not([hidden])');await page.waitForFunction(()=>document.querySelectorAll('#wallet-rows tr').length===40);
   await page.click('#wallet-rows button');assert.equal(await page.locator('#wallet-detail').isVisible(),true);

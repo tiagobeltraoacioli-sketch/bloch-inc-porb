@@ -1,5 +1,7 @@
 import {GraphExplorer} from './explorer.js';
 const $=id=>document.getElementById(id),state={session:null,analysis:null,science:null,runs:[],view:'overview'};
+const requestedView=new URLSearchParams(location.search).get('view');
+if(['overview','analyses','science','access'].includes(requestedView))state.view=requestedView;
 const explorer=new GraphExplorer($('network-explorer'),row=>{state.selected=row?.id||null;if(row)walletDetail(row);else $('wallet-detail').hidden=true;renderRows();redraw();});
 let scorePoints=[];
 let invitation=new URLSearchParams(location.hash.slice(1)).get('invite'),authMode=invitation?'accept-invite':'login',revokePath=null;
@@ -35,6 +37,7 @@ async function session(){
   $('organization').replaceChildren(...result.organizations.map(org=>{const option=element('option',org.name);option.value=org.id;return option;}));$('organization').value=result.organization.id;
   const isAdmin=['owner','admin'].includes(result.organization.role);$('admin-controls').hidden=!isAdmin;$('org-controls').hidden=result.organization.role!=='owner';$('collect-form').querySelector('button').disabled=result.organization.role==='viewer';
   $('access-description').textContent=`${result.user.email} · ${result.organization.role} · ${result.organization.name}`;
+  showView(state.view);
   await Promise.allSettled([loadOverview(),loadRuns()]);
 }
 $('logout').onclick=()=>perform($('logout'),async()=>{await api('/auth/logout','POST',{});showGate();});
