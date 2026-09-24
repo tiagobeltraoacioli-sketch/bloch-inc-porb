@@ -28,6 +28,11 @@ Each selected identifier links to the source-aware Constellation. The link
 selects the same asset and loads its bounded live address or script-hash query
 automatically. The Constellation's default generated-wallet view remains
 separate from this linked public-chain observation.
+For source-reported BTC and BLCH responses, returned transaction squares in
+the Constellation can be inspected by mouse, source-record button, or keyboard.
+The detail lists the transaction identifier, source block, observation scope,
+and up to 24 input/output references returned for that transaction. It does
+not infer sender identity or input ownership.
 
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change

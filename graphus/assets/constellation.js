@@ -3,6 +3,10 @@ const context = canvas.getContext('2d');
 let realObservation=null;
 let realRequest=0;
 let realAddressTargets=[];
+let realTransactionTargets=[];
+let selectedRealTransactionId=null;
+let realKeyboardIndex=0;
+const syntheticCanvasHelp=document.getElementById('constellation-help').textContent;
 const sourceStatus = document.createElement('details');
 sourceStatus.className = 'source-status';
 sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="true"></span><strong>Data source status</strong><span>synthetic map · optional live lookup</span></summary>
@@ -18,6 +22,12 @@ sourceStatus.innerHTML = `<summary><span class="source-status-dot" aria-hidden="
     <p>Sampled records do not establish network history coverage or AML effectiveness. <a href="daas.html">Read the data product status ↗</a></p>
   </div>`;
 document.getElementById('wallet-search-status').after(sourceStatus);
+const liveTransactionDetail=document.createElement('section');
+liveTransactionDetail.className='live-transaction-detail';
+liveTransactionDetail.setAttribute('aria-label','Selected public-chain transaction');
+liveTransactionDetail.setAttribute('aria-live','polite');
+liveTransactionDetail.hidden=true;
+document.querySelector('.record-card .transaction-fan').before(liveTransactionDetail);
 const liveButton=document.createElement('button');
 liveButton.type='button';liveButton.id='load-live-address';liveButton.textContent='Load public-chain address';
 document.querySelector('.constellation-controls').append(liveButton);
@@ -29,7 +39,14 @@ function setDataMode(mode,detail){
   document.getElementById('constellation-data-detail').textContent=detail;
   document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
+  document.getElementById('constellation-help').textContent=mode==='source-reported'
+    ?'The central star is the queried public identifier. Squares are returned transaction records; select one by clicking it, using the source-record list, or focusing the canvas and pressing the arrow keys and Enter. Arrows show only source-returned input/output references. Bitcoin and Bloch inputs do not prove sender ownership.'
+    :syntheticCanvasHelp;
   if(mode==='synthetic'){
+    selectedRealTransactionId=null;
+    liveTransactionDetail.hidden=true;
+    selectedRealTransactionId=null;
+    liveTransactionDetail.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
     canvas.setAttribute('aria-label','Synthetic wallet constellation. Use arrow keys to choose a wallet, then Enter to inspect it.');
   }
@@ -71,10 +88,15 @@ function renderLiveSourceRecords(data){
     }
   }else{
     (data.nodes||[]).slice(0,40).forEach(node=>{
-      const row=node.kind==='address'&&node.address?document.createElement('button'):document.createElement('div');
+      const actionable=(node.kind==='address'&&node.address)||node.kind==='transaction';
+      const row=document.createElement(actionable?'button':'div');
       row.className='live-source-record';
       row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}${node.balance?.base_units?` · ${formatObservedBalance(node.balance.base_units,data.asset,node.balance.decimals)}`:''}`;
-      if(row.tagName==='BUTTON'){
+      if(node.kind==='transaction'){
+        row.type='button';row.dataset.transactionId=node.id;
+        row.setAttribute('aria-pressed',String(node.id===selectedRealTransactionId));
+        row.addEventListener('click',()=>selectRealTransaction(node.id));
+      }else if(row.tagName==='BUTTON'){
         row.type='button';
         row.addEventListener('click',()=>inspectRealAddress(node.address));
       }
@@ -82,6 +104,45 @@ function renderLiveSourceRecords(data){
     });
   }
   if(!list.childElementCount)list.textContent='No bounded transaction records were returned. Balance provenance is shown above.';
+}
+function selectRealTransaction(id){
+  const data=realObservation;
+  const node=data?.nodes?.find(item=>item.kind==='transaction'&&item.id===id);
+  if(!node)return;
+  selectedRealTransactionId=id;
+  const edges=(data.edges||[]).filter(edge=>edge.from===id||edge.to===id);
+  liveTransactionDetail.replaceChildren();
+  const heading=document.createElement('h3');heading.textContent='Observed transaction';
+  const summary=document.createElement('p');
+  summary.textContent=`${node.txid||id} · source-reported block ${node.block?.height??'unavailable'} · ${edges.length} returned input/output references. These edges do not prove who controlled an input.`;
+  liveTransactionDetail.append(heading,summary);
+  const facts=document.createElement('dl');
+  for(const [label,value] of [
+    ['Transaction ID',node.txid||id],['Block hash',node.block?.hash||'Unavailable'],
+    ['Block time',node.block?.time||'Unavailable'],
+    ['Source',data.observation?.source_id||'Public-chain source'],
+    ['Observation scope',data.observation?.coverage||'Bounded source response'],
+  ]){
+    const item=document.createElement('div');
+    const name=document.createElement('dt');name.textContent=label;
+    const detail=document.createElement('dd');detail.textContent=value;
+    item.append(name,detail);facts.append(item);
+  }
+  liveTransactionDetail.append(facts);
+  const edgeList=document.createElement('ol');
+  for(const edge of edges.slice(0,24)){
+    const item=document.createElement('li');
+    item.textContent=`${edge.kind.replaceAll('_',' ')} · ${formatObservedBalance(edge.amount_base_units,data.asset)} · ${edge.from} → ${edge.to}`;
+    edgeList.append(item);
+  }
+  if(edges.length)liveTransactionDetail.append(edgeList);
+  if(edges.length>24){const more=document.createElement('p');more.textContent=`Showing 24 of ${edges.length} references returned for this transaction.`;liveTransactionDetail.append(more);}
+  liveTransactionDetail.hidden=false;
+  for(const button of document.querySelectorAll('#transaction-list [data-transaction-id]')){
+    button.setAttribute('aria-pressed',String(button.dataset.transactionId===id));
+  }
+  setText('evidence-reference',node.txid||id);
+  draw();
 }
 function combineTokenActivity(wallet,activity){
   if(activity.status!=='source-reported'||activity.network!==wallet.network||activity.asset!==wallet.asset
@@ -103,6 +164,9 @@ async function loadLiveAddress(){
     draw();return;
   }
   const requestId=++realRequest;
+  selectedRealTransactionId=null;
+  realKeyboardIndex=0;
+  liveTransactionDetail.hidden=true;
   liveButton.disabled=true;
   setDataMode('loading',`Requesting ${asset} address facts from the configured public-chain source…`);
   try{
@@ -132,7 +196,7 @@ async function loadLiveAddress(){
     setText('evidence-limit',(data.observation?.limitations||[]).join(' ' )||'No independent chain-state verification.');
     document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
     renderLiveSourceRecords(data);
-    canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}.`);
+    canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. Focus and use arrow keys to choose a returned transaction, then Enter to inspect.`);
     draw();
     if(data.asset==='USDT'||data.asset==='USDC'){
       try{
@@ -155,6 +219,7 @@ async function loadLiveAddress(){
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
+    selectedRealTransactionId=null;liveTransactionDetail.hidden=true;
     clearWallet();
     setDataMode('synthetic',`Public-chain lookup unavailable: ${error.message}. The map remains a synthetic preview.`);
     draw();
@@ -486,6 +551,7 @@ function drawRealObservation(observation){
   const orbit=Math.max(80,Math.min(width*.34,height*.34,225));
   const positions=new Map();
   realAddressTargets=[];
+  realTransactionTargets=[];
   satellites.forEach((node,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/Math.max(1,satellites.length);
     const radius=orbit*(index%3===0?.76:index%3===1?.9:1.08);
@@ -495,12 +561,19 @@ function drawRealObservation(observation){
   for(const edge of observation.edges||[]){
     const a=focusIds.has(edge.from)?center:positions.get(edge.from);
     const b=focusIds.has(edge.to)?center:positions.get(edge.to);
-    if(a&&b&&a!==b)arrow(a,b,'#a9bba6');
+    if(a&&b&&a!==b)arrow(a,b,selectedRealTransactionId&&(edge.from===selectedRealTransactionId||edge.to===selectedRealTransactionId)?'#e9ffb0':'#a9bba6');
   }
   satellites.forEach(node=>{
     const p=positions.get(node.id);
     if(node.kind==='transaction'){
-      context.fillStyle='#d0d9ca';context.globalAlpha=.75;context.fillRect(p.x-3,p.y-3,6,6);context.globalAlpha=1;
+      const selected=node.id===selectedRealTransactionId;
+      context.fillStyle=selected?'#e9ffb0':'#d0d9ca';context.globalAlpha=selected?1:.75;
+      context.fillRect(p.x-(selected?6:4),p.y-(selected?6:4),selected?12:8,selected?12:8);
+      context.globalAlpha=1;
+      realTransactionTargets.push({node,p});
+      if(document.activeElement===canvas&&realTransactionTargets.length-1===realKeyboardIndex){
+        context.strokeStyle='#f0f3eb';context.lineWidth=1.5;context.strokeRect(p.x-9,p.y-9,18,18);
+      }
     }else if(node.kind==='address'){
       const radius=node.balance?.base_units?balanceSize(node.balance.base_units,observation.asset):5;
       if(node.balance?.base_units)star(p.x,p.y,radius,colors[observation.asset?.toLowerCase()]||'#baff28',.8);
@@ -880,6 +953,8 @@ canvas.addEventListener('click',event=>{
   if(realObservation){
     const rect=canvas.getBoundingClientRect();
     const x=event.clientX-rect.left,y=event.clientY-rect.top;
+    const transaction=realTransactionTargets.find(target=>Math.hypot(x-target.p.x,y-target.p.y)<13);
+    if(transaction){selectRealTransaction(transaction.node.id);return;}
     const hit=realAddressTargets.find(target=>Math.hypot(x-target.p.x,y-target.p.y)<Math.max(13,target.radius+5));
     if(hit)inspectRealAddress(hit.address);
     return;
@@ -892,7 +967,18 @@ canvas.addEventListener('click',event=>{
   if(nearest)selectWallet(nearest,Boolean(search));
 });
 canvas.addEventListener('keydown',event=>{
-  if(realObservation)return;
+  if(realObservation){
+    if(!realTransactionTargets.length)return;
+    if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)){
+      event.preventDefault();
+      realKeyboardIndex=(realKeyboardIndex+(event.key==='ArrowRight'||event.key==='ArrowDown'?1:-1)+realTransactionTargets.length)%realTransactionTargets.length;
+      canvas.setAttribute('aria-label',`Transaction ${realKeyboardIndex+1} of ${realTransactionTargets.length}: ${realTransactionTargets[realKeyboardIndex].node.txid}. Press Enter to inspect.`);
+      draw();
+    }else if(event.key==='Enter'||event.key===' '){
+      event.preventDefault();selectRealTransaction(realTransactionTargets[realKeyboardIndex].node.id);
+    }
+    return;
+  }
   const options=wallets.filter(displayed);
   if(!options.length)return;
   if(['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(event.key)){
@@ -906,7 +992,11 @@ canvas.addEventListener('keydown',event=>{
   }
 });
 canvas.addEventListener('focus',()=>{
-  if(realObservation)return;
+  if(realObservation){
+    realKeyboardIndex=0;
+    if(realTransactionTargets.length)canvas.setAttribute('aria-label',`Transaction 1 of ${realTransactionTargets.length}: ${realTransactionTargets[0].node.txid}. Press Enter to inspect.`);
+    draw();return;
+  }
   const options=wallets.filter(displayed);
   const index=options.findIndex(wallet=>wallet===selectedWallet);
   keyboardWalletIndex=index>=0?index:0;
