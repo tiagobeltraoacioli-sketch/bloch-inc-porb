@@ -9,10 +9,15 @@ surfaces, dark text, lime accents, and the original Bloch Inc logo on a black
 header plate. A header button restores the dark palette and remembers the
 choice in the browser.
 
-Dedicated data pages are served at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
-The home page places direct links to all three immediately below the main
-header, above the hero, including on narrow screens. The network tabs lower
-on the page still switch the unified explorer's active query network.
+The primary data app is served at `/app/`. Its clickable Bitcoin, Ethereum,
+and Bloch icon cards switch the entire live workspace without reloading the
+page. Overview and Analytics are app views, with network, view, and range
+stored in the URL for deep links and browser navigation. It refreshes the
+visible source window every 60 seconds and offers exact source rows and CSV
+for analytics windows. The home page links directly into the app for each
+network. The network tabs lower on the home page still switch the unified
+record explorer's active query network.
+Dedicated legacy data pages remain at `/bitcoin/`, `/ethereum/`, and `/bloch/`.
 They share the read-only `/api/overview` response and link each shown record
 back to the unified explorer. The Bitcoin page charts recent block transaction
 count and size plus the highest source mempool fee bins. The Ethereum page

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8faf4">
+  <meta name="description" content="Live Bitcoin, Ethereum and Bloch data workspace with interactive charts, source records and network switching.">
+  <title>Data workspace — Bloch Space</title>
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="/assets/light.css">
+  <link rel="stylesheet" href="/assets/workspace.css">
+  <script src="/assets/workspace.js" type="module"></script>
+</head>
+<body>
+  <a class="skip" href="#workspace-main">Skip to data workspace</a>
+  <header class="topbar workspace-topbar">
+    <a class="brand" href="/" aria-label="Bloch Space home"><img src="/assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-rule"></span><span class="brand-word">SPACE<span class="brand-pulse"></span></span></a>
+    <span class="workspace-topbar-label">DATA WORKSPACE <span> / </span> LIVE SOURCES</span>
+    <a class="workspace-explorer-link" href="/">Explorer ↗</a>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to dark theme"><span aria-hidden="true">◐</span><span class="theme-toggle-label">Dark</span></button>
+  </header>
+  <main id="workspace-main" class="workspace">
+    <section class="workspace-intro">
+      <div><p class="eyebrow"><span class="live-pip"></span> BLOCH SPACE / MULTICHAIN INTELLIGENCE</p><h1>One workspace.<br><em>Three networks.</em></h1><p>Live chain observations, linked records and charts. Select a network to change the whole workspace instantly.</p></div>
+      <div class="workspace-orbit" aria-hidden="true"><span>₿</span><span>◇</span><span>✳</span></div>
+    </section>
+    <nav id="network-picker" class="workspace-networks" aria-label="Select blockchain">
+      <button type="button" data-network="bitcoin" aria-pressed="false"><span class="workspace-network-icon">₿</span><span><strong>Bitcoin</strong><small>UTXO · proof of work</small></span><b aria-hidden="true">↗</b></button>
+      <button type="button" data-network="ethereum" aria-pressed="false"><span class="workspace-network-icon">◇</span><span><strong>Ethereum</strong><small>Execution · finality</small></span><b aria-hidden="true">↗</b></button>
+      <button type="button" data-network="bloch" aria-pressed="false"><span class="workspace-network-icon">✳</span><span><strong>Bloch</strong><small>Epochs · Genesis-4 PoS</small></span><b aria-hidden="true">↗</b></button>
+    </nav>
+    <section class="workspace-console" aria-labelledby="workspace-title">
+      <div class="workspace-console-head"><div><p id="network-strap" class="eyebrow"></p><h2 id="workspace-title"></h2><p id="network-description"></p></div><div class="workspace-actions"><span id="workspace-status" role="status" aria-live="polite">Connecting…</span><button id="workspace-refresh" type="button">Refresh ↻</button></div></div>
+      <div class="workspace-viewbar"><div id="view-picker" class="workspace-views" aria-label="Select data view"><button type="button" data-view="overview" aria-pressed="false">Overview</button><button type="button" data-view="analytics" aria-pressed="false">Analytics</button></div><div id="range-picker" class="workspace-ranges" aria-label="Select analytics window"></div></div>
+      <div id="workspace-stats" class="workspace-stats" aria-live="polite"></div>
+      <div id="workspace-charts" class="workspace-charts"></div>
+      <section class="workspace-ledger"><div class="workspace-section-head"><div><p class="eyebrow">SOURCE RECORDS</p><h3 id="workspace-table-title">Every point, inspectable.</h3></div><button id="workspace-csv" type="button" disabled>Download CSV ↓</button></div><p id="workspace-coverage"></p><div class="workspace-table-scroll"><table id="workspace-table"></table></div></section>
+      <section class="workspace-evidence"><div><p class="eyebrow">ORIGIN AND BOUNDARY</p><h3>See where each number came from.</h3></div><div id="workspace-source"></div><details><summary>Full API response</summary><pre id="workspace-json"></pre></details></section>
+    </section>
+  </main>
+  <footer><span>© 2026 Bloch Inc · Bloch Space</span><span>Source windows and finality differ by network.</span><a href="/">Open record explorer ↗</a></footer>
+</body>
+</html>
