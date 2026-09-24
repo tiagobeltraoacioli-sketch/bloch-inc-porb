@@ -5,6 +5,7 @@ let realRequest=0;
 let realAddressTargets=[];
 let realTransactionTargets=[];
 let selectedRealTransactionId=null;
+let selectedRealEventId=null;
 let realKeyboardIndex=0;
 const syntheticCanvasHelp=document.getElementById('constellation-help').textContent;
 const sourceStatus = document.createElement('details');
@@ -45,10 +46,13 @@ function setDataMode(mode,detail){
   document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   document.getElementById('constellation-help').textContent=mode==='source-reported'
-    ?'The central star is the queried public identifier. Squares are returned transaction records; select one by clicking it, using the source-record list, or focusing the canvas and pressing the arrow keys and Enter. Arrows show only source-returned input/output references. Bitcoin and Bloch inputs do not prove sender ownership.'
+    ?(realObservation?.tokenActivity
+      ?'The central star is the queried public address. Each arrow is one returned ERC-20 Transfer log in a bounded finalized-block window. Select a log in the source-record list to inspect its exact evidence. Other addresses have no balance scale or owner attribution.'
+      :'The central star is the queried public identifier. Squares are returned transaction records; select one by clicking it, using the source-record list, or focusing the canvas and pressing the arrow keys and Enter. Arrows show only source-returned input/output references. Bitcoin and Bloch inputs do not prove sender ownership.')
     :syntheticCanvasHelp;
   if(mode==='synthetic'){
     selectedRealTransactionId=null;
+    selectedRealEventId=null;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
@@ -125,8 +129,11 @@ function renderLiveSourceRecords(data){
     heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. The balance above was queried separately. Peer balances are unknown.`;
     list.append(heading);
     for(const event of activity.events.slice(-24).reverse()){
-      const row=document.createElement('div');row.className='live-source-record';
+      const row=document.createElement('button');row.type='button';row.className='live-source-record';
+      row.dataset.eventId=event.event_id;
+      row.setAttribute('aria-pressed',String(event.event_id===selectedRealEventId));
       row.textContent=`${event.direction} · ${formatObservedBalance(event.amount_base_units,data.asset,6)} · block ${event.block_number} · tx ${event.transaction_hash} · from ${event.from} · to ${event.to}`;
+      row.addEventListener('click',()=>selectRealTokenEvent(event.event_id));
       list.append(row);
     }
     if(activity.event_count>24){
@@ -153,6 +160,38 @@ function renderLiveSourceRecords(data){
   }
   if(!list.childElementCount)list.textContent='No bounded transaction records were returned. Balance provenance is shown above.';
   renderSourceMetrics(data);
+}
+function selectRealTokenEvent(id){
+  const data=realObservation;
+  const event=data?.tokenActivity?.events?.find(item=>item.event_id===id);
+  if(!event)return;
+  selectedRealEventId=id;
+  liveTransactionDetail.replaceChildren();
+  const heading=document.createElement('h3');heading.textContent='Observed ERC-20 Transfer log';
+  const summary=document.createElement('p');
+  summary.textContent=`${data.asset} · ${event.direction} · ${formatObservedBalance(event.amount_base_units,data.asset,6)}. This log does not establish address ownership, intent, or complete transaction history.`;
+  liveTransactionDetail.append(heading,summary);
+  const facts=document.createElement('dl');
+  for(const [label,value] of [
+    ['Event ID',event.event_id],['Transaction hash',event.transaction_hash],
+    ['Block height',event.block_number],['Block hash',event.block_hash],
+    ['Transaction index',event.transaction_index],['Log index',event.log_index],
+    ['From address',event.from],['To address',event.to],
+    ['Token contract',data.tokenActivityContract||'Source-configured contract'],
+    ['Source',data.tokenObservation?.source_id||'Public-chain source'],
+    ['Observation scope',data.tokenObservation?.coverage||'Bounded finalized-block window'],
+  ]){
+    const item=document.createElement('div');
+    const name=document.createElement('dt');name.textContent=label;
+    const detail=document.createElement('dd');detail.textContent=String(value??'Unavailable');
+    item.append(name,detail);facts.append(item);
+  }
+  liveTransactionDetail.append(facts);
+  liveTransactionDetail.hidden=false;
+  for(const button of document.querySelectorAll('#transaction-list [data-event-id]'))
+    button.setAttribute('aria-pressed',String(button.dataset.eventId===id));
+  setText('evidence-reference',id);
+  draw();
 }
 function selectRealTransaction(id){
   const data=realObservation;
@@ -202,7 +241,8 @@ function combineTokenActivity(wallet,activity){
   const root=wallet.nodes?.find(node=>node.address===wallet.address);
   return {...wallet,
     nodes:activity.nodes.map(node=>node.address===wallet.address?{...node,balance:root?.balance}:node),
-    edges:activity.edges,tokenActivity:activity.activity,tokenObservation:activity.observation};
+    edges:activity.edges,tokenActivity:activity.activity,tokenActivityContract:activity.contract,
+    tokenObservation:activity.observation};
 }
 async function loadLiveAddress(){
   const address=document.getElementById('record-search').value.trim();
@@ -214,6 +254,7 @@ async function loadLiveAddress(){
   }
   const requestId=++realRequest;
   selectedRealTransactionId=null;
+  selectedRealEventId=null;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
   sourceMetricsPanel.hidden=true;
@@ -246,7 +287,11 @@ async function loadLiveAddress(){
     setText('evidence-limit',(data.observation?.limitations||[]).join(' ' )||'No independent chain-state verification.');
     document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
     renderLiveSourceRecords(data);
-    canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. Focus and use arrow keys to choose a returned transaction, then Enter to inspect.`);
+    const canvasInstruction=['BTC','BLCH'].includes(data.asset)
+      ?'Focus and use arrow keys to choose a returned transaction, then Enter to inspect.'
+      :data.asset==='ETH'?'No transaction index is connected for native ETH.'
+        :'Select returned Transfer logs in the source-record list when available.';
+    canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. ${canvasInstruction}`);
     draw();
     if(data.asset==='USDT'||data.asset==='USDC'){
       try{
@@ -269,7 +314,7 @@ async function loadLiveAddress(){
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
-    selectedRealTransactionId=null;liveTransactionDetail.hidden=true;
+    selectedRealTransactionId=null;selectedRealEventId=null;liveTransactionDetail.hidden=true;
     clearWallet();
     setDataMode('synthetic',`Public-chain lookup unavailable: ${error.message}. The map remains a synthetic preview.`);
     draw();
@@ -611,7 +656,8 @@ function drawRealObservation(observation){
   for(const edge of observation.edges||[]){
     const a=focusIds.has(edge.from)?center:positions.get(edge.from);
     const b=focusIds.has(edge.to)?center:positions.get(edge.to);
-    if(a&&b&&a!==b)arrow(a,b,selectedRealTransactionId&&(edge.from===selectedRealTransactionId||edge.to===selectedRealTransactionId)?'#e9ffb0':'#a9bba6');
+    if(a&&b&&a!==b)arrow(a,b,(selectedRealTransactionId&&(edge.from===selectedRealTransactionId||edge.to===selectedRealTransactionId))
+      ||(selectedRealEventId&&edge.event_id===selectedRealEventId)?'#e9ffb0':'#a9bba6');
   }
   satellites.forEach(node=>{
     const p=positions.get(node.id);
@@ -636,7 +682,7 @@ function drawRealObservation(observation){
   context.fillStyle='#f0f3eb';context.font='700 12px ui-monospace, monospace';
   context.fillText(observation.address.slice(0,12)+'…',center.x+radius+12,center.y-9);
   context.font='11px ui-monospace, monospace';context.fillStyle='#aac39b';
-  context.fillText('SOURCE-REPORTED ADDRESS BALANCE',20,32);
+  context.fillText(observation.asset==='BLCH'?'SOURCE-REPORTED SCRIPT BALANCE':'SOURCE-REPORTED ADDRESS BALANCE',20,32);
   context.fillText(`${satellites.length} SOURCE RECORDS · NO OWNERSHIP INFERENCE`,20,height-22);
 }
 function frame() {if(!paused){tick++;draw();}requestAnimationFrame(frame);}

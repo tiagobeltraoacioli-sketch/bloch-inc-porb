@@ -42,6 +42,13 @@ separately within the reported block window. Native ETH remains a balance-only
 view until a transaction index is connected. Every panel states its source,
 block range, and coverage limit.
 
+In a source-reported USDT or USDC query, each returned `Transfer` log in the
+source-record list can be selected. Its detail shows the exact amount, direction,
+transaction hash, block hash and height, transaction and log indexes, contract,
+both public addresses, source, and observation scope. The matching constellation
+arrow is highlighted. The list shows at most the latest 24 events from the
+bounded response; it is not a complete token history or an ownership inference.
+
 Selecting a Bloch indexed point fetches up to 12 separate script-history
 events from the public archival lookup. The history observation does not change
 the ranked snapshot balance or its block anchor. Created outputs and spent
