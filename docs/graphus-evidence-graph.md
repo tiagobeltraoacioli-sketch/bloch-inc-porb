@@ -45,3 +45,19 @@ GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwrig
 `GRAPHUS_MAP_ASSETS=USDC` narrows a live rerun to one or more comma-separated assets. Local browser checks use explicitly marked synthetic fixtures. Live checks capture actual source records in the System Map, confirm that graph exploration makes no new chain request, compare re-exported packets and dataset digests, inspect reference totals/neighbors/paths, open a filtered JSON file, hand off to Analytics and check mobile layout.
 
 Local checks also reject modified datasets, handle empty packets and missing handoffs, preserve the selected reference from the workbench, ignore a delayed source error after import and verify an explicit return to live collection.
+
+## Production verification — 2026-09-24
+
+Graphus release `057219ad` publishes commit `f02aca8`. All 23 unit tests and the local browser flow passed. Production browser checks captured these bounded, real source samples and opened the exact datasets in Constellation:
+
+| Asset | Captured records | References, including transaction nodes | New chain queries while exploring the saved graph |
+| --- | ---: | ---: | ---: |
+| BTC | 62 | 71 | 0 |
+| ETH | 24 | 42 | 0 |
+| BLCH | 844 | 49 | 0 |
+| USDT | 238 | 324 | 0 |
+| USDC | 386 | 417 | 0 |
+
+For each asset, the check compared re-exported packets with their original captures, verified exact selected-reference totals, selected a neighbor by keyboard, checked directed paths and confirmed mobile layout without horizontal overflow. A filtered Ethereum packet was reopened from JSON and passed to production Analytics without a new source request. These separate samples are not synchronized network totals.
+
+The initial Ethereum capture returned HTTP 502 twice. Independent checks of the remaining assets and a targeted Ethereum retry subsequently passed using real source responses. The browser harness now records unavailable assets while continuing independent checks and still exits with a failure if any requested asset remains unverified.

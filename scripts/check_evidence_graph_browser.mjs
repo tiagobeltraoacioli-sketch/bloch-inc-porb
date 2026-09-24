@@ -21,10 +21,12 @@ async function opened(digest){await page.waitForFunction(expected=>document.quer
 async function upload(packet){await page.setInputFiles('#net-import-file',{name:'public-evidence.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(packet))});}
 try{
   if(!live)await page.route('**/api/chain/network?*',route=>route.fulfill({json:sample(new URL(route.request().url()).searchParams.get('asset'))}));
-  await mkdir(new URL('../.data/evidence-graph/',import.meta.url),{recursive:true});let last;
+  await mkdir(new URL('../.data/evidence-graph/',import.meta.url),{recursive:true});let last;const unavailable=[];
   for(const asset of assets){
     await page.goto(origin+'/map');await page.selectOption('#capture-asset',asset);
-    for(let attempt=0;attempt<2;attempt++){await page.click('#capture-button');await page.waitForFunction(()=>!document.querySelector('#capture-button').disabled,{},{timeout:75000});if(await page.locator('#capture-result').isVisible())break;if(attempt===1)assert.fail(asset+': '+await page.locator('#capture-status').innerText());await page.waitForTimeout(1200);}
+    let captured=false;
+    for(let attempt=0;attempt<2;attempt++){await page.click('#capture-button');await page.waitForFunction(()=>!document.querySelector('#capture-button').disabled,{},{timeout:75000});if(await page.locator('#capture-result').isVisible()){captured=true;break;}if(attempt===0)await page.waitForTimeout(1200);}
+    if(!captured){const failure={asset,error:await page.locator('#capture-status').innerText()};unavailable.push(failure);console.log(JSON.stringify({unavailable:failure}));continue;}
     last=await exported('#capture-export');const before=requests.length;await page.click('#capture-graph');await opened(last.dataset_sha256);
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('graphus.constellation.evidence.v1')),null);assert.equal(await page.locator('#net-auto').isChecked(),false);assert.equal(await page.locator('#net-auto').isDisabled(),true);assert.equal(await page.locator('#net-refresh').isDisabled(),true);assert.equal(await page.locator('#net-older').isDisabled(),true);
     assert.equal(await page.locator('.constellation-workspace').isVisible(),false);assert.match(await page.locator('#net-import-note').innerText(),/source claims remain unverified/);
@@ -39,6 +41,7 @@ try{
     assert.equal(requests.length,before,'Opening or exploring saved evidence must not query a chain source');assert.deepEqual(errors,[]);
     console.log(JSON.stringify({mode:live?'real source':'test fixture',asset,records:last.dataset.edges.length,references:last.dataset.nodes.length,sha256:last.dataset_sha256,no_source_query_during_graph:true}));
   }
+  assert.ok(last,'No source capture was available');await page.goto(origin+'/constellation.html?import=evidence');
   const subset=await filteredEvidence(last,{query:last.dataset.edges[0].txid});let before=requests.length;await upload(subset);await opened(subset.dataset_sha256);assert.match(await page.locator('#net-import-note').innerText(),/Filtered subset/);assert.deepEqual(await exported('#net-export'),subset);assert.equal(requests.length,before);
   await page.locator('#net-references button').first().click();await page.locator('.net-grid').screenshot({path:new URL('../.data/evidence-graph/'+(live?'live':'local')+'-graph.png',import.meta.url).pathname});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:new URL('../.data/evidence-graph/'+(live?'live':'local')+'-mobile.png',import.meta.url).pathname,fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);await page.setViewportSize({width:1440,height:1000});
@@ -56,5 +59,5 @@ try{
     await page.click('#net-live');await page.waitForFunction(()=>!document.querySelector('#net-refresh').disabled);assert.equal(await page.locator('#network-explorer').getAttribute('data-collection-mode'),'live');assert.ok(requests.length>requested);assert.equal(new URL(page.url()).searchParams.has('import'),false);assert.equal(await page.locator('#net-asset').isDisabled(),false);assert.equal(await page.locator('#net-auto').isDisabled(),false);
     await page.selectOption('#net-asset','BTC');await page.waitForFunction(()=>!document.querySelector('#net-refresh').disabled);const btc=sample('BTC').nodes[0].address;await page.fill('#net-search',btc.toLowerCase());assert.equal(await page.locator('#net-references button').count(),0);await page.fill('#net-search',btc);assert.equal(await page.locator('#net-references button').count(),1);
   }
-  assert.deepEqual(errors,[]);console.log(`Evidence graph ${live?'live':'local'} browser passed: same-dataset graph, selected references, exact groups, neighbors, paths, local JSON import, unchanged exports, Analytics handoff and mobile layout.${live?'':' Altered/empty packets, missing handoff, late source responses and explicit return to live mode also passed.'}`);
+  assert.deepEqual(errors,[]);assert.deepEqual(unavailable,[],'Public source checks remain unavailable');console.log(`Evidence graph ${live?'live':'local'} browser passed: same-dataset graph, selected references, exact groups, neighbors, paths, local JSON import, unchanged exports, Analytics handoff and mobile layout.${live?'':' Altered/empty packets, missing handoff, late source responses and explicit return to live mode also passed.'}`);
 }finally{await browser.close();if(server)await new Promise(resolve=>server.close(resolve));}
