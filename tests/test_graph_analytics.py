@@ -104,6 +104,10 @@ class GraphAnalyticsTest(unittest.TestCase):
             {"depth": 0, "count": 1}, {"depth": 1, "count": 1}, {"depth": 2, "count": 2},
         ])
         self.assertEqual(len(two["links"]), 6)
+        self.assertEqual([(edge["event_id"], edge["step"]) for edge in two["observed_direct_edges"]],
+                         [("e1", 1), ("e2", 2), ("e4", 2)])
+        self.assertEqual(two["observed_direct_edges"][0]["sender_reference"], "a")
+        self.assertEqual(two["observed_direct_edges"][0]["source_id"], "synthetic-fixture")
         self.assertEqual(two["source_ids"], ["synthetic-fixture"])
         self.assertNotIn("usdt1", str(two))
         self.assertEqual(two, GraphAnalytics(reversed(self.graph.events)).wallet_neighborhood(**arguments))
@@ -121,6 +125,7 @@ class GraphAnalyticsTest(unittest.TestCase):
             {"depth": 0, "count": 1}, {"depth": 1, "count": 0}, {"depth": 2, "count": 0},
         ])
         self.assertEqual([link["kind"] for link in report["links"]], ["observed_destination"])
+        self.assertEqual(report["observed_direct_edges"], [])
 
     def test_neighborhood_fails_closed_on_reference_and_event_bounds(self):
         arguments = dict(chain="ethereum", network="mainnet", asset_id="eth", wallet="b",

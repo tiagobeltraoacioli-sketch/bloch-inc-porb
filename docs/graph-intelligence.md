@@ -39,7 +39,11 @@ The separate private `wallet_temporal_motifs` method uses source-provided observ
 
 The public synthetic map can expand a searched ETH, USDT, or USDC point from one to two graph steps. The center, immediate peers, and second-step peers occupy separate visual rings. Gray links show illustrative adjacency; transaction arrows and the existing event panels remain tied to the selected wallet. The selector stays at one step for BTC and BLCH because an input outpoint is not a directly observed sender. The preview uses only generated wallet examples and does not query a chain.
 
+An event inspector below the map lists every generated direct-transfer event in the selected one- or two-step neighborhood. It can filter step 1 or step 2, shows event ID, direction, date, exact fixture amount, and source label, and highlights the selected directed link. Sender and recipient buttons change the focus point. No edge between two outer-ring points is drawn as part of the two-step neighborhood, since both endpoints are already at its boundary. The list is scrollable and exposes all matching fixture events, without silent truncation.
+
 The separate private `wallet_neighborhood` method expands only directly observed account-transfer references within one chain, network, asset, and explicit time window. Its output keeps event nodes, directed sender/destination links, source IDs, finality, depth, and evidence event IDs. Unknown-sender UTXO/eUTXO outputs can attach to an already reached reference but cannot expand the graph. Requests fail if they exceed two steps, 200 references, or 500 included events; callers may set lower bounds. References and proximity are neither ownership nor value-continuity claims. The private method is not exposed through the public site.
+
+The private response now also includes an `observed_direct_edges` list. Each row preserves the event ID, graph step, sender and destination references, base-unit amount, observation time, source ID, and finality. It is a view over the same selected event nodes, not an inferred entity or flow-through edge. Unknown-sender events remain event nodes without a direct edge row.
 
 ### Normalized observation adapter
 

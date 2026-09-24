@@ -346,6 +346,7 @@ class GraphAnalytics:
                   "reference": reference, "depth": depth, "focus": reference == wallet}
                  for reference, depth in sorted(depths.items(), key=lambda pair: (pair[1], pair[0]))]
         links = []
+        direct_edges = []
         for item in selected:
             event_node = f"event:{item.event_id}"
             nodes.append({
@@ -361,12 +362,23 @@ class GraphAnalytics:
             if item.sender_attribution == "direct":
                 links.append({"from": f"reference:{item.sender}", "to": event_node,
                               "kind": "direct_observed_sender", "event_id": item.event_id})
+                direct_edges.append({
+                    "event_id": item.event_id,
+                    "step": min(depths[item.sender], depths[item.destination]) + 1,
+                    "sender_reference": item.sender,
+                    "destination_reference": item.destination,
+                    "amount_base_units": item.amount_base_units,
+                    "observed_at": item.observed_at,
+                    "source_id": item.source_id,
+                    "finality": item.finality,
+                })
         return {
             "classification": "bounded_event_centered_neighborhood_not_ownership",
             "chain": chain, "network": network, "asset_id": asset_id,
             "focus_reference": wallet,
             "window": {"start": start, "end_exclusive": end, "max_hops": max_hops},
             "nodes": nodes, "links": links,
+            "observed_direct_edges": direct_edges,
             "summary": {
                 "references_by_depth": [
                     {"depth": depth, "count": sum(value == depth for value in depths.values())}

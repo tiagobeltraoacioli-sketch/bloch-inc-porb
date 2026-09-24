@@ -74,6 +74,8 @@ let search = '';
 let selectedWallet = null;
 let selectedTransaction = null;
 let activeRoute = null;
+let selectedNetworkEvent = null;
+let networkStepFilter = 0;
 let neighborhoodHops = 1;
 let neighborhoodLevels = new Map();
 let width = 0, height = 0, dpr = 1, tick = 0;
@@ -112,8 +114,70 @@ function rebuildNeighborhood(){
 }
 neighborhoodSelect.addEventListener('change',()=>{
   neighborhoodHops=Number(neighborhoodSelect.value);
-  rebuildNeighborhood();renderSearchStatus();renderList();draw();
+  selectedNetworkEvent=null;networkStepFilter=0;
+  rebuildNeighborhood();renderSearchStatus();renderNetworkEvidence();renderList();draw();
 });
+const networkPanel=document.createElement('section');
+networkPanel.className='network-evidence';
+networkPanel.setAttribute('aria-labelledby','network-evidence-title');
+networkPanel.innerHTML='<div class="network-evidence-heading"><span>NETWORK EVIDENCE / SYNTHETIC</span><h2 id="network-evidence-title">Open each observed link.</h2><p>Each row is one generated transfer event, scoped to this asset and graph step. Adjacency does not prove ownership, value continuity, or intent.</p></div><div class="network-evidence-toolbar"><label for="network-step">Show events</label><select id="network-step" disabled><option value="0">All steps</option><option value="1">Step 1</option><option value="2">Step 2</option></select></div><p id="network-evidence-summary" class="network-evidence-summary" role="status" aria-live="polite">Search a synthetic ETH, USDT or USDC point to inspect its links.</p><div id="network-evidence-list" class="network-evidence-list"></div><div id="network-evidence-detail" class="network-evidence-detail" aria-live="polite">Select a link event to see its fixture evidence.</div>';
+document.getElementById('constellation-help').after(networkPanel);
+const networkSummary=document.getElementById('network-evidence-summary');
+const networkList=document.getElementById('network-evidence-list');
+const networkDetail=document.getElementById('network-evidence-detail');
+const networkStepSelect=document.getElementById('network-step');
+networkStepSelect.addEventListener('change',()=>{
+  networkStepFilter=Number(networkStepSelect.value);selectedNetworkEvent=null;
+  renderNetworkEvidence();draw();
+});
+function neighborhoodEvents(){
+  if(!search||!selectedWallet||!['eth','usdt','usdc'].includes(selectedWallet.asset))return [];
+  return transfers.filter(tx=>{
+    if(walletById.get(tx.from).asset!==selectedWallet.asset)return false;
+    const from=neighborhoodLevels.get(tx.from),to=neighborhoodLevels.get(tx.to);
+    return from!==undefined&&to!==undefined&&Math.min(from,to)<neighborhoodHops;
+  }).sort((a,b)=>{
+    const stepA=Math.min(neighborhoodLevels.get(a.from),neighborhoodLevels.get(a.to));
+    const stepB=Math.min(neighborhoodLevels.get(b.from),neighborhoodLevels.get(b.to));
+    return stepA-stepB||a.observed.localeCompare(b.observed)||a.id.localeCompare(b.id);
+  });
+}
+function renderNetworkEvidence(){
+  networkList.replaceChildren();networkDetail.textContent='Select a link event to see its fixture evidence.';
+  if(!selectedWallet||!search){networkStepSelect.disabled=true;networkSummary.textContent='Search a synthetic ETH, USDT or USDC point to inspect its links.';return;}
+  if(!['eth','usdt','usdc'].includes(selectedWallet.asset)){
+    networkStepSelect.disabled=true;
+    networkSummary.textContent='BTC and BLCH input outpoints do not identify direct senders. No account-style link evidence is asserted here.';return;
+  }
+  networkStepSelect.disabled=false;
+  networkStepSelect.querySelector('option[value="2"]').disabled=neighborhoodHops===1;
+  const allEvents=neighborhoodEvents();
+  const first=allEvents.filter(tx=>Math.min(neighborhoodLevels.get(tx.from),neighborhoodLevels.get(tx.to))===0).length;
+  const events=networkStepFilter?allEvents.filter(tx=>Math.min(neighborhoodLevels.get(tx.from),neighborhoodLevels.get(tx.to))+1===networkStepFilter):allEvents;
+  networkSummary.textContent=`${allEvents.length} generated direct-transfer events · ${first} at step 1 · ${allEvents.length-first} at step 2 · showing ${events.length} · ${sourceNames[selectedWallet.asset]}`;
+  events.forEach(tx=>{
+    const step=Math.min(neighborhoodLevels.get(tx.from),neighborhoodLevels.get(tx.to))+1;
+    const button=document.createElement('button');button.type='button';button.className='network-event';button.setAttribute('aria-pressed','false');
+    const heading=document.createElement('strong');heading.textContent=`STEP ${step} · ${tx.id}`;
+    const route=document.createElement('span');route.textContent=`${tx.from} → ${tx.to}`;
+    const detail=document.createElement('small');detail.textContent=`${tx.observed} · ${tx.amount.toLocaleString('en-US')} ${units[selectedWallet.asset]} · synthetic fixture`;
+    button.append(heading,route,detail);
+    button.addEventListener('click',()=>{
+      selectedNetworkEvent=tx;
+      networkList.querySelectorAll('button').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
+      networkDetail.replaceChildren();
+      const evidence=document.createElement('p');
+      evidence.textContent=`${tx.id} · step ${step} · ${tx.from} → ${tx.to} · ${tx.observed} · ${tx.amount.toLocaleString('en-US')} ${units[selectedWallet.asset]} · ${sourceNames[selectedWallet.asset]}. This is a generated event, not a chain record or AML conclusion.`;
+      const actions=document.createElement('div');
+      for(const [label,id] of [['Focus sender',tx.from],['Focus recipient',tx.to]]){
+        const focus=document.createElement('button');focus.type='button';focus.textContent=label;
+        focus.addEventListener('click',()=>selectWallet(walletById.get(id),true));actions.append(focus);
+      }
+      networkDetail.append(evidence,actions);draw();
+    });
+    networkList.append(button);
+  });
+}
 function focusedPeers() {
   if(!search||!selectedWallet)return [];
   return [...neighborhoodLevels.keys()].filter(id=>id!==selectedWallet.id).sort();
@@ -187,7 +251,10 @@ function draw() {
   }
   for (const [from,to] of relations) {
     if (!displayed(from)||!displayed(to)) continue;
-    if(search&&selectedWallet&&neighborhoodHops===1&&from.id!==selectedWallet.id&&to.id!==selectedWallet.id)continue;
+    if(search&&selectedWallet){
+      const fromStep=neighborhoodLevels.get(from.id),toStep=neighborhoodLevels.get(to.id);
+      if(fromStep===undefined||toStep===undefined||Math.min(fromStep,toStep)>=neighborhoodHops)continue;
+    }
     const selected=selectedWallet && (from.id===selectedWallet.id||to.id===selectedWallet.id);
     line(point(from),point(to),selected?'#9bc6e2':'#6da8c8',selected?.48:.12,selected?1.5:.8);
   }
@@ -202,6 +269,10 @@ function draw() {
       const from=walletById.get(tx.from),to=walletById.get(tx.to);
       if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#f5d9a7');
     }
+  }
+  if(selectedNetworkEvent){
+    const from=walletById.get(selectedNetworkEvent.from),to=walletById.get(selectedNetworkEvent.to);
+    if(displayed(from)&&displayed(to))arrow(point(from),point(to),'#f5d9a7');
   }
   const keyboardChoice=document.activeElement===canvas?wallets.filter(displayed)[keyboardWalletIndex]:null;
   for (const wallet of wallets) {
@@ -218,6 +289,9 @@ function draw() {
     }
     if(activeRoute?.some(tx=>tx.from===wallet.id||tx.to===wallet.id)){
       context.strokeStyle='#f5d9a7';context.lineWidth=1.5;context.beginPath();context.arc(p.x,p.y,selected?19:12+level*7.2,0,Math.PI*2);context.stroke();
+    }
+    if(selectedNetworkEvent&&(selectedNetworkEvent.from===wallet.id||selectedNetworkEvent.to===wallet.id)){
+      context.strokeStyle='#f5d9a7';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?21:14+level*7.2,0,Math.PI*2);context.stroke();
     }
     if (wallet===keyboardChoice) {
       context.strokeStyle='#ffffff';context.lineWidth=2;context.beginPath();context.arc(p.x,p.y,selected?18:13,0,Math.PI*2);context.stroke();
@@ -508,7 +582,8 @@ function renderSearchStatus() {
   status.textContent=`${matches.length} ${matches.length===1?'match':'matches'} · ${selectedWallet.id} centered with ${direct} immediate ${direct===1?'point':'points'} and ${second} second-step illustrative ${second===1?'point':'points'} · ${selectedWallet.transactions.length} wallet events. Select another result below to change focus.`;
 }
 function clearWallet() {
-  selectedWallet=null;selectedTransaction=null;activeRoute=null;
+  selectedWallet=null;selectedTransaction=null;activeRoute=null;selectedNetworkEvent=null;
+  networkStepFilter=0;networkStepSelect.value='0';
   neighborhoodHops=1;neighborhoodLevels=new Map();neighborhoodSelect.value='1';neighborhoodSelect.disabled=true;
   setText('record-type','SELECT A WALLET');setText('record-id',search?'No matching wallet.':'Each dot opens a fan.');
   setText('record-summary',search?'Try a synthetic wallet ID such as SIM-BTC-001 or change the asset filter.':'Open a wallet point to inspect its synthetic transactions and relationships.');
@@ -525,14 +600,17 @@ function clearWallet() {
   pathTarget.replaceChildren();pathTarget.disabled=true;pathHops.disabled=true;pathResults.replaceChildren();
   pathSummary.textContent='Select a synthetic ETH, USDT or USDC point.';
   motifMetrics.replaceChildren();motifPairs.replaceChildren();motifSummary.textContent='Select a synthetic wallet point.';motifGap.disabled=true;
+  renderNetworkEvidence();
 }
 function selectWallet(wallet,updateQuery=false) {
   if(updateQuery){search=wallet.id.toLowerCase();document.getElementById('record-search').value=wallet.id;}
-  selectedWallet=wallet;selectedTransaction=null;
+  selectedWallet=wallet;selectedTransaction=null;selectedNetworkEvent=null;
+  networkStepFilter=0;networkStepSelect.value='0';
   const expanded=Boolean(search&&['eth','usdt','usdc'].includes(wallet.asset));
   if(!expanded){neighborhoodHops=1;neighborhoodSelect.value='1';}
   neighborhoodSelect.disabled=!expanded;
   rebuildNeighborhood();
+  renderNetworkEvidence();
   noteLink.href=`account.html?wallet=${encodeURIComponent(wallet.address)}`;
   setText('record-type','SYNTHETIC WALLET / '+wallet.asset.toUpperCase());
   setText('record-id',wallet.id);
@@ -638,3 +716,4 @@ new ResizeObserver(resize).observe(canvas);
 const initialWallet=new URL(window.location.href).searchParams.get('wallet')||new URL(window.location.href).searchParams.get('address');
 if(initialWallet){const input=document.getElementById('record-search');input.value=initialWallet;input.dispatchEvent(new Event('input',{bubbles:true}));}
 renderList();renderSearchStatus();resize();requestAnimationFrame(frame);
+renderNetworkEvidence();
