@@ -100,12 +100,14 @@ function normalizeLog(log, {contract, address, first, last, finalizedHash}) {
   };
 }
 
-export async function queryEthereumActivity({address, asset, env = {}, fetcher = fetch, now = () => new Date()}) {
+export async function queryEthereumActivity({address, asset, toBlock = null, env = {}, fetcher = fetch, now = () => new Date()}) {
   const token = String(asset || '').toUpperCase();
   if (!ADDRESS.test(address || '') || !['ETH', 'USDT', 'USDC'].includes(token)) {
     return fail('invalid_address_or_asset', 400);
   }
   if (token === 'ETH') return fail('native_eth_activity_requires_transaction_index', 501);
+  if (toBlock !== null && (typeof toBlock !== 'string' || !/^(0|[1-9][0-9]*)$/.test(toBlock)
+      || !Number.isSafeInteger(Number(toBlock)))) return fail('invalid_to_block', 400);
   try {
     const endpoint = rpcEndpoint(env);
     const chainId = await rpc(fetcher, endpoint, 'eth_chainId', [], 1);
@@ -114,8 +116,16 @@ export async function queryEthereumActivity({address, asset, env = {}, fetcher =
     if (!block || typeof block.hash !== 'string' || !HEX32.test(block.hash)) {
       throw new Error('invalid_rpc_response');
     }
-    const last = boundedNumber(block.number);
-    const timestamp = boundedNumber(block.timestamp);
+    const finalizedHeight = boundedNumber(block.number);
+    const last = toBlock === null ? finalizedHeight : Number(toBlock);
+    if (last > finalizedHeight) return fail('to_block_not_finalized', 400);
+    const windowEnd = last === finalizedHeight ? block
+      : await rpc(fetcher, endpoint, 'eth_getBlockByNumber', [`0x${last.toString(16)}`, false], 5);
+    if (!windowEnd || boundedNumber(windowEnd.number) !== last
+        || typeof windowEnd.hash !== 'string' || !HEX32.test(windowEnd.hash)) throw new Error('invalid_rpc_response');
+    const finalizedTime = new Date(boundedNumber(block.timestamp) * 1000);
+    if (!Number.isFinite(finalizedTime.getTime())) throw new Error('invalid_rpc_response');
+    const timestamp = boundedNumber(windowEnd.timestamp);
     const blockTime = new Date(timestamp * 1000);
     if (!Number.isFinite(blockTime.getTime())) throw new Error('invalid_rpc_response');
     const first = Math.max(0, last - WINDOW_BLOCKS + 1);
@@ -132,7 +142,7 @@ export async function queryEthereumActivity({address, asset, env = {}, fetcher =
     const events = new Map();
     for (const [logs, direction] of [[inbound, 'incoming'], [outbound, 'outgoing']]) {
       for (const log of logs) {
-        const event = normalizeLog(log, {contract, address: normalizedAddress, first, last, finalizedHash: block.hash.toLowerCase()});
+        const event = normalizeLog(log, {contract, address: normalizedAddress, first, last, finalizedHash: windowEnd.hash.toLowerCase()});
         if (event.direction !== direction && event.direction !== 'self') throw new Error('invalid_rpc_log');
         const previous = events.get(event.event_id);
         if (previous && JSON.stringify(previous) !== JSON.stringify(event)) throw new Error('invalid_rpc_log');
@@ -159,7 +169,8 @@ export async function queryEthereumActivity({address, asset, env = {}, fetcher =
       })),
       observation: {
         source_id: 'configured-ethereum-json-rpc', retrieved_at: now().toISOString(),
-        finalized_head: {height: last, hash: block.hash.toLowerCase(), time: blockTime.toISOString()},
+        finalized_head: {height: finalizedHeight, hash: block.hash.toLowerCase(), time: finalizedTime.toISOString()},
+        window_end_anchor: {height: last, hash: windowEnd.hash.toLowerCase(), time: blockTime.toISOString()},
         block_window: {from: first, to: last, width: last - first + 1},
         coverage: 'erc20_transfer_logs_in_64_or_fewer_source_reported_finalized_blocks',
         limitations: [

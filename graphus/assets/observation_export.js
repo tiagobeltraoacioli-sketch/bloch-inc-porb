@@ -18,6 +18,7 @@
     ?{...pick(value,['source_id','retrieved_at','coverage']),
       limitations:Array.isArray(value.limitations)?value.limitations.filter(item=>typeof item==='string').slice(0,12):[],
       ...(value.finalized_head?{finalized_head:anchor(value.finalized_head)}:{}),
+      ...(value.window_end_anchor?{window_end_anchor:anchor(value.window_end_anchor)}:{}),
       ...(value.block_window?{block_window:pick(value.block_window,['from','to','width'])}:{}),
       ...(value.head_before_balance?{head_before_balance:pick(value.head_before_balance,['slot','height','finalized_height','state_root'])}:{})}
     :null;

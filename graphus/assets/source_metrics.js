@@ -118,7 +118,7 @@
       throw new Error('Token contract mismatch');
     }
     const balance=wallet?.balance?.block;
-    const logs=activity?.observation?.finalized_head;
+    const logs=activity?.observation?.window_end_anchor||activity?.observation?.finalized_head;
     for(const anchor of [balance,logs]){
       if(!Number.isSafeInteger(anchor?.height)||anchor.height<0
           ||typeof anchor.hash!=='string'||!/^0x[0-9a-fA-F]{64}$/.test(anchor.hash)){

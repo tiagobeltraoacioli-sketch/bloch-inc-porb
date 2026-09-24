@@ -156,12 +156,14 @@ function renderSourceMetrics(data){
     const anchors=data.tokenAnchorComparison;
     if(anchors){
       add('Balance block',String(anchors.balance.height),anchors.balance.hash);
-      add('Log window head',String(anchors.logs.height),anchors.logs.hash);
+      add('Log window end',String(anchors.logs.height),anchors.logs.hash);
+      if(data.tokenObservation?.finalized_head)
+        add('Source finalized head',String(data.tokenObservation.finalized_head.height),data.tokenObservation.finalized_head.hash);
       add('Balance retrieved',data.observation?.retrieved_at||'Unavailable','Separate source request');
       add('Logs retrieved',data.tokenObservation?.retrieved_at||'Unavailable','Separate source request');
       const distance=Math.abs(anchors.height_difference);
       add('Anchor comparison',anchors.status==='same_source_anchor'?'Same source block':`${distance} ${distance===1?'block':'blocks'} apart`,
-        anchors.status==='same_source_anchor'?'Matching height and hash; not a balance reconciliation':'Balance and log results were retrieved at separate finalized heads');
+        anchors.status==='same_source_anchor'?'Matching height and hash; not a balance reconciliation':'Balance and log window end are separate source snapshots');
     }
     add('Active blocks',`${metrics.block_activity.active_blocks} / ${metrics.block_activity.total_blocks}`,'Blocks with at least one returned Transfer log');
     add('Busiest block',metrics.block_activity.busiest_block
@@ -173,6 +175,29 @@ function renderSourceMetrics(data){
     }
   }else add('Activity coverage','Balance only','No transaction index is connected for this observation');
   sourceMetricsPanel.append(heading,grid);
+  if(metrics.kind==='erc20_transfer_logs'&&data.tokenObservation?.block_window){
+    const window=data.tokenObservation.block_window;
+    const navigation=document.createElement('div');navigation.className='source-block-timeline';
+    const title=document.createElement('h4');title.textContent='Finalized log windows';
+    const note=document.createElement('p');
+    note.textContent=`Viewing blocks ${window.from}–${window.to}. Each request returns at most 64 blocks and replaces this view; the balance is a separate observation. Download the current JSON before changing windows.`;
+    const controls=document.createElement('div');controls.className='source-block-timeline-controls';
+    if(window.from>0){
+      const older=document.createElement('button');older.type='button';older.dataset.tokenWindow='older';
+      older.textContent=`Older blocks ending ${window.from-1}`;
+      older.addEventListener('click',()=>loadTokenActivity(data,realRequest,window.from-1,true));controls.append(older);
+    }
+    if(window.to<data.tokenObservation.finalized_head?.height){
+      const newer=document.createElement('button');newer.type='button';newer.dataset.tokenWindow='newer';
+      const next=Math.min(window.to+64,data.tokenObservation.finalized_head.height);
+      newer.textContent=`Newer blocks ending ${next}`;
+      newer.addEventListener('click',()=>loadTokenActivity(data,realRequest,next===data.tokenObservation.finalized_head.height?null:next,true));controls.append(newer);
+      const latest=document.createElement('button');latest.type='button';latest.dataset.tokenWindow='latest';
+      latest.textContent='Latest finalized blocks';
+      latest.addEventListener('click',()=>loadTokenActivity(data,realRequest,null,true));controls.append(latest);
+    }
+    navigation.append(title,note,controls);sourceMetricsPanel.append(navigation);
+  }
   if(metrics.kind==='utxo_observations'&&metrics.block_activity.blocks.length){
     const panel=document.createElement('div');panel.className='source-peer-ledger';
     const title=document.createElement('h4');title.textContent='Returned transaction blocks';
@@ -446,7 +471,7 @@ function combineTokenActivity(wallet,activity){
     edges:activity.edges,tokenActivity:activity.activity,tokenActivityContract:activity.contract,
     tokenObservation:activity.observation,tokenAnchorComparison:anchors};
 }
-async function loadTokenActivity(wallet,requestId){
+async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=false){
   if(tokenActivityInFlightFor===requestId)return;
   tokenActivityInFlightFor=requestId;
   const list=document.getElementById('transaction-list');
@@ -455,6 +480,7 @@ async function loadTokenActivity(wallet,requestId){
   list.prepend(loading);
   try{
     const activityQuery=new URLSearchParams({asset:wallet.asset,address:wallet.address});
+    if(toBlock!==null)activityQuery.set('to_block',String(toBlock));
     const response=await fetch(`/api/chain/activity?${activityQuery}`,{headers:{Accept:'application/json'}});
     let activityData;
     try{activityData=await response.json();}
@@ -462,6 +488,11 @@ async function loadTokenActivity(wallet,requestId){
     if(requestId!==realRequest)return;
     if(!response.ok)throw new Error(activityData.error||`HTTP ${response.status}`);
     realObservation=combineTokenActivity(wallet,activityData);
+    selectedTokenBlockBucket=null;
+    selectedRealPeerAddress=null;
+    selectedTokenTransactionHash=null;
+    selectedRealEventId=null;
+    liveTransactionDetail.hidden=true;
     renderLiveSourceRecords(realObservation);
     const anchors=realObservation.tokenAnchorComparison;
     const anchorNote=anchors.status==='same_source_anchor'
@@ -471,13 +502,22 @@ async function loadTokenActivity(wallet,requestId){
     draw();
   }catch(error){
     if(requestId!==realRequest)return;
+    if(preservePrevious&&realObservation?.tokenActivity){
+      const note=document.createElement('p');note.className='live-source-record';
+      note.textContent=`Requested log window unavailable: ${error.message}. The previously loaded window remains visible.`;
+      const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
+      retry.textContent='Retry requested window';
+      retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock,true));
+      list.prepend(note,retry);
+      return;
+    }
     realObservation=wallet;
     renderLiveSourceRecords(wallet);
     const note=document.createElement('p');note.className='live-source-record';
     note.textContent=`Bounded Transfer logs unavailable: ${error.message}. The source-reported balance remains available.`;
     const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
     retry.textContent='Retry Transfer logs';
-    retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId));
+    retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock));
     list.prepend(note,retry);
     setDataMode('source-reported',`${wallet.asset} balance remains available from ${wallet.observation?.source_id||'the configured source'}. Bounded Transfer logs are unavailable; retry the separate activity request.`);
     draw();

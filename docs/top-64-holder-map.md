@@ -77,6 +77,16 @@ same-height hash conflict is rejected; differing valid heads remain separate
 and their amounts must not be reconciled as one snapshot. Ethereum address case
 is normalized when matching a queried address to returned log nodes.
 
+The public token view can request an earlier finalized `Transfer`-log window
+with the optional decimal `to_block` parameter on `/api/chain/activity`.
+Each response remains limited to at most 64 blocks and validates the requested
+end against the current source-reported finalized head. The response separately
+records that head and the requested window-end block hash; logs at the end must
+match the window anchor. Older, newer, and latest controls replace the visible
+window rather than merging different source snapshots. A failed page request
+keeps the previously loaded window visible. The balance remains a separate
+lookup and the JSON download contains only the current bounded window.
+
 The source-aware canvas plots at most 36 other points from a bounded response
 and states the visible and returned counts. For USDT and USDC, it chooses points
 by the number of returned logs; selecting a log brings its address into view

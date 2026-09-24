@@ -21,12 +21,14 @@ function log({from = other, to = address, index = 0, number = '0x64', blockHash 
     transactionIndex: '0x2', logIndex: `0x${index.toString(16)}`, removed: false,
   };
 }
-function source({incoming = [], outgoing = [], chainId = '0x1', block = null} = {}) {
+function source({incoming = [], outgoing = [], chainId = '0x1', block = null, historicalBlock = null} = {}) {
   const calls = [];
   const fetcher = async (_url, init) => {
     const request = JSON.parse(init.body); calls.push(request);
     if (request.method === 'eth_chainId') return reply(request.id, chainId);
-    if (request.method === 'eth_getBlockByNumber') return reply(request.id, block || {number: '0x64', hash, timestamp: '0x5'});
+    if (request.method === 'eth_getBlockByNumber') return reply(request.id, request.params[0] === 'finalized'
+      ? block || {number: '0x64', hash, timestamp: '0x5'}
+      : historicalBlock);
     if (request.method === 'eth_getLogs') return reply(request.id, request.id === 3 ? incoming : outgoing);
     throw new Error('unexpected request');
   };
@@ -52,6 +54,7 @@ test('USDC activity is exact bounded Transfer-log evidence with source provenanc
   assert.equal(body.edges.length, 2);
   assert.deepEqual(body.observation.block_window, {from: 37, to: 100, width: 64});
   assert.equal(body.observation.finalized_head.hash, hash);
+  assert.equal(body.observation.window_end_anchor.hash, hash);
   assert.equal(body.observation.retrieved_at, '2026-09-23T12:00:00.000Z');
   assert.equal(calls.length, 4);
   assert.equal(calls[2].params[0].address, contract);
@@ -59,6 +62,36 @@ test('USDC activity is exact bounded Transfer-log evidence with source provenanc
   assert.equal(calls[2].params[0].toBlock, '0x64');
   assert.deepEqual(calls[2].params[0].topics, [topic, null, indexed(address)]);
   assert.deepEqual(calls[3].params[0].topics, [topic, indexed(address)]);
+});
+
+test('older finalized windows use their own block anchor and reject an inconsistent end log', async () => {
+  const historicalHash=`0x${'c'.repeat(64)}`;
+  const historicalBlock={number:'0x24',hash:historicalHash,timestamp:'0x4'};
+  const {fetcher,calls}=source({historicalBlock,incoming:[log({number:'0x24',blockHash:historicalHash})]});
+  const result=await queryEthereumActivity({address,asset:'USDC',toBlock:'36',env,fetcher,now});
+  assert.equal(result.status,200);
+  assert.deepEqual(result.body.observation.block_window,{from:0,to:36,width:37});
+  assert.equal(result.body.observation.finalized_head.height,100);
+  assert.equal(result.body.observation.finalized_head.hash,hash);
+  assert.equal(result.body.observation.window_end_anchor.height,36);
+  assert.equal(result.body.observation.window_end_anchor.hash,historicalHash);
+  assert.equal(calls[2].params[0],'0x24');
+  assert.equal(calls[3].params[0].toBlock,'0x24');
+  const mismatch=source({historicalBlock,incoming:[log({number:'0x24'})]});
+  assert.deepEqual(await queryEthereumActivity({address,asset:'USDC',toBlock:'36',env,fetcher:mismatch.fetcher,now}),
+    {status:502,body:{error:'chain_source_unavailable'}});
+});
+
+test('historical window input is bounded by the finalized head',async()=>{
+  for(const value of ['-1','01','1.2','9007199254740992','']){
+    const response=await onRequest({request:new Request(`https://bloch-graphus.pages.dev/api/chain/activity?asset=USDC&address=${address}&to_block=${encodeURIComponent(value)}`),env:{}});
+    assert.equal(response.status,400);
+    assert.equal((await response.json()).error,'invalid_to_block');
+  }
+  const {fetcher,calls}=source();
+  assert.deepEqual(await queryEthereumActivity({address,asset:'USDC',toBlock:'101',env,fetcher,now}),
+    {status:400,body:{error:'to_block_not_finalized'}});
+  assert.equal(calls.length,2);
 });
 
 test('self transfer appearing in both filters is represented once', async () => {

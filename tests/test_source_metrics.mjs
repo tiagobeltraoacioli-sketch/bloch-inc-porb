@@ -17,6 +17,11 @@ test('token balance and log anchors require the same contract and reject same-he
   const separate=compareTokenAnchors(wallet,activity);
   assert.equal(separate.status,'separate_source_anchors');
   assert.equal(separate.height_difference,2);
+  activity.observation.window_end_anchor={height:80,hash:'0x'+'d'.repeat(64)};
+  const historical=compareTokenAnchors(wallet,activity);
+  assert.equal(historical.logs.height,80);
+  assert.equal(historical.height_difference,-20);
+  delete activity.observation.window_end_anchor;
   activity.observation.finalized_head.height=100;
   assert.throws(()=>compareTokenAnchors(wallet,activity),/Conflicting finalized anchor/);
   activity.contract='0x'+'d'.repeat(40);
