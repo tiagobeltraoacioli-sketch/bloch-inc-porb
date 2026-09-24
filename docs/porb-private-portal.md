@@ -103,4 +103,6 @@ The custom domain now responds successfully over HTTPS at `https://rednblue.spac
 
 The graph update passed 21 model, graph search, source, authorization and time-series checks, plus local WebKit interaction checks for nodes, keyboard connections, exact/partial reference search, transaction search, direction filters, pagination, evidence inspection, empty results, and mobile layout.
 
+Production WebKit verified the master login on the custom domain, address/script and transaction search across saved BTC, ETH, BLCH, USDT and USDC datasets, exact record inspection, mobile layout for each asset, touch selection and logout. The public AML site's primary access action reached the custom-domain login successfully; its mobile layout also passed. Published releases: portal `8780b082.rednblue-space.pages.dev`, public landing `8dbd3e26.aml-blochinc.pages.dev`.
+
 Deploy the public AML landing independently: `python3 scripts/build_aml_landing.py` creates a temporary directory containing only the public landing assets and its own `wrangler.toml`. In that directory, run `wrangler pages deploy public --project-name aml-blochinc --branch main`. Its `/portal` paths redirect to the custom BI-PoRB domain. The private portal continues to deploy from `site/`; its Functions and D1 bindings are not included in the public landing bundle.
