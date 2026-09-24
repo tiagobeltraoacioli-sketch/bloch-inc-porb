@@ -166,6 +166,18 @@ async function bitcoinTx(fetcher, query, now) {
 
 export function bitcoinTransactionFacts(tx, headHeight = null) {
   const coinbase = tx.vin?.some(input => input.is_coinbase === true) ?? false;
+  const validSats = value => Number.isSafeInteger(value) && value >= 0;
+  const inputs = Array.isArray(tx.vin) ? tx.vin : [];
+  const outputs = Array.isArray(tx.vout) ? tx.vout : [];
+  const prevoutsWithValue = inputs.filter(input => validSats(input?.prevout?.value)).length;
+  const inputTotal = !coinbase && inputs.length && prevoutsWithValue === inputs.length ?
+    inputs.reduce((sum, input) => sum + BigInt(input.prevout.value), 0n) : null;
+  const outputTotal = outputs.length && outputs.every(output => validSats(output?.value)) ?
+    outputs.reduce((sum, output) => sum + BigInt(output.value), 0n) : null;
+  const difference = inputTotal !== null && outputTotal !== null && inputTotal >= outputTotal ? inputTotal - outputTotal : null;
+  const feeCheck = coinbase ? 'not_applicable' : inputTotal === null || outputTotal === null ? 'unavailable' :
+    difference === null ? 'inconsistent_values' : !validSats(tx.fee) ? 'reported_fee_unavailable' :
+      difference === BigInt(tx.fee) ? 'matches_source_fee' : 'differs_from_source_fee';
   const weight = Number(tx.weight);
   const fee = Number(tx.fee);
   const virtualSize = Number.isSafeInteger(weight) && weight > 0 ? Math.ceil(weight / 4) : null;
@@ -179,6 +191,8 @@ export function bitcoinTransactionFacts(tx, headHeight = null) {
     signals_rbf: !coinbase && tx.vin?.some(input => Number.isSafeInteger(input.sequence) && input.sequence < 0xfffffffe) === true,
     confirmations,
     head_height:headHeight,
+    flow:{input_total_sat:inputTotal?.toString() ?? null,output_total_sat:outputTotal?.toString() ?? null,
+      derived_fee_sat:difference?.toString() ?? null,prevouts_with_value:prevoutsWithValue,input_count:inputs.length,fee_check:feeCheck},
   };
 }
 

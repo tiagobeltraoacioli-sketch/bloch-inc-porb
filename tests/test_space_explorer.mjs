@@ -108,10 +108,24 @@ test('Ethereum block lookup separates a missing block from an RPC error', async 
 
 test('Bitcoin transaction fee rate uses virtual bytes and replacement needs a sequence signal', () => {
   assert.deepEqual(bitcoinTransactionFacts({weight:561,fee:282,vin:[{sequence:0xfffffffd}],status:{confirmed:true,block_height:98}},100),
-    {coinbase:false,virtual_size_vb:141,fee_rate_sat_vb:'2.00',signals_rbf:true,confirmations:3,head_height:100});
+    {coinbase:false,virtual_size_vb:141,fee_rate_sat_vb:'2.00',signals_rbf:true,confirmations:3,head_height:100,
+      flow:{input_total_sat:null,output_total_sat:null,derived_fee_sat:null,prevouts_with_value:0,input_count:1,fee_check:'unavailable'}});
   assert.deepEqual(bitcoinTransactionFacts({weight:400,fee:0,vin:[{is_coinbase:true}]}),
-    {coinbase:true,virtual_size_vb:100,fee_rate_sat_vb:null,signals_rbf:false,confirmations:0,head_height:null});
+    {coinbase:true,virtual_size_vb:100,fee_rate_sat_vb:null,signals_rbf:false,confirmations:0,head_height:null,
+      flow:{input_total_sat:null,output_total_sat:null,derived_fee_sat:null,prevouts_with_value:0,input_count:1,fee_check:'not_applicable'}});
   assert.equal(bitcoinTransactionFacts({vin:[],status:{confirmed:true,block_height:98}}).confirmations,null);
+});
+
+test('Bitcoin value accounting uses exact satoshis and exposes incomplete or inconsistent sources', () => {
+  const tx={fee:500,vin:[{prevout:{value:5000}},{prevout:{value:7000}}],vout:[{value:10000},{value:1500}]};
+  const flow=bitcoinTransactionFacts(tx).flow;
+  assert.deepEqual(flow,{input_total_sat:'12000',output_total_sat:'11500',derived_fee_sat:'500',prevouts_with_value:2,input_count:2,fee_check:'matches_source_fee'});
+  assert.equal(bitcoinTransactionFacts({...tx,fee:400}).flow.fee_check,'differs_from_source_fee');
+  const partial=bitcoinTransactionFacts({...tx,vin:[tx.vin[0],{}]}).flow;
+  assert.equal(partial.input_total_sat,null);
+  assert.equal(partial.output_total_sat,'11500');
+  assert.equal(partial.fee_check,'unavailable');
+  assert.equal(bitcoinTransactionFacts({...tx,vout:[{value:13000}]}).flow.fee_check,'inconsistent_values');
 });
 
 test('Ethereum receipt decodes only successful allowlisted Transfer logs and preserves exact units', () => {

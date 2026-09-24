@@ -19,6 +19,7 @@ const clear = node => node.replaceChildren();
 const element = (tag, className, text) => {const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
 const compact = value => {const text=String(value??'—');return text.length>27?`${text.slice(0,15)}…${text.slice(-9)}`:text;};
 const count = value => Number.isSafeInteger(value)?new Intl.NumberFormat('en-US').format(value):value==null?'—':String(value);
+const exactInteger = value => {try{return new Intl.NumberFormat('en-US').format(BigInt(value));}catch{return '—';}};
 const hexNumber = value => {try{return count(Number(BigInt(value)));}catch{return '—';}};
 const decimal = (raw, places) => {try{const n=BigInt(raw);const base=10n**BigInt(places);const whole=(n/base).toString();const part=(n%base).toString().padStart(places,'0').replace(/0+$/,'');return `${new Intl.NumberFormat('en-US').format(BigInt(whole))}${part?'.'+part.slice(0,8):''}`;}catch{return '—';}};
 const time = value => {const date=new Date(typeof value==='number'?value*1000:value);return Number.isFinite(date.getTime())?date.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'})+' UTC':'—';};
@@ -80,6 +81,35 @@ function batchedRows(container,entries,render,batchSize=60){
     controls.hidden=shown===entries.length;
   };
   more.addEventListener('click',appendNext);controls.append(more);container.append(controls);appendNext();
+}
+function usageChart(container,title,usedRaw,limitRaw,unit){
+  let used,limit;
+  try{used=BigInt(usedRaw);limit=BigInt(limitRaw);}catch{return;}
+  if(used<0n||limit<=0n||used>limit)return;
+  const percent=Number(used*10000n/limit)/100;
+  const panel=element('section','flow-panel');panel.append(element('h4','subhead',title));
+  const bar=element('div','flow-chart');bar.setAttribute('role','img');bar.setAttribute('aria-label',`${exactInteger(used)} of ${exactInteger(limit)} ${unit} used, ${percent.toFixed(2)} percent`);
+  const fill=element('span','flow-chart-fill');fill.style.width=`${percent}%`;bar.append(fill);panel.append(bar);
+  const legend=element('div','flow-legend');legend.append(element('span','',`${exactInteger(used)} ${unit} used`),element('strong','',`${percent.toFixed(2)}% of ${exactInteger(limit)} ${unit} limit`));panel.append(legend);
+  container.append(panel);
+}
+function bitcoinFlow(container,flow){
+  if(!flow)return;
+  const panel=element('section','flow-panel');panel.append(element('h4','subhead','Bitcoin value accounting'));
+  const totals=element('div','flow-totals');
+  for(const [label,value] of [['Inputs',flow.input_total_sat],['Outputs',flow.output_total_sat],['Computed difference',flow.derived_fee_sat]])totals.append(metric(label,value==null?'Unavailable':`${decimal(value,8)} BTC`,value==null?'':`${exactInteger(value)} sat`));
+  panel.append(totals);
+  if(flow.input_total_sat!=null&&flow.output_total_sat!=null&&flow.derived_fee_sat!=null){
+    const input=BigInt(flow.input_total_sat),output=BigInt(flow.output_total_sat),fee=BigInt(flow.derived_fee_sat);
+    if(input>0n){const outputPercent=Number(output*10000n/input)/100,feePercent=Number(fee*10000n/input)/100;
+      const bar=element('div','flow-chart flow-chart-split');bar.setAttribute('role','img');bar.setAttribute('aria-label',`${exactInteger(output)} sat outputs and ${exactInteger(fee)} sat computed difference from ${exactInteger(input)} sat inputs`);
+      const outputPart=element('span','flow-chart-fill');outputPart.style.width=`${outputPercent}%`;const feePart=element('span','flow-chart-fee');feePart.style.width=`${feePercent}%`;bar.append(outputPart,feePart);panel.append(bar);
+      const legend=element('div','flow-legend flow-key');for(const [label,className] of [['Outputs','flow-swatch-output'],['Computed difference','flow-swatch-fee']]){const item=element('span');const swatch=element('i',className);swatch.setAttribute('aria-hidden','true');item.append(swatch,document.createTextNode(label));legend.append(item);}panel.append(legend);
+    }
+  }
+  const status={matches_source_fee:'Computed difference matches the source-reported fee.',differs_from_source_fee:'Computed difference differs from the source-reported fee.',reported_fee_unavailable:'The source-reported fee is unavailable.',inconsistent_values:'Source-reported outputs exceed available inputs.',not_applicable:'Coinbase inputs do not contain prior outputs; no fee difference is calculated.',unavailable:'A complete input and output value set is unavailable.'}[flow.fee_check]||'Value comparison unavailable.';
+  panel.append(element('p','flow-note',`${count(flow.prevouts_with_value)} of ${count(flow.input_count)} input values available. ${status} Inputs do not establish ownership.`));
+  container.append(panel);
 }
 function openRecord(kind,query,asset) {$('#search-kind').value=kind;$('#search-input').value=query;if(state.network==='ethereum'&&asset)$('#search-asset').value=asset;search(kind,query,asset);}
 
@@ -210,6 +240,7 @@ function renderBlock(data,query) {
     :network==='ethereum'?[['Height',height],['Timestamp',time(Number(BigInt(block.timestamp)))],['Transactions',count(data.total_transactions)],['Finalized checkpoint',count(data.finalized_height)],['Gas used',hexNumber(block.gasUsed)],['Gas limit',hexNumber(block.gasLimit)],['Base fee',block.baseFeePerGas?`${decimal(BigInt(block.baseFeePerGas).toString(),9)} gwei`:'—'],['Parent hash',block.parentHash]]
     :[['Height',height],['Slot',count(block.slot)],['Epoch',count(block.epoch)],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Attestations',count(block.attestation_count)],['Finality',block.finality||'—'],['Proposer index',count(block.proposer_index)],['State root',block.state_root],['Parent',block.parent]];
   fields(left,values);
+  if(network==='ethereum')usageChart(left,'Block gas utilization',block.gasUsed,block.gasLimit,'gas');
   const parent=network==='bitcoin'?block.previousblockhash:network==='ethereum'?block.parentHash:block.parent;
   if(typeof parent==='string'&&/^(?:0x)?[0-9a-f]{64}$/i.test(parent))referenceSection(left,[{label:'Parent block',query:parent,kind:'block'}]);
   const ids=data.transaction_ids;
@@ -230,6 +261,8 @@ function renderTransaction(data,query) {
     :network==='ethereum'?[['Block',tx.blockNumber?hexNumber(tx.blockNumber):'Pending'],['Receipt',receiptLabel],['Execution',ethReceipt?.status==='0x1'?'Successful':ethReceipt?.status==='0x0'?'Reverted':'Unavailable'],['Confirmations',data.position?.confirmations==null?'Unavailable':`${count(data.position.confirmations)} blocks`],['Latest head snapshot',count(data.position?.head_height)],['Finalized height',count(data.position?.finalized_height)],['Finality relation',ethFinality],['From',tx.from],['To',tx.to||'Contract creation'],['Value',`${decimal(BigInt(tx.value||'0x0').toString(),18)} ETH`],['Transaction type',tx.type==null?'—':hexNumber(tx.type)],['Gas limit',hexNumber(tx.gas)],['Gas used',ethReceipt?hexNumber(ethReceipt.gasUsed):'—'],['Effective gas price',ethReceipt?.effectiveGasPrice?`${decimal(BigInt(ethReceipt.effectiveGasPrice).toString(),9)} gwei`:'—'],['Execution gas fee',data.gas_fee_wei==null?'—':`${data.gas_fee_wei} wei`],['Blob gas used',data.blob_gas_used??'—'],['Blob gas price',data.blob_gas_price_wei==null?'—':`${data.blob_gas_price_wei} wei`],['Blob fee',data.blob_fee_status==='not_applicable'?'Not applicable':data.blob_fee_wei==null?'Unavailable':`${data.blob_fee_wei} wei`],['Total transaction fee',data.total_fee_wei==null?'Unavailable':`${decimal(data.total_fee_wei,18)} ETH`],['Exact total fee',data.total_fee_wei==null?'Unavailable':`${data.total_fee_wei} wei`],['Nonce',hexNumber(tx.nonce)]]
     :[['Height',count(tx.height)],['Slot',count(tx.slot)],['Transaction index',count(tx.index)],['Indexed depth',data.position?.indexed_depth_blocks==null?'—':`${count(data.position.indexed_depth_blocks)} blocks`],['Finalized height',count(data.position?.finalized_height)],['Finality relation',data.position?.finality_relation==='unavailable'?'Unavailable':`${data.position.finality_relation==='at_or_below_reported_checkpoint'?'At or below':'Above'} reported checkpoint`],['Comparison scope',data.position?.comparison_scope==='matched_indexer_tip'?'Same indexer tip':data.position?.comparison_scope==='separate_indexer_snapshots'?'Separate indexer snapshots':'Transaction snapshot only'],['Kind',tx.kind],['Fee',`${tx.fee_sat??'—'} sat`],['Stake',`${tx.stake_sat??'—'} sat`],['Size',`${count(tx.size_bytes)} bytes`],['Block',tx.block_id],['Inputs',count(tx.inputs?.length)],['Outputs',count(tx.outputs?.length)]];
   fields(left,values);
+  if(network==='bitcoin')bitcoinFlow(left,data.facts?.flow);
+  if(network==='ethereum'&&ethReceipt)usageChart(left,'Transaction gas utilization',ethReceipt.gasUsed,tx.gas,'gas');
   const related=[];
   const blockRef=network==='bitcoin'?tx.status?.block_hash:network==='ethereum'?tx.blockHash:tx.block_id;
   if(typeof blockRef==='string'&&/^(?:0x)?[0-9a-f]{64}$/i.test(blockRef))related.push({label:'Containing block',query:blockRef,kind:'block'});

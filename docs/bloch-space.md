@@ -57,7 +57,15 @@ Bitcoin fee rates divide source-reported satoshis by rounded-up weight units;
 the sequence flag signals replacement eligibility and does not predict whether
 a transaction will be replaced. Bitcoin confirmation depth compares the
 transaction block height with a separate best-chain head snapshot and can
-change after a reorganization. Ethereum execution gas fees multiply receipt
+change after a reorganization. Bitcoin transaction value accounting sums only
+source-reported, nonnegative, safe-integer satoshi values. It reports exact
+input and output totals, prior-output coverage, and the computed difference
+against the source fee. Coinbase and incomplete inputs have no computed fee.
+The proportional value chart appears only when complete totals exist; it does
+not infer ownership or change outputs.
+Ethereum block and identity-checked transaction views chart gas used against
+the reported gas limit. The percentage is a presentation of integer gas units,
+not a fee estimate. Ethereum execution gas fees multiply receipt
 gas used by effective gas price. Blob fees multiply `blobGasUsed` by
 `blobGasPrice` only when both receipt fields are present. The total fee is
 unavailable when a blob transaction lacks either field. All calculations use
