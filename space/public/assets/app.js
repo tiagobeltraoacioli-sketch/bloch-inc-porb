@@ -61,6 +61,26 @@ function recordIdentity(value){
   const copyLink=element('button','','Copy link');copyLink.type='button';copyLink.setAttribute('aria-live','polite');copyLink.addEventListener('click',()=>copyRecordText(new URL(`${location.pathname}${location.search}`,'https://bloch.space').href,copyLink));
   actions.append(copyId,copyLink);container.append(actions);return container;
 }
+function referenceSection(container,items){
+  if(!items.length)return;
+  container.append(element('h4','subhead','Explore related records'));
+  const list=element('div','record-list');
+  for(const item of items)list.append(row(item.label,compact(item.query),'↗',()=>openRecord(item.kind,item.query,item.asset)));
+  container.append(list);
+}
+function batchedRows(container,entries,render,batchSize=60){
+  const list=element('div','record-list');container.append(list);
+  let shown=0;
+  const controls=element('div','record-pages');
+  const more=element('button','','');more.type='button';
+  const appendNext=()=>{
+    const end=Math.min(shown+batchSize,entries.length);
+    for(;shown<end;shown++)list.append(render(entries[shown],shown));
+    more.textContent=`Show next ${Math.min(batchSize,entries.length-shown)} · ${count(shown)} of ${count(entries.length)} shown`;
+    controls.hidden=shown===entries.length;
+  };
+  more.addEventListener('click',appendNext);controls.append(more);container.append(controls);appendNext();
+}
 function openRecord(kind,query,asset) {$('#search-kind').value=kind;$('#search-input').value=query;if(state.network==='ethereum'&&asset)$('#search-asset').value=asset;search(kind,query,asset);}
 
 function renderHolders(page) {
@@ -190,6 +210,8 @@ function renderBlock(data,query) {
     :network==='ethereum'?[['Height',height],['Timestamp',time(Number(BigInt(block.timestamp)))],['Transactions',count(data.total_transactions)],['Finalized checkpoint',count(data.finalized_height)],['Gas used',hexNumber(block.gasUsed)],['Gas limit',hexNumber(block.gasLimit)],['Base fee',block.baseFeePerGas?`${decimal(BigInt(block.baseFeePerGas).toString(),9)} gwei`:'—'],['Parent hash',block.parentHash]]
     :[['Height',height],['Slot',count(block.slot)],['Epoch',count(block.epoch)],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Attestations',count(block.attestation_count)],['Finality',block.finality||'—'],['Proposer index',count(block.proposer_index)],['State root',block.state_root],['Parent',block.parent]];
   fields(left,values);
+  const parent=network==='bitcoin'?block.previousblockhash:network==='ethereum'?block.parentHash:block.parent;
+  if(typeof parent==='string'&&/^(?:0x)?[0-9a-f]{64}$/i.test(parent))referenceSection(left,[{label:'Parent block',query:parent,kind:'block'}]);
   const ids=data.transaction_ids;
   if(ids?.length){left.append(element('h4','subhead',`Transactions / ${count(data.offset+1)}–${count(data.offset+ids.length)} of ${count(data.total_transactions??block.tx_count??ids.length)}`));const list=element('div','record-list');for(const tx of ids)list.append(row(compact(tx),'Open transaction','↗',()=>openRecord('tx',tx)));left.append(list);}
   if(data.offset>0||data.next_offset!=null){const pages=element('div','record-pages');if(data.offset>0){const previous=element('button','','← Previous 32');previous.type='button';previous.addEventListener('click',()=>search('block',query,null,Math.max(0,data.offset-32)));pages.append(previous);}if(data.next_offset!=null){const next=element('button','','Next 32 →');next.type='button';next.addEventListener('click',()=>search('block',query,null,data.next_offset));pages.append(next);}left.append(pages);}
@@ -208,11 +230,18 @@ function renderTransaction(data,query) {
     :network==='ethereum'?[['Block',tx.blockNumber?hexNumber(tx.blockNumber):'Pending'],['Receipt',receiptLabel],['Execution',ethReceipt?.status==='0x1'?'Successful':ethReceipt?.status==='0x0'?'Reverted':'Unavailable'],['Confirmations',data.position?.confirmations==null?'Unavailable':`${count(data.position.confirmations)} blocks`],['Latest head snapshot',count(data.position?.head_height)],['Finalized height',count(data.position?.finalized_height)],['Finality relation',ethFinality],['From',tx.from],['To',tx.to||'Contract creation'],['Value',`${decimal(BigInt(tx.value||'0x0').toString(),18)} ETH`],['Transaction type',tx.type==null?'—':hexNumber(tx.type)],['Gas limit',hexNumber(tx.gas)],['Gas used',ethReceipt?hexNumber(ethReceipt.gasUsed):'—'],['Effective gas price',ethReceipt?.effectiveGasPrice?`${decimal(BigInt(ethReceipt.effectiveGasPrice).toString(),9)} gwei`:'—'],['Execution gas fee',data.gas_fee_wei==null?'—':`${data.gas_fee_wei} wei`],['Blob gas used',data.blob_gas_used??'—'],['Blob gas price',data.blob_gas_price_wei==null?'—':`${data.blob_gas_price_wei} wei`],['Blob fee',data.blob_fee_status==='not_applicable'?'Not applicable':data.blob_fee_wei==null?'Unavailable':`${data.blob_fee_wei} wei`],['Total transaction fee',data.total_fee_wei==null?'Unavailable':`${decimal(data.total_fee_wei,18)} ETH`],['Exact total fee',data.total_fee_wei==null?'Unavailable':`${data.total_fee_wei} wei`],['Nonce',hexNumber(tx.nonce)]]
     :[['Height',count(tx.height)],['Slot',count(tx.slot)],['Transaction index',count(tx.index)],['Indexed depth',data.position?.indexed_depth_blocks==null?'—':`${count(data.position.indexed_depth_blocks)} blocks`],['Finalized height',count(data.position?.finalized_height)],['Finality relation',data.position?.finality_relation==='unavailable'?'Unavailable':`${data.position.finality_relation==='at_or_below_reported_checkpoint'?'At or below':'Above'} reported checkpoint`],['Comparison scope',data.position?.comparison_scope==='matched_indexer_tip'?'Same indexer tip':data.position?.comparison_scope==='separate_indexer_snapshots'?'Separate indexer snapshots':'Transaction snapshot only'],['Kind',tx.kind],['Fee',`${tx.fee_sat??'—'} sat`],['Stake',`${tx.stake_sat??'—'} sat`],['Size',`${count(tx.size_bytes)} bytes`],['Block',tx.block_id],['Inputs',count(tx.inputs?.length)],['Outputs',count(tx.outputs?.length)]];
   fields(left,values);
+  const related=[];
+  const blockRef=network==='bitcoin'?tx.status?.block_hash:network==='ethereum'?tx.blockHash:tx.block_id;
+  if(typeof blockRef==='string'&&/^(?:0x)?[0-9a-f]{64}$/i.test(blockRef))related.push({label:'Containing block',query:blockRef,kind:'block'});
+  if(network==='ethereum')for(const [label,address] of [['Sender',tx.from],['Recipient',tx.to]]){
+    if(typeof address==='string'&&/^0x[0-9a-f]{40}$/i.test(address))related.push({label,query:address,kind:'address',asset:'ETH'});
+  }
+  referenceSection(left,related);
   const sides=network==='bitcoin'?[['Inputs',tx.vin?.map(input=>({id:input.prevout?.scriptpubkey_address||input.txid||'Coinbase',target:input.prevout?.scriptpubkey_address,amount:input.prevout?.value,detail:`${compact(input.txid)}:${input.vout}`}))],['Outputs',tx.vout?.map((out,index)=>({id:out.scriptpubkey_address||out.scriptpubkey||`Output ${index}`,target:out.scriptpubkey_address,amount:out.value,detail:`vout ${index} · ${data.outspends?.[index]?.spent?'spent':'unspent at source'}`}))]]
     :network==='bloch'?[['Inputs',tx.inputs?.map(input=>({id:input.script_hash,target:input.script_hash,amount:input.value_sat,detail:`${compact(input.txid)}:${input.vout}`}))],['Outputs',tx.outputs?.map(out=>({id:out.script_hash,target:out.script_hash,amount:out.value_sat,detail:`vout ${out.vout}`}))]]:[];
-  for(const [title,entries] of sides){if(!entries?.length)continue;left.append(element('h4','subhead',`${title} / ${entries.length}`));const list=element('div','record-list');for(const entry of entries.slice(0,60))list.append(row(compact(entry.id),entry.detail,entry.amount==null?'—':`${decimal(entry.amount,8)} ${network==='bitcoin'?'BTC':'BLCH'}`,entry.target?()=>openRecord('address',entry.target,network==='bitcoin'?'BTC':'BLCH'):null));left.append(list);}
-  if(network==='ethereum'&&data.token_transfers?.length){left.append(element('h4','subhead',`USDT / USDC Transfer logs / showing ${data.token_transfers.length} of ${count(data.token_transfer_count)}`));const list=element('div','record-list');for(const transfer of data.token_transfers){list.append(row(`${transfer.kind} · ${decimal(transfer.amount_base_units,6)} ${transfer.asset}`,`${compact(transfer.from)} → ${compact(transfer.to)} · log ${hexNumber(transfer.log_index)}`,transfer.asset));}left.append(list);}
-  if(network==='ethereum'&&ethReceipt?.logs?.length){left.append(element('h4','subhead',`Receipt logs / ${ethReceipt.logs.length}`));const list=element('div','record-list');for(const log of ethReceipt.logs.slice(0,32))list.append(row(compact(log.address),`Log ${hexNumber(log.logIndex)} · ${compact(log.topics?.[0])}`,`${log.topics?.length??0} topics`));left.append(list);}
+  for(const [title,entries] of sides){if(!entries?.length)continue;left.append(element('h4','subhead',`${title} / ${entries.length}`));batchedRows(left,entries,entry=>row(compact(entry.id),entry.detail,entry.amount==null?'—':`${decimal(entry.amount,8)} ${network==='bitcoin'?'BTC':'BLCH'}`,entry.target?()=>openRecord('address',entry.target,network==='bitcoin'?'BTC':'BLCH'):null));}
+  if(network==='ethereum'&&data.token_transfers?.length){left.append(element('h4','subhead',`USDT / USDC Transfer logs / showing ${data.token_transfers.length} of ${count(data.token_transfer_count)}`));const list=element('div','record-list');for(const transfer of data.token_transfers){const item=row(`${transfer.kind} · ${decimal(transfer.amount_base_units,6)} ${transfer.asset}`,`Log ${hexNumber(transfer.log_index)}`,transfer.asset);const parties=element('div','transfer-parties');for(const [label,address] of [['From',transfer.from],['To',transfer.to]]){if(typeof address!=='string'||!/^0x[0-9a-f]{40}$/i.test(address))continue;const button=element('button','',`${label} ${compact(address)}`);button.type='button';button.title=address;button.addEventListener('click',()=>openRecord('address',address,transfer.asset));parties.append(button);}item.firstChild.append(parties);list.append(item);}left.append(list);}
+  if(network==='ethereum'&&ethReceipt?.logs?.length){left.append(element('h4','subhead',`Receipt logs / ${ethReceipt.logs.length}`));batchedRows(left,ethReceipt.logs,log=>row(compact(log.address),`Log ${hexNumber(log.logIndex)} · ${compact(log.topics?.[0])}`,`${log.topics?.length??0} topics`,typeof log.address==='string'&&/^0x[0-9a-f]{40}$/i.test(log.address)?()=>openRecord('address',log.address,'ETH'):null),32);}
   const aside=provenance(data,[['Block reference',tx.block_id||tx.blockHash||tx.status?.block_hash||'Unconfirmed'],...(network==='bloch'?[['Indexed tip at receipt',`${count(data.position?.indexed_to_height)} / slot ${count(data.position?.indexed_to_slot)}`],['Indexed chain tip',data.position?.indexed_chain_tip],['Indexer verification',tx.verification]]:[]),['Source scope',network==='bitcoin'?'Mempool and best-chain state can change.':network==='ethereum'?'Receipt identity is checked against the transaction. Confirmation depth and finality height come from separate RPC snapshots.':'Indexed depth is block distance at the transaction snapshot. Finality relation uses the separate health response unless chain tips match.']]);
   return [left,aside];
 }

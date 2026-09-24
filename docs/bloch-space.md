@@ -41,6 +41,10 @@ source supplied a valid identifier for that network.
 Record views provide copy controls for the exact identifier and a canonical
 `bloch.space` link. The link preserves the network, record type, asset for
 addresses, and block transaction page offset.
+Block records link to their source-reported parent when available. Transaction
+records link to the containing block, Ethereum sender and recipient, and
+allowlisted token transfer parties. Long transaction input, output, and receipt
+log lists can be expanded in bounded batches without hiding the total count.
 An address, script hash, or UTXO reference is not a person or a complete wallet.
 Bitcoin confirmation is probabilistic. Ethereum receipt success and consensus
 finality are separate. Bloch slot, height, and finality use the Bloch source
