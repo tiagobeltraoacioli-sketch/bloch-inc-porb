@@ -48,5 +48,9 @@ for network in ("bitcoin", "ethereum", "bloch"):
     if network == "ethereum" and transaction["receipt"]:
         receipt = transaction["receipt"]
         assert transaction["gas_fee_wei"] == str(int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16))
+    if network == "bloch":
+        position = transaction["position"]
+        assert position["indexed_depth_blocks"] == transaction["transaction"]["as_of_height"] - transaction["transaction"]["height"] + 1
+        assert position["comparison_scope"] in ("matched_indexer_tip", "separate_indexer_snapshots", "transaction_snapshot_only")
     assert wallet["wallet"]["balance"]["base_units"].isdigit()
     print(network, "head", block_query, "tx", txid[:14], "balance", wallet["wallet"]["balance"]["base_units"][:18])
