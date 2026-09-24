@@ -4,10 +4,18 @@ The public [System Map](https://bloch-graphus.xyz/map) now connects 44 modules a
 
 ## Module navigation
 
-- Combine asset, module group, implementation stage and text filters. Use the diagram or the responsive directory; both select the same module contracts.
+- Combine asset, layer, module group, implementation stage and text filters. Use the diagram or the responsive directory; both select the same module contracts. Filtered layers occupy only the columns they need.
 - Inspect inputs, outputs, coverage, access and upstream/downstream dependencies. Diagram arrows open their data contract. References between modules are architecture dependencies, not wallet transfers.
 - Open Constellation, Oculum, Analytics, the field catalog, Bloch Space and DaaS. Private links open `rednblue.space/portal/?view=analyses`, `?view=science` or `?view=access`; the portal preserves the requested screen through login.
 - Share module URLs such as `/map?category=aml&module=aml-evidence`. Unsupported filter values are ignored and the registry restricts navigation to known module IDs and product routes.
+
+### Map controls and details
+
+**Fit map** fits every matching module into the available canvas, without horizontal overflow. Zoom buttons show the scale relative to that overview; selecting a module preserves the current zoom. **Focus module** centers the selection at a readable scale. Drag the background to pan, use Ctrl/Command + wheel to zoom, or focus the canvas and use arrow keys, `+`, `-` and `Home`.
+
+The details panel opens beside the diagram on wide screens. On screens up to 1,100 px it opens as a scrollable dialog, so its actions stay reachable. Close it and use **Details** to reopen the same selection. **Clear selection** restores the unhighlighted overview. Phones start in Directory view; Map remains available.
+
+**Expand workspace** opens the controls and diagram in a full-window dialog. **Exit expanded view** or Escape restores the original workspace. Native dialogs manage focus and prevent interaction with content behind them. Source-module **Capture … evidence** actions start the selected capture and return to its workbench, including from the expanded workspace.
 
 ## AML evidence preparation
 
@@ -45,11 +53,15 @@ Full and filtered collections also open directly in Constellation through **Grap
 node --test tests/test_system_map.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
 GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_panel_browser.mjs
+GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_panel_browser.mjs
 ```
 
 Unit checks cover module contracts, fixed product routes, exact values, stripped fields, reproducible digests, cursor/anchor binding, atomic deduplication, page/record capacity, exact filters, subset lineage and comparisons with conflicting anchors. Local WebKit uses explicitly synthetic fixtures and checks module navigation, keyboard/connection selection, historical collection, baseline retention/comparison, filtered exports, ledger controls, partial failures/cancellation, asset-switch races, capacity, Analytics handoff and mobile layout. Live mode uses actual deployed APIs for all five assets, collects two pages and retries a failed public read once. The browser harness prints only aggregate counts, not private data.
 
 Set `GRAPHUS_MAP_ASSETS=USDC` (or a comma-separated subset of the five supported assets) to repeat only a failed live source check. Live failures log the public response status, cursor and a bounded error-body excerpt for diagnosis.
+
+The panel regression harness checks actual pointer clicks and SVG bounds at 1,440, 1,280, 1,024 and 390 px. It covers the formerly cropped last column, all 44 modules, zoom retention, focus, layer/search filters, empty results, expanded-view sizing, Escape, compact dialogs, dependency navigation, deep links and a source-module capture action. Local capture uses a fixture; production mode requests BTC from the real deployed endpoint. Screenshots remain in ignored `.data/system-map-panel/`.
 
 Deploy from `graphus/` with `wrangler pages deploy . --project-name bloch-graphus --branch main` so its existing Functions are included. The portal screen-link change deploys separately from `site/` to `rednblue-space`. Neither deployment contains private handoff files or operator research artifacts.
 

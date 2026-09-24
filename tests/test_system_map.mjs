@@ -17,6 +17,8 @@ test('asset, implementation and AML filters combine without exposing unrelated m
   const nodes=MODULES.filter(n=>matchesModule(n,{asset:'BTC',category:'aml',status:'available'}));assert.ok(nodes.length>=2);assert.ok(nodes.every(n=>n.category==='aml'&&n.status==='available'));
   assert.ok(MODULES.filter(n=>matchesModule(n,{query:'isolation'})).some(n=>n.id==='ml'));
   assert.equal(MODULES.filter(n=>matchesModule(n,{query:'<script>'})).length,0);
+  assert.ok(MODULES.filter(n=>matchesModule(n,{layer:'DELIVER'})).every(n=>n.layer==='DELIVER'));
+  assert.equal(MODULES.filter(n=>matchesModule(n,{layer:'SOURCE',query:'Integration API keys'})).length,0);
 });
 test('evidence preserves exact amounts, strips unapproved fields and exposes reproducible digests without inferred scores',async()=>{
   const raw=sample();raw.owner='PRIVATE NAME';raw.aml_score=99;raw.nodes[0].owner='PRIVATE NAME';raw.edges[0].aml_score=99;

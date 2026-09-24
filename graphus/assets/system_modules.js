@@ -71,8 +71,8 @@ export const CONNECTIONS=[
   pair('events','free','Public chain facts'),pair('manifest','catalog','Source and field definitions'),pair('features','zk','Proposed bounded transform for research'),pair('bridge-node','paths','Research-only bridge evidence; absent from live graph paths'),
 ];
 
-export function matchesModule(node,{asset='all',category='all',status='all',query=''}={}) {
-  return (asset==='all'||node.assets.includes(asset.toUpperCase()))&&(category==='all'||node.category===category)&&(status==='all'||node.status===status)&&`${node.id} ${node.title} ${node.description} ${node.inputs.join(' ')} ${node.outputs.join(' ')} ${node.layer} ${node.category}`.toLowerCase().includes(query.trim().toLowerCase());
+export function matchesModule(node,{asset='all',layer='all',category='all',status='all',query=''}={}) {
+  return (asset==='all'||node.assets.includes(asset.toUpperCase()))&&(layer==='all'||node.layer===layer)&&(category==='all'||node.category===category)&&(status==='all'||node.status===status)&&`${node.id} ${node.title} ${node.description} ${node.inputs.join(' ')} ${node.outputs.join(' ')} ${node.layer} ${node.category}`.toLowerCase().includes(query.trim().toLowerCase());
 }
 export function effectiveAsset(node,asset='all') {return node.assets.includes(asset.toUpperCase())?asset.toUpperCase():node.assets[0];}
 export function actionLinks(node,asset='all') {
