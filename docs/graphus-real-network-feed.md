@@ -47,3 +47,17 @@ GRAPHUS_URL=https://bloch-graphus.xyz \
 For a local static server, `GRAPHUS_ADAPTERS=1` runs the real source adapters through the browser test harness, using the public Ethereum RPC already used by project probes. It supplies actual public source responses, not invented records. The harness checks pagination, graph paths, exact exports, Analytics handoff, wallet discovery, balance refresh/history, mobile layout and source failure behavior. `GRAPHUS_CHECK_PART=balances` limits a follow-up check to Oculum and failure behavior.
 
 Deploy from the `graphus/` working directory with its Functions directory present. See [deployment instructions](graphus-analytics-lab.md). Source APIs: [Esplora](https://github.com/Blockstream/esplora/blob/master/API.md) and [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/). Source-reported finality and balances are not independent Graphus consensus verification.
+
+### Production verification: 2026-09-24
+
+Deployment `c251e8b1` includes the compiled Functions worker and the transient-source retry. The full Node suite passed 130 tests; the subsequent collection/import/API checks passed after the final changes. Production WebKit checks returned these two-page collections:
+
+| Asset | Initial records | Collected unique records | Source snapshots |
+| --- | ---: | ---: | ---: |
+| BLCH | 844 | 909 | 2 |
+| BTC | 55 | 113 | 2 |
+| ETH | 24 | 48 | 2 |
+| USDT | 237 | 658 | 2 |
+| USDC | 256 | 649 | 2 |
+
+These changing samples are not network totals. Directed paths, block filters, provenance exports and the local Analytics handoff passed for the collected records. Oculum discovered and refreshed 32 real address balances each for BTC, ETH, USDT and USDC, retaining session histories. The existing BLCH indexed-balance/Constellation/Analytics handoff also passed in production. Mobile checks had no horizontal overflow or browser errors. An injected single transient error recovered on the next attempt; persistent network and address-source failures left empty source states without synthetic replacement records.

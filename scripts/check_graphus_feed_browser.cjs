@@ -39,7 +39,7 @@ const base=process.env.GRAPHUS_URL||'http://127.0.0.1:8097',adapterMode=process.
       results.push({asset,first:first.dataset.edges.length,collected:next.dataset.edges.length,snapshots:next.dataset.snapshots.length});console.log(JSON.stringify({network:results.at(-1)}));
     }
     if(results.length){await page.locator('#net-analytics').click();await page.waitForURL('**/analytics*');assert.match(await page.locator('#lab-badge').innerText(),/REAL NETWORK COLLECTION/);assert.equal(await page.evaluate(()=>sessionStorage.getItem('graphus.analytics.network.v1')),null);}
-    for(const asset of ['ETH','USDC','BTC']){
+    for(const asset of ['ETH','USDT','USDC','BTC']){
       await page.goto(base+'/oculum.html?asset='+asset);
       await page.waitForFunction(()=>!document.querySelector('#oculum-discover').disabled,{},{timeout:120000});await page.locator('#oculum-auto').uncheck();
       const status=await page.locator('#oculum-source-status').innerText();assert.notEqual(await page.locator('#oculum-source-status').getAttribute('data-state'),'error',status);
@@ -52,6 +52,7 @@ const base=process.env.GRAPHUS_URL||'http://127.0.0.1:8097',adapterMode=process.
       await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Oculum '+asset+' overflow');if(asset==='USDC')await page.screenshot({path:'/private/tmp/graphus-live-oculum-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:1000});
       observed.push({asset,addresses:updated.records.length,history:true});console.log(JSON.stringify({balances:observed.at(-1)}));
     }
+    let retryRequests=0;await page.route('**/api/chain/network?asset=ETH',route=>++retryRequests===1?route.fulfill({status:502,json:{error:'test_transient_failure'}}):route.fallback());await page.goto(base+'/constellation.html?asset=ETH');await waitNetwork();assert.equal(retryRequests,2);assert.ok(await page.locator('#net-references button').count()>0);
     await page.route('**/api/chain/network?*',route=>route.fulfill({status:503,json:{error:'test_failure'}}));await page.goto(base+'/constellation.html?asset=ETH');await page.waitForFunction(()=>document.querySelector('#net-status').dataset.error==='true');assert.equal(await page.locator('#net-references button').count(),0);assert.equal(await page.locator('.constellation-workspace').isVisible(),false);
     await page.route('**/api/chain/wallet?*',route=>route.fulfill({status:503,json:{error:'test_failure'}}));await page.goto(base+'/constellation.html?asset=ETH&address=0x0000000000000000000000000000000000000001');await page.waitForFunction(()=>document.body.dataset.constellationMode==='empty');assert.equal(await page.locator('#accessible-records button').count(),0);
     assert.deepEqual(errors,[]);console.log(JSON.stringify({status:'passed',networks:results,balanceSamples:observed,noSyntheticFallback:true,browserErrors:errors}));
