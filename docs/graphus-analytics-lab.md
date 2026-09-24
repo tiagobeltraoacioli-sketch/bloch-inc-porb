@@ -63,3 +63,9 @@ wrangler pages deploy . --project-name bloch-graphus --branch main
 ```
 
 Confirm the deployment output includes the compiled Functions worker, then verify `/api/chain/holders?asset=BLCH` returns JSON. Deploying the static directory from the repository root misses the nested Functions directory and makes API paths fall back to HTML. Sibling products and private source directories are outside this artifact.
+
+## Verified release: 2026-09-24
+
+Deployment `35f1567f` includes the Functions worker and real-data default. The 22 targeted adapter, API and analytics tests passed. Production WebKit checks loaded all five assets, preserved transaction and block identifiers in exports, passed mobile layout checks, and confirmed that a source error never substitutes synthetic records. The observed sample contained BLCH 844, BTC 61, ETH 24, USDT 304 and USDC 265 connections; these are changing bounded samples, not chain totals. Real BLCH and USDC address form queries and an ETH address deep link also passed, including exact source balance display.
+
+Dedicated-node status was checked separately at 13:07:48 UTC: Bitcoin was still in initial block download (862,869 blocks, 968,395 headers, verification progress 76.7973%); Ethereum was still executing at 26,041,999. A public Ethereum head observation at 13:09:13 UTC was 26,047,519, approximately 5,520 blocks ahead of that earlier local reading. Erigon's 26,042,999 highest-block field was an internal stage target, not the public network tip. Private BTC/USDT/USDC ranking artifacts remained unbuilt. The deployed recent-network adapters use public sources and do not depend on those nodes finishing synchronization.

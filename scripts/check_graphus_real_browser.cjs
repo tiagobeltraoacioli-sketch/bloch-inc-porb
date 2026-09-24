@@ -12,8 +12,8 @@ const base=process.env.GRAPHUS_URL||'http://127.0.0.1:8096';
     });
     for(const asset of ['BLCH','BTC','ETH','USDT','USDC']){
       await page.goto(base+'/analytics.html'+(asset==='BLCH'?'':'?asset='+asset));
-      await page.waitForFunction(()=>document.querySelector('#lab-badge').innerText.includes('REAL CHAIN DATA')||document.querySelector('#lab-message').dataset.error==='true',{},{timeout:65000});
-      assert.match(await page.locator('#lab-badge').innerText(),/REAL CHAIN DATA/,`${asset}: ${await page.locator('#lab-message').innerText()}`);
+      await page.waitForFunction(()=>document.querySelector('#lab-badge').innerText==='REAL CHAIN DATA · SOURCE-REPORTED'||document.querySelector('#lab-message').dataset.error==='true',{},{timeout:65000});
+      assert.equal(await page.locator('#lab-badge').innerText(),'REAL CHAIN DATA · SOURCE-REPORTED',`${asset}: ${await page.locator('#lab-message').innerText()}`);
       assert.equal(await page.locator('#lab-asset').inputValue(),asset);
       const source=await page.locator('#lab-source-detail').innerText();assert.match(source,/Anchor/);assert.doesNotMatch(source,/synthetic|demonstration/i);
       assert.ok(await page.locator('#lab-ledger-body a').count()>0);
