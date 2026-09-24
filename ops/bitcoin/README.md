@@ -27,6 +27,8 @@ Check progress without exposing the RPC cookie:
 `python3 -m service.chain_node_status` from the authorized workstation reads
 this node and the Ethereum node over existing SSH aliases and prints aggregate
 JSON status. It does not initiate a snapshot or publish a ranking.
+Its `private_artifacts.BTC` field reports file presence and permissions only;
+`private_file_present` still requires the separate artifact review below.
 
 ```sh
 sudo -u graphusbtc /opt/graphus-bitcoin/31.1/bin/bitcoin-cli \

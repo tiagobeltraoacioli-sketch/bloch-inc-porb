@@ -3,7 +3,8 @@ import subprocess
 import unittest
 from datetime import datetime, timezone
 
-from service.chain_node_status import BTC_INFO, ETH_DISK, ETH_LOGS, ETH_SYNC, _ethereum, collect
+from service.chain_node_status import (BTC_ARTIFACT, BTC_INFO, ETH_ARTIFACTS, ETH_DISK,
+                                       ETH_LOGS, ETH_SYNC, _ethereum, collect)
 
 
 class ChainNodeStatusTest(unittest.TestCase):
@@ -19,6 +20,10 @@ class ChainNodeStatusTest(unittest.TestCase):
                 "[Downloader] Syncing snapshots eta=1h34m data=83.02%,1.7TB/2.0TB\n"),
             ETH_DISK: subprocess.CompletedProcess(ETH_DISK, 0,
                 "1B-blocks Used Avail Use%\n3000000000000 1800000000000 1100000000000 63%\n", ""),
+            BTC_ARTIFACT: subprocess.CompletedProcess(BTC_ARTIFACT, 0,
+                '{"BTC":{"state":"not_built"}}', ""),
+            ETH_ARTIFACTS: subprocess.CompletedProcess(ETH_ARTIFACTS, 0,
+                '{"USDT":{"state":"not_built"},"USDC":{"state":"not_built"}}', ""),
         }
         result = collect(run=lambda command: replies[command],
                          now=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc))
@@ -30,6 +35,8 @@ class ChainNodeStatusTest(unittest.TestCase):
         self.assertEqual(result["ethereum"]["disk_available_bytes"], 1100000000000)
         self.assertFalse(result["ethereum"]["token_scan_sync_gate_open"])
         self.assertFalse(result["ranking_publication_ready"])
+        self.assertEqual(result["private_artifacts"]["BTC"]["state"], "not_built")
+        self.assertEqual(result["private_artifacts"]["USDT"]["state"], "not_built")
 
     def test_errors_do_not_turn_into_false_readiness(self):
         def failing(command):
@@ -43,6 +50,25 @@ class ChainNodeStatusTest(unittest.TestCase):
         result = collect(run=failing)
         self.assertEqual(result["bitcoin"]["state"], "unavailable")
         self.assertEqual(result["ethereum"]["state"], "unavailable")
+        self.assertEqual(result["private_artifacts"]["BTC"]["state"], "unavailable")
+        self.assertFalse(result["ranking_publication_ready"])
+
+    def test_present_private_files_still_require_review(self):
+        def run(command):
+            if command == BTC_ARTIFACT:
+                return subprocess.CompletedProcess(command, 0, json.dumps({
+                    "BTC": {"state": "private_file_present", "size_bytes": 8142,
+                            "review_required": True}}), "")
+            if command == ETH_ARTIFACTS:
+                return subprocess.CompletedProcess(command, 0, json.dumps({
+                    "USDT": {"state": "private_file_present", "size_bytes": 9301,
+                             "review_required": True},
+                    "USDC": {"state": "invalid_file"}}), "")
+            raise subprocess.TimeoutExpired(command, 20)
+        result = collect(run=run)
+        self.assertEqual(result["private_artifacts"]["BTC"]["size_bytes"], 8142)
+        self.assertTrue(result["private_artifacts"]["USDT"]["review_required"])
+        self.assertEqual(result["private_artifacts"]["USDC"]["state"], "invalid_file")
         self.assertFalse(result["ranking_publication_ready"])
 
     def test_old_downloader_log_does_not_override_synced_rpc(self):

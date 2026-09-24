@@ -61,6 +61,10 @@ files are staged for review only; they are not connected to the public map.
 `service.private_artifact_review` provides a separate file-level check on each
 completed private artifact. Its JSON output contains only the asset, anchor,
 row count, file digest, and review state. It never marks public release ready.
+The read-only `service.chain_node_status` command also reports whether each
+private BTC, USDT, and USDC file is absent, present with mode 0600, invalid, or
+unavailable. Presence still requires the independent artifact review; the
+status command never includes wallet identifiers or marks publication ready.
 The standalone reviewer was installed on both data hosts and its command-line
 entry point was verified under each unprivileged service account. It will
 return a review summary only after an artifact exists; no private ranking or

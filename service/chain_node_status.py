@@ -25,6 +25,26 @@ ETH_LOGS = _remote("bloch-bridge", "sudo", "-n", "docker", "logs", "--tail", "80
                   "graphus-erigon")
 ETH_DISK = _remote("bloch-bridge", "df", "-B1", "--output=size,used,avail,pcent",
                   "/var/lib/graphus/ethereum")
+ARTIFACT_PROBE = """import json, os, stat, sys
+result = {}
+for name, path in zip(sys.argv[1::2], sys.argv[2::2]):
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        result[name] = {"state": "not_built"}
+        continue
+    if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600:
+        result[name] = {"state": "invalid_file"}
+    else:
+        result[name] = {"state": "private_file_present", "size_bytes": info.st_size,
+                        "review_required": True}
+print(json.dumps(result))"""
+BTC_ARTIFACT = _remote("bloch-dex", "sudo", "-n", "-u", "graphusbtc", "python3", "-B",
+                       "-c", ARTIFACT_PROBE, "BTC",
+                       "/var/lib/graphus-bitcoin/rankings/bitcoin-top64-scripts.json")
+ETH_ARTIFACTS = _remote("bloch-bridge", "sudo", "-n", "-u", "graphusidx", "python3", "-B",
+                        "-c", ARTIFACT_PROBE, "USDT", "/var/lib/graphus-token-index/USDT-top64.json",
+                        "USDC", "/var/lib/graphus-token-index/USDC-top64.json")
 def _run(command):
     return subprocess.run(command, capture_output=True, text=True, timeout=20, check=True)
 
@@ -86,6 +106,21 @@ def _ethereum(raw, logs, disk):
     return status
 
 
+def _artifacts(raw, expected):
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or set(payload) != set(expected):
+        raise ValueError("invalid private artifact status")
+    for value in payload.values():
+        if not isinstance(value, dict) or value.get("state") not in (
+                "not_built", "invalid_file", "private_file_present"):
+            raise ValueError("invalid private artifact state")
+        if value["state"] == "private_file_present" and (
+                type(value.get("size_bytes")) is not int or value["size_bytes"] < 0
+                or value.get("review_required") is not True):
+            raise ValueError("invalid private artifact file")
+    return payload
+
+
 def collect(run=_run, now=None):
     """Keep node errors separate; no private RPC endpoint or identifier is emitted."""
     observed = now or datetime.now(timezone.utc)
@@ -103,6 +138,12 @@ def collect(run=_run, now=None):
         output["ethereum"] = _ethereum(sync, log_result.stdout + log_result.stderr, disk)
     except (subprocess.SubprocessError, OSError, ValueError, KeyError, TypeError):
         output["ethereum"] = {"state": "unavailable", "token_scan_sync_gate_open": False}
+    output["private_artifacts"] = {}
+    for command, names in ((BTC_ARTIFACT, ("BTC",)), (ETH_ARTIFACTS, ("USDT", "USDC"))):
+        try:
+            output["private_artifacts"].update(_artifacts(run(command).stdout, names))
+        except (subprocess.SubprocessError, OSError, ValueError, KeyError, TypeError):
+            output["private_artifacts"].update({name: {"state": "unavailable"} for name in names})
     return output
 
 
