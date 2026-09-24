@@ -118,3 +118,17 @@ Graphus release `0d02b8d5` publishes commit `677431b`. The reported clipping was
 All 23 contract/evidence/collection tests passed locally. Local and production WebKit panel checks passed at 1,440, 1,280, 1,024 and 390 px: all 44 modules fit, no horizontal canvas overflow, actual clicks reached the last column, selection preserved zoom, focus enlarged the selected module, and filters, dependencies, dialogs, Escape and expanded view worked. Desktop and phone screenshots were inspected for toolbar contrast and readable details. No browser page errors were reported.
 
 The production source-module action closed both nested dialogs, restored the workspace and captured 58 real BTC records from one bounded page at `2026-09-24T22:43:56.413Z`. This check does not measure the other source adapters or continuous availability.
+
+### Captured observations in the map — 2026-09-24
+
+Graphus release `48909eae` publishes commit `219e2fe`. All 25 unit tests passed locally. The observation browser harness passed for all five assets with explicit fixtures; local regression checks also passed for the four map viewport widths and the historical-collection/baseline/filter workflows. Failure, cancellation, asset-switch and unavailable-storage scenarios retained or cleared evidence as specified.
+
+Production WebKit verified the deployed observation panel with these real bounded samples:
+
+| Asset | Returned records | References, including transaction nodes | Inspector handoff verified |
+| --- | ---: | ---: | --- |
+| BTC | 57 | 76 | Constellation |
+| ETH | 24 | 42 | Analytics |
+| BLCH | 844 | 49 | Constellation |
+
+All three checks verified source metadata, exact full-packet exports despite ledger filters, asset isolation, private-module boundaries and zero additional source queries during inspector navigation or handoff. Constellation exports retained the original dataset digests. The BLCH check also verified the phone dialog and export; its production screenshot was inspected. No browser page errors were reported. These samples are observations at different retrieval times, not complete network totals or continuous source-health measurements.
