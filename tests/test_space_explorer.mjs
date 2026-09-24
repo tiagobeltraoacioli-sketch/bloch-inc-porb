@@ -37,6 +37,21 @@ test('Bitcoin block response bounds transaction IDs and preserves source status'
   assert.equal(next.body.next_offset,null);
 });
 
+test('Bitcoin overview exposes source histogram and bounded recent mempool entries', async () => {
+  const fetcher=async input => {
+    const path=new URL(input).pathname;
+    if(path.endsWith('/blocks'))return answer([{id:hash,height:100,tx_count:3}]);
+    if(path.endsWith('/mempool'))return answer({count:2,vsize:150000,fee_histogram:[[8,50000],[2,100000]]});
+    if(path.endsWith('/fee-estimates'))return answer({'3':2.5});
+    if(path.endsWith('/mempool/recent'))return answer([{txid:block,fee:200,vsize:100},{txid:'bad',fee:1,vsize:1}]);
+    throw new Error(`Unexpected request ${path}`);
+  };
+  const response=await handleExplore(url('overview','network=bitcoin'),{fetcher});
+  assert.equal(response.status,200);
+  assert.deepEqual(response.body.mempool.fee_histogram,[[8,50000],[2,100000]]);
+  assert.deepEqual(response.body.recent_mempool.map(tx=>tx.txid),[block]);
+});
+
 test('Ethereum transaction preserves receipt status and a separate finalized checkpoint', async () => {
   const methods=[];
   const fetcher=async (_input,init) => {

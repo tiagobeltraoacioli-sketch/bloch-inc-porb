@@ -50,12 +50,42 @@ function renderHolders(page) {
   panel.append(grid,element('p','holder-map-note','Exact indexed eUTXO balances. Size and glow use a visual scale; script references do not identify wallet owners.'));
 }
 
+function renderBitcoinMempool(mempool,recent) {
+  const panel=$('#btc-mempool');clear(panel);panel.hidden=true;
+  const raw=mempool?.fee_histogram;
+  if(!Array.isArray(raw)||!raw.length||raw.length>512)return;
+  const bins=raw.filter(pair=>Array.isArray(pair)&&pair.length===2&&Number.isFinite(pair[0])&&pair[0]>=0&&Number.isSafeInteger(pair[1])&&pair[1]>0);
+  if(bins.length!==raw.length||bins.some((pair,index)=>index&&pair[0]>bins[index-1][0]))return;
+  const total=bins.reduce((sum,pair)=>sum+pair[1],0);
+  if(!Number.isSafeInteger(total)||total<=0)return;
+  panel.hidden=false;
+  const header=element('div','mempool-head');header.append(element('strong','',`MEMPOOL FEE DEPTH / ${count(bins.length)} SOURCE BINS`),element('span','',`${(total/1e6).toFixed(2)}M vB in histogram`));panel.append(header);
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 720 220');svg.setAttribute('role','img');svg.setAttribute('aria-label','Cumulative mempool virtual bytes ordered from higher to lower fee-rate bins.');
+  const ns='http://www.w3.org/2000/svg';const svgEl=(tag,attrs,text)=>{const node=document.createElementNS(ns,tag);for(const [key,value] of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=String(text);return node;};
+  const left=32,right=690,top=22,bottom=182;
+  const logMin=Math.log1p(bins.at(-1)[0]),logRange=Math.max(.001,Math.log1p(bins[0][0])-logMin);
+  const y=rate=>bottom-(Math.log1p(rate)-logMin)/logRange*(bottom-top);
+  let cumulative=0,path=`M ${left} ${y(bins[0][0]).toFixed(2)}`;
+  for(let index=0;index<bins.length;index++){cumulative+=bins[index][1];path+=` H ${(left+(right-left)*cumulative/total).toFixed(2)}`;if(index+1<bins.length)path+=` V ${y(bins[index+1][0]).toFixed(2)}`;}
+  svg.append(svgEl('line',{x1:left,y1:bottom,x2:right,y2:bottom,stroke:'#6b8067','stroke-width':1}));
+  for(const budget of [1e6,3e6,6e6]){if(budget>=total)continue;const x=left+(right-left)*budget/total;svg.append(svgEl('line',{x1:x,y1:top,x2:x,y2:bottom,stroke:'#779268','stroke-dasharray':'3 5',opacity:.6}));svg.append(svgEl('text',{x:x+4,y:top+11,fill:'#b4c7a9','font-size':10,'font-family':'monospace'},`${budget/1e6}M`));}
+  svg.append(svgEl('path',{d:`${path} L ${right} ${bottom} L ${left} ${bottom} Z`,fill:'#baff281b'}),svgEl('path',{d:path,fill:'none',stroke:'#baff28','stroke-width':2,'stroke-linejoin':'round'}));
+  svg.append(svgEl('text',{x:left,y:209,fill:'#95a791','font-size':10,'font-family':'monospace'},'0 vB'),svgEl('text',{x:right,y:209,fill:'#95a791','font-size':10,'font-family':'monospace','text-anchor':'end'},`${(total/1e6).toFixed(2)}M vB`));
+  panel.append(svg);
+  const thresholds=element('div','mempool-thresholds');
+  for(const budget of [1e6,3e6,6e6]){if(budget>total)continue;let covered=0;const pair=bins.find(item=>(covered+=item[1])>=budget);if(pair)thresholds.append(metric(`Bin floor at ${budget/1e6}M vB`,`${pair[0].toFixed(2)} sat/vB`));}
+  if(thresholds.childElementCount)panel.append(thresholds);
+  panel.append(element('p','mempool-note','Cumulative source histogram from higher to lower fee bins. Bin floors are observed backlog positions, not confirmation forecasts or fee recommendations.'));
+  if(recent?.length){panel.append(element('h4','subhead','Recent mempool entries / source observed'));const list=element('div','record-list mempool-recent');for(const tx of recent)list.append(row(compact(tx.txid),`${count(tx.vsize)} vB · ${count(tx.fee)} sat fee`,`${(tx.fee/tx.vsize).toFixed(2)} sat/vB`,()=>openRecord('tx',tx.txid)));panel.append(list);}
+}
+
 function renderOverview(data) {
   state.overview=data;
   const network=state.network;
   $('#network-title').textContent=titles[network];
   const metrics=$('#metrics'),signals=$('#signal'),latest=$('#latest-list');clear(metrics);clear(signals);clear(latest);
   renderHolders(network==='bloch'?data.holders:null);
+  if(network==='bitcoin')renderBitcoinMempool(data.mempool,data.recent_mempool);else{clear($('#btc-mempool'));$('#btc-mempool').hidden=true;}
   $('#network-status').textContent='Source live';$('#network-status').dataset.state='ok';
   $('#source-line').textContent=`${data.source} · retrieved ${time(data.retrieved_at)} · ${data.note}`;
   if(network==='bitcoin'){
@@ -195,6 +225,7 @@ async function switchNetwork(network,updateUrl=true) {
   $('#network-status').textContent='Connecting';$('#network-status').dataset.state='pending';
   clear($('#metrics'));clear($('#signal'));clear($('#latest-list'));$('#source-line').textContent='Querying the selected public source…';
   clear($('#holder-map'));$('#holder-map').hidden=true;
+  clear($('#btc-mempool'));$('#btc-mempool').hidden=true;
   $('#result-section').hidden=true;message('');
   if(updateUrl)history.replaceState(null,'',`/?network=${network}`);
   try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}

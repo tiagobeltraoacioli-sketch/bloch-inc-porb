@@ -9,7 +9,7 @@ adapters are imported directly for public address and script lookups.
 
 | Network | Overview | Block and transaction | Public reference |
 | --- | --- | --- | --- |
-| Bitcoin | Blockstream Esplora best-chain blocks, mempool, fee estimates | Esplora block, transaction, outspend facts, source-head confirmation depth, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
+| Bitcoin | Blockstream Esplora best-chain blocks, mempool fee-depth histogram, bounded recent mempool entries and fee estimates | Esplora block, transaction, outspend facts, source-head confirmation depth, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
 | Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price | JSON-RPC block and identity-checked receipt; confirmation depth, execution gas fee, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
 | Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts with indexed depth and finalized-height comparison | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
 
@@ -48,6 +48,12 @@ transfers come only from successful receipt logs emitted by fixed Ethereum
 mainnet USDT and USDC contracts, with exact base-unit amounts and at most 64
 events shown per transaction. Other contract calls and token approvals are
 not represented as transfers.
+The Bitcoin mempool chart draws all valid source histogram bins in descending
+fee-rate order, capped at 512 bins. The threshold cards report the fee-bin
+floor at cumulative 1M, 3M and 6M virtual bytes when the source backlog is
+large enough. These are backlog observations, not confirmation predictions or
+fee recommendations. The recent list is the source's last ten observed
+mempool entries, not a complete network-wide transaction stream.
 Ethereum receipt state distinguishes pending, missing, unavailable and a block
 identity mismatch. Execution fields, token events, confirmation depth and the
 relation to the finalized height are shown only after the receipt transaction

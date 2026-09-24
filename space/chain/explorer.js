@@ -80,14 +80,18 @@ function source(network, name, retrievedAt, note) {
 async function bitcoinOverview(fetcher, now) {
   const blocks = await json(fetcher, `${BTC}/blocks`);
   if (!Array.isArray(blocks) || !blocks.length || !isHex64(blocks[0]?.id)) throw new Error('invalid_source_response');
-  const [mempool, fees] = await Promise.allSettled([
+  const [mempool, fees, recentMempool] = await Promise.allSettled([
     json(fetcher, `${BTC}/mempool`), json(fetcher, `${BTC}/fee-estimates`),
+    json(fetcher, `${BTC}/mempool/recent`),
   ]);
   return {
-    ...source('bitcoin', 'Blockstream Esplora', now(), 'Best-chain and mempool values are source reported; confirmation is probabilistic.'),
+    ...source('bitcoin', 'Blockstream Esplora', now(), 'Best-chain, mempool histogram and recent mempool entries are separate source snapshots; confirmation is probabilistic.'),
     head: blocks[0], recent_blocks: blocks.slice(0, 10),
     mempool: mempool.status === 'fulfilled' ? mempool.value : null,
     fee_estimates_sat_vbyte: fees.status === 'fulfilled' ? fees.value : null,
+    recent_mempool: recentMempool.status === 'fulfilled' && Array.isArray(recentMempool.value) ?
+      recentMempool.value.filter(tx => isHex64(tx?.txid) && Number.isSafeInteger(tx.fee) && tx.fee >= 0 &&
+        Number.isSafeInteger(tx.vsize) && tx.vsize > 0).slice(0,10) : [],
   };
 }
 
