@@ -1,4 +1,16 @@
 const $ = selector => document.querySelector(selector);
+const themeStorageKey='bloch-space-theme';
+try{if(localStorage.getItem(themeStorageKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
+function setTheme(theme,persist=false){
+  document.documentElement.dataset.theme=theme;
+  const next=theme==='light'?'dark':'light';
+  const toggle=$('#theme-toggle');toggle.setAttribute('aria-label',`Switch to ${next} theme`);toggle.title=`Switch to ${next} theme`;
+  toggle.querySelector('.theme-toggle-label').textContent=next==='light'?'Light':'Dark';
+  $('meta[name="theme-color"]').content=theme==='light'?'#f8faf4':'#050706';
+  if(persist)try{localStorage.setItem(themeStorageKey,theme);}catch{}
+}
+setTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
+$('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light',true));
 const state = {network:'bitcoin', overview:null, result:null, request:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
 const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Choose ETH, USDT or USDC for addresses.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};

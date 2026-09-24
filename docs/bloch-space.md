@@ -4,6 +4,10 @@
 and Bloch explorer. It uses the Bloch Inc identity and keeps every result tied
 to its network, source, retrieval time, and coverage boundary. Graphus chain
 adapters are imported directly for public address and script lookups.
+The interface currently opens in a light palette for visual comparison: white
+surfaces, dark text, lime accents, and the original Bloch Inc logo on a black
+header plate. A header button restores the dark palette and remembers the
+choice in the browser.
 
 ## Live read surfaces
 

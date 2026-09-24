@@ -1,0 +1,67 @@
+.theme-toggle{display:flex;align-items:center;gap:8px;flex:none;padding:9px 12px;border:1px solid #52694b;background:#101a10;color:#baff28;font:700 .64rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-transform:uppercase;letter-spacing:.06em}
+.theme-toggle:hover{border-color:#baff28}.theme-toggle span:first-child{font-size:1rem;line-height:1}
+@media(max-width:600px){.top-links{display:none}.theme-toggle{margin-left:auto;padding:9px}.theme-toggle-label{display:none}}
+
+html[data-theme="light"]{color-scheme:light;--bg:#f8faf4;--panel:#ffffff;--panel2:#f3f7ef;--line:#cbd6c7;--white:#111911;--muted:#42513e;--faint:#566653}
+html[data-theme="light"] :focus-visible{outline-color:#3b6900}
+html[data-theme="light"] .topbar{background:#fffffff2;border-bottom-color:#ccd7c9}
+html[data-theme="light"] .brand{padding:9px 13px;margin-left:-13px;background:#050706}
+html[data-theme="light"] .brand-word{color:#baff28}
+html[data-theme="light"] .brand-rule{background:#708169}
+html[data-theme="light"] .topbar-tag{color:#52614e}
+html[data-theme="light"] .topbar-tag span,html[data-theme="light"] .top-links a:hover{color:#447300}
+html[data-theme="light"] .theme-toggle{border-color:#a3b59a;background:#f1f7e9;color:#1f3813}
+html[data-theme="light"] .theme-toggle:hover{border-color:#406900;background:#e6f6cb}
+html[data-theme="light"] .hero{background:radial-gradient(circle at 73% 52%,#baff2840,transparent 34%),linear-gradient(#cee0c73b 1px,transparent 1px),linear-gradient(90deg,#cee0c73b 1px,transparent 1px),#f8faf4}
+html[data-theme="light"] .hero-lede,html[data-theme="light"] .section-head>p{color:#344431}
+html[data-theme="light"] .eyebrow,html[data-theme="light"] .hero h1 em,html[data-theme="light"] .section-head h2 span{color:#537d00}
+html[data-theme="light"] .hero-line span{border-color:#90a48a;background:#fff;color:#263622}
+html[data-theme="light"] .orbit{border-color:#63834e80}
+html[data-theme="light"] .orbit-two{border-color:#4f7e2580}
+html[data-theme="light"] .orbit-core{background:radial-gradient(circle at 35% 25%,#d8ff83,#a4e331 62%,#6fad10);border-color:#587e23;box-shadow:0 0 55px #baff2866,0 0 130px #baff2833;color:#102007}
+html[data-theme="light"] .orbit-core span,html[data-theme="light"] .orbit-label{color:#305900}
+html[data-theme="light"] .network-tabs button{background:#fff;border-color:#ccd8c6;color:#172414}
+html[data-theme="light"] .network-tabs button[aria-selected=true]{background:#e9f7d6;color:#101a0d}
+html[data-theme="light"] .network-tabs button[aria-selected=true]::after{background:#76b800}
+html[data-theme="light"] .tab-symbol{border-color:#75926b;color:#426900}
+html[data-theme="light"] .network-tabs small{color:#52614f}
+html[data-theme="light"] .search{background:#fff}
+html[data-theme="light"] .search-label,html[data-theme="light"] .search-icon{color:#2c491e}
+html[data-theme="light"] .search-line{border-color:#8fa18a;background:#fff}
+html[data-theme="light"] .search input{color:#101810}
+html[data-theme="light"] .search input::placeholder{color:#66765f}
+html[data-theme="light"] .search select{border-left-color:#c4d2be;background:#f4f8f0;color:#142111}
+html[data-theme="light"] .search button{background:#baff28;color:#102009}
+html[data-theme="light"] .search button:hover{background:#a6e711}
+html[data-theme="light"] .message{border-color:#b99b62;background:#fff5df;color:#5a3511}
+html[data-theme="light"] .network-panel,html[data-theme="light"] .signal-panel,html[data-theme="light"] .result-card{background:#fff}
+html[data-theme="light"] .status-pill{border-color:#7e9f68;color:#315600}
+html[data-theme="light"] .status-pill[data-state=error]{border-color:#b58c52;color:#674216}
+html[data-theme="light"] .metric{border-color:#d5e0d0;background:#f3f8ee}
+html[data-theme="light"] .metric span,html[data-theme="light"] .signal-item span,html[data-theme="light"] .field dt,html[data-theme="light"] .provenance span{color:#52634f}
+html[data-theme="light"] .metric strong,html[data-theme="light"] .signal-item strong{color:#12200f}
+html[data-theme="light"] .metric small,html[data-theme="light"] .source-line{color:#4c5e48}
+html[data-theme="light"] .result-section{background:#f2f6ee}
+html[data-theme="light"] .text-button,html[data-theme="light"] .record-row button,html[data-theme="light"] .field a,html[data-theme="light"] .row-link{color:#315900}
+html[data-theme="light"] .record-id{border-color:#b7d596;background:#eff9dd;color:#254600}
+html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}
+html[data-theme="light"] .record-row{border-color:#d3dfce;background:#f7faf4}
+html[data-theme="light"] .record-row small,html[data-theme="light"] .record-row>span{color:#4d5c4a}
+html[data-theme="light"] .record-pages button{border-color:#93ad87;background:#f0f8e9;color:#315900}
+html[data-theme="light"] .record-pages button:hover{border-color:#426c10}
+html[data-theme="light"] .graph-panel{border-color:#a4ba9a;background:radial-gradient(circle at 50% 50%,#e7f6d3,#f8faf5 68%)}
+html[data-theme="light"] .graph-panel svg text{fill:#2d4228}
+html[data-theme="light"] .graph-caption{color:#4c6047}
+html[data-theme="light"] .holder-map,html[data-theme="light"] .mempool-panel{border-color:#a4bb98;background:radial-gradient(circle at 50% 30%,#effbdc,#f7faf4 70%)}
+html[data-theme="light"] .holder-map-head,html[data-theme="light"] .mempool-head{color:#315900}
+html[data-theme="light"] .holder-map-head span,html[data-theme="light"] .mempool-head span{color:#52634d}
+html[data-theme="light"] .holder-map-cell{border-color:#d5e3cd;background:#fff}
+html[data-theme="light"] .holder-empty-dot{border-color:#85977d}
+html[data-theme="light"] .holder-map-note,html[data-theme="light"] .mempool-note,html[data-theme="light"] .mempool-range{color:#4f6249}
+html[data-theme="light"] .mempool-panel svg text{fill:#41543c}
+html[data-theme="light"] .graphus-band{border-top-color:#aac999;background:radial-gradient(circle at 78% 40%,#baff2866,transparent 32%),#eaf5df}
+html[data-theme="light"] .graphus-band p:not(.eyebrow){color:#344630}
+html[data-theme="light"] .graphus-links a{border-color:#a7bf9a;background:#fff;color:#12200f}
+html[data-theme="light"] .graphus-links a:hover{border-color:#4e7e15;color:#315900}
+html[data-theme="light"] .graphus-links span,html[data-theme="light"] footer a{color:#315900}
+html[data-theme="light"] footer{background:#fff;color:#4b5c47}
