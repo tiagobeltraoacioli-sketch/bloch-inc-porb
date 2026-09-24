@@ -10,7 +10,7 @@ The [Graphus preview](https://bloch-graphus.xyz/) presents the initial [three-ne
 
 ## Current status
 
-The [System Map](https://bloch-graphus.xyz/map) connects 44 modules, including ten AML workspace components, with implementation/access status, input/output contracts, clickable dependencies and product links. Its evidence workbench captures real source pages, diagnoses missing fields, preserves exact values, exports a dataset digest and opens the same packet in Analytics. See the [module and evidence workbench guide](docs/graphus-system-map.md).
+The [System Map](https://bloch-graphus.xyz/map) connects 44 modules, including ten AML workspace components, with implementation/access status, input/output contracts, clickable dependencies and product links. Its evidence workbench collects up to eight real source pages, retains provenance, filters exact values and compares a pinned baseline with the current sample. Full collections and filtered subsets include dataset digests and open directly in Analytics. See the [module and evidence workbench guide](docs/graphus-system-map.md).
 
 The [private BI-PoRB portal](https://rednblue.space/portal/) unifies real Graphus and Bloch Space observations for Bitcoin, Ethereum and Bloch. It includes invitation-only email/password access, organization roles, scoped API keys, saved datasets, Isolation Forest Red scores, observed-record completeness Blue scores, clustering and historical time-series evaluation. Its interactive graphs support reference and transaction search, clickable connections and exact record inspection. See the [portal methods, API and deployment guide](docs/porb-private-portal.md). These are descriptive observation scores without judgments or identity labels.
 

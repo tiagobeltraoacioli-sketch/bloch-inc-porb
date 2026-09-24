@@ -1,13 +1,13 @@
 import {ASSETS,LAYERS,STATUS,CATEGORIES,MODULES,CONNECTIONS,matchesModule,effectiveAsset,actionLinks} from './system_modules.js';
-import {fetchEvidence} from './system_evidence.js';
+import {createEvidenceWorkbench} from './system_workbench.js';
 const $=id=>document.getElementById(id),byId=new Map(MODULES.map(n=>[n.id,n]));
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const button=(text,action)=>{const b=el('button',text);b.type='button';b.onclick=action;return b;};
 const link=(text,href)=>{const a=el('a',text);a.href=href;if(href.startsWith('https://')||href.startsWith('/api/')){a.target='_blank';a.rel='noopener noreferrer';}return a;};
 const svg=(tag,attrs={})=>{const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;};
-const short=value=>value.length>26?value.slice(0,12)+'…'+value.slice(-10):value;
 const state={asset:'all',category:'all',status:'all',query:'',selected:null,directory:matchMedia('(max-width:700px)').matches,box:[0,0,1530,930]};
-let dimensions=[1530,930],drag=null,packet=null,recordPage=0,controller=null,requestId=0;
+let dimensions=[1530,930],drag=null;
+const {setAsset:setCaptureAsset}=createEvidenceWorkbench();
 $('category-filter').replaceChildren(...Object.entries(CATEGORIES).map(([value,text])=>new Option(text,value)));
 function readLocation(){
   const p=new URLSearchParams(location.search);
@@ -88,44 +88,6 @@ $('graphus-map').onpointermove=event=>{if(!drag)return;const rect=event.currentT
 $('graphus-map').onpointerup=$('graphus-map').onpointercancel=()=>drag=null;
 addEventListener('popstate',()=>{readLocation();render();});
 
-function clearCapture(message='Capture cleared. No source data is stored by this workbench.'){
-  requestId++;controller?.abort();controller=null;packet=null;recordPage=0;$('capture-result').hidden=true;$('capture-cancel').hidden=true;$('capture-button').disabled=false;$('capture-status').textContent=message;
-  for(const id of ['capture-ledger','capture-source','capture-metrics','capture-blocks','capture-types','capture-provenance'])$(id).replaceChildren();
-  $('capture-search').value='';
-}
-function setCaptureAsset(asset){if($('capture-asset').value!==asset){clearCapture('Asset changed. Capture a new source page.');$('capture-asset').value=asset;}$('reference-asset').value=asset;}
-$('capture-asset').onchange=()=>{clearCapture('Asset changed. Capture a new source page.');$('reference-asset').value=$('capture-asset').value;};
-$('capture-clear').onclick=()=>clearCapture();$('capture-cancel').onclick=()=>clearCapture('Capture canceled.');
-$('capture-form').onsubmit=async event=>{
-  event.preventDefault();clearCapture();const id=++requestId,asset=$('capture-asset').value;controller=new AbortController();const active=controller;
-  const timeout=setTimeout(()=>active.abort(),65000);$('capture-button').disabled=true;$('capture-cancel').hidden=false;$('capture-status').textContent=`Reading real ${asset} source records…`;
-  try{const result=await fetchEvidence(asset,{signal:active.signal});if(id!==requestId)return;packet=result;renderCapture();$('capture-status').textContent=`Captured ${result.diagnostics.records} source records for ${asset}. Source retrieval: ${result.dataset.retrieved_at}.`;}
-  catch(error){if(id===requestId)$('capture-status').textContent=active.signal.aborted?'Source request timed out. Retry the capture.':error.message;}
-  finally{clearTimeout(timeout);if(id===requestId){controller=null;$('capture-button').disabled=false;$('capture-cancel').hidden=true;}}
-};
-function renderCapture(){
-  const{dataset:d,diagnostics:q}=packet;$('capture-result').hidden=false;
-  $('capture-metrics').replaceChildren(...[['References',q.references],['Records',q.records],['Transactions',q.transactions],['Returned blocks',q.blocks],['Missing timestamps',q.records_without_timestamp]].map(([name,value])=>{const box=el('div');box.append(el('span',name),el('strong',value.toLocaleString()));return box;}));
-  $('capture-source').replaceChildren(el('strong',d.source),el('p',`${d.asset} / ${d.network} · Source block ${d.anchor.height} · ${d.anchor.hash}`),el('p',d.coverage),el('p',`Finality: ${d.anchor.finality||'not supplied'}. Source-reported; not independently verified.`));
-  const blocks=new Map();for(const edge of d.edges)blocks.set(String(edge.block_number),(blocks.get(String(edge.block_number))||0)+1);
-  bars('capture-blocks',[...blocks].sort((a,b)=>Number(a[0])-Number(b[0])).slice(-32));bars('capture-types',Object.entries(q.record_types));
-  $('capture-graph').href=`constellation.html?asset=${d.asset.toLowerCase()}`;
-  $('capture-provenance').textContent=JSON.stringify({dataset_sha256:packet.dataset_sha256,digest_encoding:packet.digest_encoding,diagnostics:q,snapshots:d.snapshots,aml_score_included:false},null,2);ledger();
-}
-function bars(id,rows){const max=Math.max(1,...rows.map(r=>r[1]));$(id).replaceChildren(...rows.map(([title,count])=>{const row=el('div'),meter=el('meter');meter.max=max;meter.value=count;meter.setAttribute('aria-label',`${title}: ${count} returned records`);row.append(el('span',title.replaceAll('_',' ')),meter,el('b',count.toLocaleString()));return row;}));if(!rows.length)$(id).append(el('p','No records were returned in this source page.'));}
-function transactionUrl(asset,txid){return `${asset==='BTC'?'https://blockstream.info':asset==='BLCH'?'https://blochl1.com':'https://etherscan.io'}/tx/${txid}`;}
-function referenceLink(node,asset){const ref=node.address||node.txid,a=link(short(ref),node.kind==='transaction'?transactionUrl(asset,ref):`constellation.html?${new URLSearchParams({asset:asset.toLowerCase(),address:ref})}`);a.title=ref;return a;}
-function ledger(){
-  if(!packet)return;const d=packet.dataset,refs=new Map(d.nodes.map(n=>[n.id,n])),query=$('capture-search').value.trim();
-  const matches=value=>d.asset==='BTC'&&/^[13]/.test(value)?value.includes(query):value.toLowerCase().includes(query.toLowerCase());
-  const rows=d.edges.filter(e=>[e.txid,refs.get(e.from).address||refs.get(e.from).txid,refs.get(e.to).address||refs.get(e.to).txid].some(matches));
-  const pages=Math.max(1,Math.ceil(rows.length/20));recordPage=Math.min(recordPage,pages-1);
-  $('capture-ledger').replaceChildren(...rows.slice(recordPage*20,recordPage*20+20).map(e=>{const row=el('tr'),block=el('td',String(e.block_number)),tx=link(short(e.txid),transactionUrl(d.asset,e.txid));tx.title=e.txid;block.append(tx);const endpoints=el('td');endpoints.append(referenceLink(refs.get(e.from),d.asset),el('span',' → '),referenceLink(refs.get(e.to),d.asset));row.append(block,endpoints,el('td',e.kind.replaceAll('_',' ')),el('td',e.amount_base_units));return row;}));
-  $('capture-page').textContent=`${rows.length} matching records · Page ${recordPage+1} / ${pages}`;$('capture-prev').disabled=recordPage===0;$('capture-next').disabled=recordPage>=pages-1;
-}
-$('capture-search').oninput=()=>{recordPage=0;ledger();};$('capture-prev').onclick=()=>{recordPage--;ledger();};$('capture-next').onclick=()=>{recordPage++;ledger();};
-$('capture-export').onclick=()=>{if(!packet)return;const url=URL.createObjectURL(new Blob([JSON.stringify(packet,null,2)],{type:'application/json'})),a=link('',url);a.download=`graphus-evidence-${packet.dataset.asset}-${packet.dataset.anchor.height}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-$('capture-analytics').onclick=()=>{if(!packet)return;try{sessionStorage.setItem('graphus.analytics.network.v1',JSON.stringify(packet));location.href='analytics.html?import=network';}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and import it into Analytics.';}};
 $('reference-form').onsubmit=event=>{event.preventDefault();const asset=$('reference-asset').value,reference=$('reference-input').value.trim();const valid=asset==='BLCH'?/^[a-f0-9]{64}$/i.test(reference):asset==='BTC'?/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(reference):/^0x[a-f0-9]{40}$/i.test(reference);if(!valid){$('reference-status').textContent=`Enter a public ${asset==='BLCH'?'64-hex script hash':asset+' address'} in the expected format.`;return;}const view=event.submitter?.value==='oculum'?'oculum':'constellation';location.href=`${view}.html?${new URLSearchParams({asset:asset.toLowerCase(),address:reference})}`;};
 const workflows=[['AML evidence preparation',['aml-evidence','snapshot','scores','review'],'Capture public observations, retain coverage and inspect private descriptive scores. Case management remains planned.'],['Graph & balance research',['events','paths','balances','motifs'],'Move between transaction records, directed paths, observed balances and graph statistics.'],['Organization integration',['invitations','api-keys','daas','audit'],'Open the private portal to invite users, create scoped keys and inspect recorded access events.'],['Machine learning',['features','ml','blue','timeseries'],'Inspect descriptive features, Red/Blue components and historical evaluation methods.']];
 $('workflow-cards').replaceChildren(...workflows.map(([title,ids,description])=>{const card=el('article');card.append(el('h3',title),el('p',description));ids.forEach((id,i)=>card.append(button(`${i+1}. ${byId.get(id).title}`,()=>{select(id);$('system').scrollIntoView({block:'start'});})));return card;}));

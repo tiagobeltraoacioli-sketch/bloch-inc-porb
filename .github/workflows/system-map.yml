@@ -16,3 +16,4 @@ jobs:
           node-version: '24'
       - run: node --test tests/test_system_map.mjs
       - run: node --check graphus/assets/map.js
+      - run: node --check graphus/assets/system_workbench.js
