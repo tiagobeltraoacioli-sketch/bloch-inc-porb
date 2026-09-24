@@ -100,14 +100,42 @@ def top_event_candidates(index, *, asset, limit=64):
         raise ValueError("unsupported asset or rank limit")
     with closing(sqlite3.connect(Path(index).resolve().as_uri() + "?mode=ro", uri=True)) as db:
         state = {key: json.loads(value) for key, value in db.execute("SELECT key, value FROM metadata")}
-        if (state.get("asset") != asset or state.get("contract") != CONTRACTS[asset]
-                or state.get("same_block_balance_reads_complete") is not True):
+        if (state.get("schema_version") != 1 or state.get("asset") != asset
+                or state.get("contract") != CONTRACTS[asset]
+                or state.get("transfer_history_scan_complete") is not True
+                or state.get("same_block_balance_reads_complete") is not True
+                or type(state.get("target_height")) is not int
+                or state["target_height"] < 0
+                or not re.fullmatch(r"0x[0-9a-fA-F]{64}", str(state.get("target_hash")))
+                or type(state.get("next_block")) is not int
+                or state["next_block"] <= state["target_height"]):
             raise ValueError("same-block balance reads are incomplete")
+        count, balances, missing = db.execute("""SELECT
+            (SELECT count(*) FROM candidates),
+            (SELECT count(*) FROM balances),
+            (SELECT count(*) FROM candidates c LEFT JOIN balances b
+                ON b.address=c.address WHERE b.address IS NULL)""").fetchone()
+        if count != balances or missing:
+            raise ValueError("candidate balance coverage is incomplete")
+        invalid = db.execute("""SELECT count(*) FROM balances WHERE
+            typeof(address) != 'text' OR length(address) != 42
+            OR substr(address, 1, 2) != '0x' OR address != lower(address)
+            OR substr(address, 3) GLOB '*[^0-9a-f]*'
+            OR typeof(amount_base_units) != 'text' OR amount_base_units = ''
+            OR length(amount_base_units) > 78
+            OR amount_base_units GLOB '*[^0-9]*'
+            OR (length(amount_base_units) > 1 AND substr(amount_base_units, 1, 1) = '0')""").fetchone()[0]
+        if invalid:
+            raise ValueError("invalid candidate balance row")
         rows = db.execute("""SELECT address, amount_base_units FROM balances
             WHERE amount_base_units != '0'
             ORDER BY length(amount_base_units) DESC, amount_base_units DESC, address ASC
             LIMIT ?""", (limit,)).fetchall()
-        count = db.execute("SELECT count(*) FROM candidates").fetchone()[0]
+        if any(not isinstance(address, str) or not re.fullmatch(r"0x[0-9a-f]{40}", address)
+               or not isinstance(amount, str) or len(amount) > 78
+               or not re.fullmatch(r"[1-9][0-9]*", amount)
+               or int(amount) >= 1 << 256 for address, amount in rows):
+            raise ValueError("invalid candidate balance row")
     return {"kind": "private_event_discovered_token_balance_ranking",
             "asset": asset, "network": "ethereum-mainnet",
             "contract": CONTRACTS[asset], "block_height": state["target_height"],

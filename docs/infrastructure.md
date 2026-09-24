@@ -47,6 +47,13 @@ matched the local SHA-256, and a read-only `--check-only` run returned
 `waiting_for_full_validation` at block 785,954. No snapshot or ranking was
 created by that verification.
 
+At approximately 10:30 UTC, Bitcoin remained in IBD at block 790,272 of
+968,386 headers. Erigon remained in snapshot download at 88.73%, with execution
+block 0 and about 1.04 TB available. The private USDT/USDC top-64 reader now
+rechecks transfer-scan completion, same-block balance completion, and one-to-one
+candidate balance coverage before it returns a result. This is an index
+integrity gate, not a claim that Transfer events discover every token holder.
+
 Private timers now gate further work on node readiness. The Bitcoin snapshot
 job checks `initialblockdownload=false` before exporting and wrote no ranking
 while validation was in progress. On the bridge, USDT and USDC Transfer-event

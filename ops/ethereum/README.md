@@ -43,7 +43,9 @@ event scans, then query `balanceOf` in bounded batches against that same
 finalized block hash. A private top-64 of **event-discovered** addresses is
 available only after all candidate balance reads complete. This still lacks an
 independent contract-state coverage proof and must not be labeled as the global
-holder ranking.
+holder ranking. The private top-64 reader rechecks both completion flags,
+compares candidate and balance row coverage, and rejects malformed addresses
+or decimal amounts before returning a ranking.
 
 References: [Erigon hardware requirements](https://docs.erigon.tech/get-started/hardware-requirements),
 [Caplin](https://docs.erigon.tech/fundamentals/caplin),

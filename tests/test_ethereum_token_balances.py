@@ -2,6 +2,7 @@
 
 import io
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -69,6 +70,23 @@ class TokenBalanceTests(unittest.TestCase):
         result = rpc_batch("http://127.0.0.1:8545",
                            [("eth_call", []), ("eth_call", [])])
         self.assertEqual(result, ["0x1", "0x2"])
+
+    def test_private_top_rejects_incomplete_or_corrupt_candidate_balances(self):
+        collect(asset="USDC", index=self.index, rpc_url="http://127.0.0.1:8545",
+                call=self.rpc, batch_call=lambda _url, requests: ["0x1"] * len(requests))
+        with sqlite3.connect(self.index) as db:
+            db.execute("DELETE FROM balances WHERE address=?", (A,))
+        with self.assertRaisesRegex(ValueError, "coverage"):
+            top_event_candidates(self.index, asset="USDC")
+        with sqlite3.connect(self.index) as db:
+            db.execute("INSERT INTO balances VALUES (?, ?)", (A, "01"))
+        with self.assertRaisesRegex(ValueError, "invalid candidate balance"):
+            top_event_candidates(self.index, asset="USDC")
+        with sqlite3.connect(self.index) as db:
+            db.execute("UPDATE balances SET amount_base_units='1' WHERE address=?", (A,))
+            db.execute("UPDATE metadata SET value='false' WHERE key='transfer_history_scan_complete'")
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            top_event_candidates(self.index, asset="USDC")
 
 
 if __name__ == "__main__":
