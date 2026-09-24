@@ -4,9 +4,9 @@ BI-PoRB is a proposed **external, optional** Bloch Inc transaction monitoring an
 
 **Graphus of Bloch Inc — A Matter of Data 2.0** is the proposed data and graph platform behind BI-PoRB. See the [Graphus product boundary](docs/graphus-product.md).
 
-The private [Ethereum pilot](docs/ethereum-private-pilot.md) now preserves source-reported block time and can materialize a bounded, digest-checked event graph. Its aggregate summary and source comparison remain on the restricted data host; public wallet views are synthetic.
+The private [Ethereum pilot](docs/ethereum-private-pilot.md) preserves source-reported block time and can materialize a bounded, digest-checked event graph. Its aggregate summary and source comparison remain on the restricted data host. The public constellation defaults to synthetic examples; separate bounded public-chain lookups show source-reported balances and events.
 
-The [Graphus preview](https://bloch-graphus.pages.dev/) presents the initial [three-network, five-asset scope](docs/initial-assets.md), a synthetic [wallet constellation with two-step expansion and an event inspector](https://bloch-graphus.pages.dev/constellation.html), a temporal path explorer and observed-shapes panel, an [84-field data atlas](https://bloch-graphus.pages.dev/catalog.html), and a [DaaS proposal](https://bloch-graphus.pages.dev/daas.html). The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
+The [Graphus preview](https://bloch-graphus.xyz/) presents the initial [three-network, five-asset scope](docs/initial-assets.md), a synthetic [wallet constellation with two-step expansion and an event inspector](https://bloch-graphus.xyz/constellation.html) plus separate real lookups, [Oculum's queried-sample holder map](https://bloch-graphus.xyz/oculum), a temporal path explorer and observed-shapes panel, an [84-field data atlas](https://bloch-graphus.xyz/catalog.html), and a [DaaS proposal](https://bloch-graphus.xyz/daas.html). The [deep architecture](docs/graphus-2-architecture.md) specifies the proposed event model, temporal graph, ML evaluation, ZK research, and release gates.
 
 ## Current status
 

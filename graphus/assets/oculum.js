@@ -5,6 +5,8 @@ const addressInput=document.getElementById('oculum-address');
 const identifierLabel=document.getElementById('oculum-identifier-label');
 const form=document.getElementById('oculum-form');
 const addButton=document.getElementById('oculum-add');
+const batchInput=document.getElementById('oculum-batch-input');
+const batchButton=document.getElementById('oculum-batch-add');
 const sourceStatus=document.getElementById('oculum-source-status');
 const coverage=document.getElementById('oculum-coverage');
 const count=document.getElementById('oculum-count');
@@ -15,6 +17,8 @@ const tooltip=document.getElementById('oculum-tooltip');
 const colors={BTC:'#e9c985',ETH:'#b4d7a4',USDT:'#87c9ab',USDC:'#c6ced1',BLCH:'#baff28'};
 const records=new Map();
 const activityByKey=new Map();
+const MAX_SAMPLE_PER_ASSET=64;
+const MAX_BATCH=16;
 let selectedKey=null;
 let points=[];
 let width=0,height=0,dpr=1;
@@ -57,6 +61,7 @@ function currentRecords(){
   return [...records.values()].filter(record=>record.asset===asset)
     .sort((a,b)=>BigInt(a.baseUnits)===BigInt(b.baseUnits)?a.address.localeCompare(b.address):(BigInt(a.baseUnits)>BigInt(b.baseUnits)?-1:1));
 }
+function assetRecordCount(asset){return [...records.values()].filter(record=>record.asset===asset).length;}
 function setStatus(message,kind='neutral'){
   const dot=document.createElement('span');dot.className='oculum-source-dot';dot.setAttribute('aria-hidden','true');
   const body=document.createElement('div');
@@ -68,7 +73,7 @@ function setStatus(message,kind='neutral'){
 function addRecord({asset,address,balance,observation,network,origin,independentVerification}){
   if(!address||!/^\d+$/.test(balance?.base_units||''))return false;
   const key=recordKey(asset,address);
-  if(!records.has(key)&&records.size>=24)return false;
+  if(!records.has(key)&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)return false;
   activityByKey.delete(key);
   records.set(key,{
     key,asset,address,baseUnits:balance.base_units,decimals:balance.decimals,
@@ -228,9 +233,9 @@ function draw(){
   items.forEach((record,index)=>{
     const level=high===low?.5:(values[index]-low)/(high-low);
     const angle=-Math.PI/2+(index-1)*2.399963229728653;
-    const orbit=index===0?0:Math.min(Math.min(width,height)*.40,65+Math.sqrt(index-1)*64);
+    const orbit=index===0?0:Math.min(width,height)*.40*Math.sqrt(index/Math.max(1,items.length-1));
     const x=width*.5+Math.cos(angle)*orbit,y=height*.5+Math.sin(angle)*orbit;
-    points.push({record,x,y,level,radius:6+16*level});
+    points.push({record,x,y,level,radius:(items.length>24?4:6)+(items.length>24?10:16)*level});
   });
   for(const point of points){
     const radius=36+82*point.level;
@@ -247,8 +252,10 @@ function draw(){
       context.strokeStyle='#f0f3eb';context.lineWidth=1.5;
       context.beginPath();context.arc(point.x,point.y,point.radius+7,0,Math.PI*2);context.stroke();
     }
-    context.fillStyle='#edf4e8';context.font='11px ui-monospace, monospace';
-    context.fillText(point.record.address.slice(0,10)+'…',point.x+point.radius+10,point.y-8);
+    if(items.length<=24||point.record.key===selectedKey||items.indexOf(point.record)<8){
+      context.fillStyle='#edf4e8';context.font='11px ui-monospace, monospace';
+      context.fillText(point.record.address.slice(0,10)+'…',point.x+point.radius+10,point.y-8);
+    }
   }
 }
 function render(){
@@ -277,7 +284,7 @@ function renderCoverage(items){
   const dates=items.filter(item=>item.retrievedAt).map(item=>new Date(item.retrievedAt).getTime()).filter(Number.isFinite).sort((a,b)=>a-b);
   const metrics=document.createElement('div');metrics.className='oculum-quality-grid';
   for(const [label,value,note] of [
-    ['Sample',`${items.length}/24`,'Session limit; not chain coverage'],
+    ['Sample',`${items.length}/${MAX_SAMPLE_PER_ASSET}`,'Session limit for this asset; not chain coverage'],
     ['Direct queries',String(queried),'Other points are bounded observed neighbors'],
     ['Block anchored',`${pinned}/${items.length}`,'Anchor reported by source; not independently checked'],
     ['Sources',String(sources.size),'Independent verification is not implied'],
@@ -297,33 +304,62 @@ function renderCoverage(items){
   for(const line of lines){const li=document.createElement('li');li.textContent=line;facts.append(li);}
   coverage.append(facts);
 }
-async function addAddress(event){
-  event?.preventDefault();
-  const asset=assetSelect.value.toUpperCase(),address=addressInput.value.trim();
-  if(records.size>=24&&!records.has(recordKey(asset,address))){setStatus('This session is limited to 24 identifiers. Reload before adding more.','error');return;}
-  if(asset==='BLCH'&&!/^[0-9a-f]{64}$/i.test(address)){setStatus('BLCH requires a 64-hex script hash. A person or wallet name cannot be used.','error');return;}
+async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
+  if(!records.has(recordKey(asset,address))&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)throw new Error(`This asset sample is limited to ${MAX_SAMPLE_PER_ASSET} identifiers.`);
+  if(asset==='BLCH'&&!/^[0-9a-f]{64}$/i.test(address))throw new Error('BLCH requires a 64-hex script hash.');
   const network=asset==='BTC'?'bitcoin':asset==='BLCH'?'bloch':'ethereum';
-  addButton.disabled=true;setStatus(`Loading ${asset} source data for ${address}…`,'loading');
-  try{
-    const query=new URLSearchParams({network,asset,address});
-    const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
-    const data=await response.json();
-    if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
-    addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:asset==='BLCH'?'queried script hash':'queried address',independentVerification:data.independent_verification});
-    let enriched=0;
+  const query=new URLSearchParams({network,asset,address});
+  const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
+  const data=await response.json();
+  if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
+  if(!addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:asset==='BLCH'?'queried script hash':'queried address',independentVerification:data.independent_verification}))throw new Error('Asset sample capacity was reached.');
+  let enriched=0;
+  if(includeNeighbors){
     for(const node of data.nodes||[]){
       if(node.kind!=='address'||node.address===data.address||!node.balance)continue;
       const before=records.size;
       if(addRecord({asset,address:node.address,balance:node.balance,observation:{...data.observation,retrieved_at:node.balance.retrieved_at,coverage:'bounded observed-neighbor address summary'},network:data.network,origin:'address seen in bounded BTC transaction page',independentVerification:data.independent_verification})&&records.size>before)enriched++;
     }
-    selectedKey=recordKey(asset,data.address);
-    setStatus(`${asset} source-reported balance loaded from ${data.observation?.source_id||'public source'}${asset==='BTC'?`; ${enriched} observed-neighbor balances added`:''}. No ownership attribution.`, 'success');
-    render();
+  }
+  selectedKey=recordKey(asset,data.address);
+  render();
+  return {source:data.observation?.source_id||'public source',enriched};
+}
+async function addAddress(event){
+  event?.preventDefault();
+  const asset=assetSelect.value.toUpperCase(),address=addressInput.value.trim();
+  addButton.disabled=true;batchButton.disabled=true;
+  setStatus(`Loading ${asset} source data for ${address}…`,'loading');
+  try{
+    const result=await lookupAndAdd(asset,address);
+    setStatus(`${asset} source-reported balance loaded from ${result.source}${asset==='BTC'?`; ${result.enriched} observed-neighbor balances added`:''}. No ownership attribution.`, 'success');
   }catch(error){setStatus(`Lookup unavailable: ${error.message}. No balance was added.`,'error');}
-  finally{addButton.disabled=false;}
+  finally{addButton.disabled=false;batchButton.disabled=false;}
+}
+async function addBatch(){
+  const asset=assetSelect.value.toUpperCase();
+  const inputs=[...new Set(batchInput.value.split(/[\s,;]+/).map(value=>value.trim()).filter(Boolean))];
+  if(!inputs.length||inputs.length>MAX_BATCH){setStatus(`Paste 1 to ${MAX_BATCH} identifiers for one asset per batch.`,'error');return;}
+  addButton.disabled=true;batchButton.disabled=true;assetSelect.disabled=true;
+  let loaded=0,failed=0;
+  setStatus(`Querying ${inputs.length} ${asset} identifiers from public sources…`,'loading');
+  let cursor=0;
+  async function worker(){
+    while(cursor<inputs.length){
+      const address=inputs[cursor++];
+      try{await lookupAndAdd(asset,address,{includeNeighbors:false});loaded++;}
+      catch{failed++;}
+      setStatus(`${loaded+failed}/${inputs.length} checked · ${loaded} loaded · ${failed} unavailable. Ranking covers this queried sample only.`,'loading');
+    }
+  }
+  try{await Promise.all([worker(),worker()]);
+    setStatus(`${loaded} ${asset} balances loaded; ${failed} unavailable. The map ranks at most ${MAX_SAMPLE_PER_ASSET} identifiers queried for this asset, not the entire network.`,failed?'error':'success');
+    if(!failed)batchInput.value='';
+  }finally{addButton.disabled=false;batchButton.disabled=false;assetSelect.disabled=false;}
 }
 
 form.addEventListener('submit',addAddress);
+batchButton.addEventListener('click',addBatch);
 assetSelect.addEventListener('change',()=>{updateIdentifierInput();render();});
 function updateIdentifierInput(){
   const blch=assetSelect.value.toUpperCase()==='BLCH';

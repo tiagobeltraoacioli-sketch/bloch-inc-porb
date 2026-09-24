@@ -24,10 +24,12 @@ MAX_RESULTS = 100
 ETH_ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}\Z")
 BTC_ADDRESS = re.compile(r"(?:bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\Z", re.I)
 HEX64 = re.compile(r"0x[0-9a-fA-F]{64}\Z")
+SCRIPT_HASH = re.compile(r"[0-9a-fA-F]{64}\Z")
 DECIMAL = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 CONTRACT_BY_ASSET = {symbol.upper(): contract for contract, symbol in TOKEN_CONTRACTS.items()}
 ASSET_NETWORK = {"BTC": "bitcoin-mainnet", "ETH": "ethereum-mainnet",
-                 "USDT": "ethereum-mainnet", "USDC": "ethereum-mainnet"}
+                 "USDT": "ethereum-mainnet", "USDC": "ethereum-mainnet",
+                 "BLCH": "bloch-mainnet"}
 
 
 def _timestamp(value):
@@ -52,6 +54,12 @@ def _balance(balance, asset):
         if balance.get("unit") != "sat" or balance.get("scope") != "source_confirmed_address_aggregate" or balance.get("block") is not None:
             raise ValueError("invalid BTC address aggregate")
         return amount, None, None, None
+    if asset == "BLCH":
+        if (balance.get("unit") != "sat" or balance.get("scope") != "source_reported_script_hash_state"
+                or balance.get("block") is not None or type(balance.get("utxo_count")) is not int
+                or balance["utxo_count"] < 0):
+            raise ValueError("invalid Bloch script-hash balance")
+        return amount, None, None, None
     expected_unit = "wei" if asset == "ETH" else "token-base-unit"
     if balance.get("unit") != expected_unit or balance.get("scope") != "source_reported_finalized_block":
         raise ValueError("invalid Ethereum balance scope")
@@ -72,7 +80,7 @@ def _extract(record):
     if asset not in ASSET_NETWORK or record.get("network") != ASSET_NETWORK[asset]:
         raise ValueError("unsupported network or asset")
     address = record.get("address")
-    pattern = BTC_ADDRESS if asset == "BTC" else ETH_ADDRESS
+    pattern = BTC_ADDRESS if asset == "BTC" else SCRIPT_HASH if asset == "BLCH" else ETH_ADDRESS
     if not isinstance(address, str) or not pattern.fullmatch(address):
         raise ValueError("invalid address identifier")
     if asset != "BTC":
@@ -83,17 +91,22 @@ def _extract(record):
     if not isinstance(observation, dict):
         raise ValueError("source observation required")
     source_id = observation.get("source_id")
-    if source_id != ("blockstream-esplora" if asset == "BTC" else "configured-ethereum-json-rpc"):
+    expected_source = ("blockstream-esplora" if asset == "BTC" else
+                       "bloch-archival-rpc" if asset == "BLCH" else "configured-ethereum-json-rpc")
+    if source_id != expected_source:
         raise ValueError("unexpected source identifier")
     retrieved = _timestamp(observation.get("retrieved_at"))
     amount, block_hash, block_height, block_time = _balance(record.get("balance"), asset)
     if asset == "BTC":
         if observation.get("coverage") not in ("unavailable", "first_page_up_to_8_confirmed_transactions"):
             raise ValueError("unexpected BTC query coverage")
+    elif asset == "BLCH":
+        if observation.get("coverage") not in ("bounded_first_12_script_hash_events", "balance_only_history_unavailable"):
+            raise ValueError("unexpected Bloch query coverage")
     elif observation.get("coverage") != "single_address_balance_at_source_reported_finalized_block":
         raise ValueError("unexpected Ethereum query coverage")
     return [(asset, address, amount, source_id, retrieved, block_hash, block_height, block_time,
-             "queried_address")]
+             "queried_script_hash" if asset == "BLCH" else "queried_address")]
 
 
 def build_index(input_jsonl, index_path):
@@ -155,9 +168,9 @@ def top_candidates(index_path, *, asset, block_hash=None, limit=25):
     """Rank only addresses present in one local candidate snapshot."""
     if asset not in ASSET_NETWORK or type(limit) is not int or not 1 <= limit <= MAX_RESULTS:
         raise ValueError("unsupported asset or result limit")
-    if asset == "BTC":
+    if asset in ("BTC", "BLCH"):
         if block_hash is not None:
-            raise ValueError("BTC address aggregates have no common block anchor")
+            raise ValueError("BTC and BLCH source balances have no common block anchor")
         anchor = ""
     else:
         if not isinstance(block_hash, str) or not HEX64.fullmatch(block_hash):
@@ -179,7 +192,7 @@ def top_candidates(index_path, *, asset, block_hash=None, limit=25):
             "sampled_address_count": count, "chain_history_complete": False,
             "network_wide_discovery_complete": False, "independent_balance_verification": False,
             "input_sha256": metadata["input_sha256"],
-            "comparability": ("separate retrieval times; no common UTXO snapshot" if asset == "BTC"
+            "comparability": ("separate retrieval times; no common UTXO snapshot" if asset in ("BTC", "BLCH")
                               else "same source-reported finalized block, without independent state verification"),
             "rows": [dict(zip(fields, row)) for row in rows],
             "semantics": "Addresses only. Ranking covers this local sample, not all holders or owners."}

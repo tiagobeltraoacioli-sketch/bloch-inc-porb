@@ -47,6 +47,53 @@ function assetForLiveAddress(address){
   if(/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(address))return 'BTC';
   return null;
 }
+function renderLiveSourceRecords(data){
+  const activity=data.tokenActivity;
+  setText('record-related',activity
+    ?`${activity.event_count} Transfer logs in a bounded window · ${data.nodes.length-1} observed peer addresses`
+    :`${data.nodes?.length||0} source nodes · ${data.edges?.length||0} observation links`);
+  const list=document.getElementById('transaction-list');list.replaceChildren();
+  if(activity){
+    const heading=document.createElement('p');
+    const window=data.tokenObservation?.block_window;
+    heading.className='live-source-record';
+    heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. The balance above was queried separately. Peer balances are unknown.`;
+    list.append(heading);
+    for(const event of activity.events.slice(-24).reverse()){
+      const row=document.createElement('div');row.className='live-source-record';
+      row.textContent=`${event.direction} · ${formatObservedBalance(event.amount_base_units,data.asset,6)} · block ${event.block_number} · tx ${event.transaction_hash} · from ${event.from} · to ${event.to}`;
+      list.append(row);
+    }
+    if(activity.event_count>24){
+      const note=document.createElement('p');note.className='live-source-record';
+      note.textContent=`Showing the latest 24 of ${activity.event_count} events in this 64-block-or-smaller window. Earlier activity is unknown here.`;
+      list.append(note);
+    }
+  }else{
+    (data.nodes||[]).slice(0,40).forEach(node=>{
+      const row=node.kind==='address'&&node.address?document.createElement('button'):document.createElement('div');
+      row.className='live-source-record';
+      row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}${node.balance?.base_units?` · ${formatObservedBalance(node.balance.base_units,data.asset,node.balance.decimals)}`:''}`;
+      if(row.tagName==='BUTTON'){
+        row.type='button';
+        row.addEventListener('click',()=>inspectRealAddress(node.address));
+      }
+      list.append(row);
+    });
+  }
+  if(!list.childElementCount)list.textContent='No bounded transaction records were returned. Balance provenance is shown above.';
+}
+function combineTokenActivity(wallet,activity){
+  if(activity.status!=='source-reported'||activity.network!==wallet.network||activity.asset!==wallet.asset
+    ||activity.address!==wallet.address||!Array.isArray(activity.nodes)||!Array.isArray(activity.edges)
+    ||!Array.isArray(activity.activity?.events)||activity.edges.length>256||activity.nodes.length>513){
+    throw new Error('inconsistent_token_activity');
+  }
+  const root=wallet.nodes?.find(node=>node.address===wallet.address);
+  return {...wallet,
+    nodes:activity.nodes.map(node=>node.address===wallet.address?{...node,balance:root?.balance}:node),
+    edges:activity.edges,tokenActivity:activity.activity,tokenObservation:activity.observation};
+}
 async function loadLiveAddress(){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
@@ -64,9 +111,8 @@ async function loadLiveAddress(){
     const data=await response.json();
     if(requestId!==realRequest)return;
     if(!response.ok||data.status!=='source-reported')throw new Error(data.error||data.reason||`Source returned HTTP ${response.status}`);
+    clearWallet();
     realObservation=data;
-    selectedWallet=null;
-    selectedTransaction=null;
     const unit=data.balance?.unit||'base units';
     const baseUnits=data.balance?.base_units;
     setDataMode('source-reported',`${data.asset} · ${data.observation?.source_id||'public-chain source'} · retrieved ${data.observation?.retrieved_at||'time unavailable'} · independently verified by Graphus: no. Control and ownership are unknown.`);
@@ -78,7 +124,6 @@ async function loadLiveAddress(){
     setText('record-holdings',formatObservedBalance(baseUnits,data.asset,data.balance?.decimals));
     setText('record-time',data.balance?.block?.time||data.observation?.retrieved_at||'—');
     setText('record-source',data.observation?.source_id||'—');
-    setText('record-related',`${data.nodes?.length||0} source nodes · ${data.edges?.length||0} observation links`);
     setText('record-meaning','No model output or AML score.');
     setText('evidence-network',data.network||'—');
     setText('evidence-type',`Source-reported ${data.asset==='BLCH'?'script-hash':'address'} balance and bounded activity`);
@@ -86,20 +131,27 @@ async function loadLiveAddress(){
     setText('evidence-finality',data.balance?.scope||'Source reported');
     setText('evidence-limit',(data.observation?.limitations||[]).join(' ' )||'No independent chain-state verification.');
     document.querySelector('.transaction-fan > p').textContent='SOURCE RECORDS / PUBLIC CHAIN';
-    const list=document.getElementById('transaction-list');list.replaceChildren();
-    (data.nodes||[]).slice(0,40).forEach(node=>{
-      const row=node.kind==='address'&&node.address?document.createElement('button'):document.createElement('div');
-      row.className='live-source-record';
-      row.textContent=`${node.kind||'record'} · ${node.txid||node.address||node.id}${node.balance?.base_units?` · ${formatObservedBalance(node.balance.base_units,data.asset,node.balance.decimals)}`:''}`;
-      if(row.tagName==='BUTTON'){
-        row.type='button';
-        row.addEventListener('click',()=>inspectRealAddress(node.address));
-      }
-      list.append(row);
-    });
-    if(!list.childElementCount)list.textContent='No transaction index is configured for this address. Balance source and block anchor are shown above.';
+    renderLiveSourceRecords(data);
     canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}.`);
     draw();
+    if(data.asset==='USDT'||data.asset==='USDC'){
+      try{
+        const activityQuery=new URLSearchParams({asset:data.asset,address:data.address});
+        const activityResponse=await fetch(`/api/chain/activity?${activityQuery}`,{headers:{Accept:'application/json'}});
+        const activityData=await activityResponse.json();
+        if(requestId!==realRequest)return;
+        if(!activityResponse.ok)throw new Error(activityData.error||`HTTP ${activityResponse.status}`);
+        realObservation=combineTokenActivity(data,activityData);
+        renderLiveSourceRecords(realObservation);
+        setDataMode('source-reported',`${data.asset} balance retrieved ${data.observation?.retrieved_at||'time unavailable'}; ${activityData.activity.event_count} separate Transfer logs in source-reported finalized blocks ${activityData.observation.block_window.from}–${activityData.observation.block_window.to}. No independent Graphus verification or owner inference.`);
+        draw();
+      }catch(activityError){
+        if(requestId!==realRequest)return;
+        const note=document.createElement('p');note.className='live-source-record';
+        note.textContent=`Bounded Transfer logs unavailable: ${activityError.message}. The source-reported balance remains available.`;
+        document.getElementById('transaction-list').prepend(note);
+      }
+    }
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;

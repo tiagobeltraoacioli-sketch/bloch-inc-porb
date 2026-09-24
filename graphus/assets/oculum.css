@@ -21,6 +21,13 @@
 .oculum-form button:hover, .oculum-form button:focus-visible { background: #d1ff6a; }
 .oculum-form button:disabled { opacity: .55; cursor: progress; }
 .oculum-form button span { margin-left: .6rem; }
+.oculum-batch { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: .45rem 1rem; align-items: end; padding: 1rem 1.15rem; border: 1px solid #40503f; border-top: 0; background: #101710; }
+.oculum-batch label, .oculum-batch p { grid-column: 1 / -1; }
+.oculum-batch label { color: #d7e9ca; font: 700 .78rem var(--body); }
+.oculum-batch p { margin: 0 0 .3rem; color: #aebfa8; font-size: .74rem; line-height: 1.5; }
+.oculum-batch textarea { box-sizing: border-box; width: 100%; min-height: 78px; resize: vertical; padding: .65rem .8rem; border: 1px solid #526648; background: #070b07; color: var(--white); font: .74rem var(--mono); }
+.oculum-batch button { min-height: 48px; padding: .7rem 1rem; border: 1px solid var(--brand-lime); background: transparent; color: var(--brand-lime); font: 700 .72rem var(--body); text-transform: uppercase; cursor: pointer; }
+.oculum-batch button:disabled { opacity: .55; cursor: progress; }
 .oculum-source { display: flex; gap: .85rem; align-items: flex-start; padding: .95rem 1.2rem; border: 1px solid #40503f; border-top: 0; background: #182118; color: #d8e7d0; }
 .oculum-source-dot { flex: 0 0 8px; width: 8px; height: 8px; margin-top: .38rem; border-radius: 50%; background: var(--brand-lime); box-shadow: 0 0 0 4px #34492b; }
 .oculum-source strong { display: block; font: 700 .76rem var(--body); }
@@ -107,6 +114,7 @@
   .oculum-intro h1 { font-size: clamp(3.6rem, 14vw, 6rem); }
   .oculum-workspace { padding: 70px 1rem 85px; }
   .oculum-form { padding: .8rem; }
+  .oculum-batch { grid-template-columns: 1fr; padding: .8rem; }
   .oculum-field, .oculum-form button { flex: 1 1 100%; }
   .oculum-map-top, .oculum-map-bottom { flex-wrap: wrap; padding: .85rem; font-size: .58rem; }
   .oculum-canvas-wrap, #oculum-canvas { min-height: 380px; }

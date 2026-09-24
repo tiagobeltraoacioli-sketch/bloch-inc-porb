@@ -14,6 +14,8 @@ ETH_TWO = "0x" + "0" * 39 + "2"
 BLOCK_A = "0x" + "a" * 64
 BLOCK_B = "0x" + "b" * 64
 USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+BLCH_ONE = "a" * 64
+BLCH_TWO = "b" * 64
 
 
 def ethereum_record(address, amount, block=BLOCK_A, when="2026-09-23T12:00:00.000Z"):
@@ -34,6 +36,16 @@ def bitcoin_record(amount, when="2026-09-23T12:00:00.000Z"):
                         "scope": "source_confirmed_address_aggregate", "block": None},
             "observation": {"source_id": "blockstream-esplora", "retrieved_at": when,
                             "coverage": "first_page_up_to_8_confirmed_transactions"}}
+
+
+def bloch_record(script_hash, amount, when="2026-09-23T12:00:00.000Z"):
+    return {"status": "source-reported", "independent_verification": False,
+            "network": "bloch-mainnet", "asset": "BLCH", "address": script_hash,
+            "balance": {"base_units": amount, "unit": "sat",
+                        "scope": "source_reported_script_hash_state", "block": None,
+                        "utxo_count": 1},
+            "observation": {"source_id": "bloch-archival-rpc", "retrieved_at": when,
+                            "coverage": "bounded_first_12_script_hash_events"}}
 
 
 class HolderCandidateIndexTests(unittest.TestCase):
@@ -71,6 +83,16 @@ class HolderCandidateIndexTests(unittest.TestCase):
         self.assertEqual(result["rows"][0]["amount_base_units"], "20")
         self.assertIn("separate retrieval times", result["comparability"])
         self.assertEqual(result["rows"][0]["selection"], "queried_address")
+
+    def test_bloch_script_hashes_rank_exactly_without_shared_snapshot(self):
+        self.build([bloch_record(BLCH_ONE, "999999999999999999"),
+                    bloch_record(BLCH_TWO, "1000000000000000000")])
+        result = top_candidates(self.index, asset="BLCH", limit=64)
+        self.assertEqual([row["address"] for row in result["rows"]], [BLCH_TWO, BLCH_ONE])
+        self.assertEqual(result["rows"][0]["selection"], "queried_script_hash")
+        self.assertFalse(result["network_wide_discovery_complete"])
+        with self.assertRaisesRegex(ValueError, "no common block"):
+            top_candidates(self.index, asset="BLCH", block_hash=BLOCK_A)
 
     def test_reject_unanchored_or_mismatched_claims_without_overwriting_index(self):
         self.build([bitcoin_record("5")])
