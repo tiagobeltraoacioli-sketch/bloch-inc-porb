@@ -30,6 +30,8 @@
 .source-block-timeline-controls small{color:#aac39e;font-size:.59rem}
 .source-block-timeline-bar{display:block;height:4px;background:#344832}
 .source-block-timeline-bar i{display:block;height:100%;background:#baff28}
+.source-window-link{display:inline-block;margin-top:.65rem;color:#baff28;font:.66rem var(--mono);overflow-wrap:anywhere}
+.source-window-link:hover,.source-window-link:focus-visible{color:#e9f5e2}
 .live-export[hidden]{display:none}
 body[data-constellation-mode="source-reported"] #transaction-list{max-height:430px;overflow:auto;overscroll-behavior:contain}
 .source-peer-ledger{margin-top:1rem;padding-top:.85rem;border-top:1px solid #40503f}

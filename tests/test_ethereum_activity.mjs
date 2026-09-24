@@ -94,6 +94,24 @@ test('historical window input is bounded by the finalized head',async()=>{
   assert.equal(calls.length,2);
 });
 
+test('a pinned historical link rejects a different source block before reading logs',async()=>{
+  const historicalHash=`0x${'c'.repeat(64)}`;
+  const historicalBlock={number:'0x24',hash:historicalHash,timestamp:'0x4'};
+  const same=source({historicalBlock});
+  const result=await queryEthereumActivity({address,asset:'USDC',toBlock:'36',
+    expectedHash:historicalHash.toUpperCase().replace('0X','0x'),env,fetcher:same.fetcher,now});
+  assert.equal(result.status,200);
+  const mismatch=source({historicalBlock});
+  assert.deepEqual(await queryEthereumActivity({address,asset:'USDC',toBlock:'36',
+    expectedHash:hash,env,fetcher:mismatch.fetcher,now}),
+  {status:409,body:{error:'window_anchor_mismatch'}});
+  assert.equal(mismatch.calls.length,3);
+  for(const params of [{expectedHash:hash},{toBlock:'36',expectedHash:'bad'}]){
+    const invalid=await queryEthereumActivity({address,asset:'USDC',env,...params});
+    assert.deepEqual(invalid,{status:400,body:{error:'invalid_expected_hash'}});
+  }
+});
+
 test('self transfer appearing in both filters is represented once', async () => {
   const self = log({from: address, to: address});
   const {fetcher} = source({incoming: [self], outgoing: [self]});

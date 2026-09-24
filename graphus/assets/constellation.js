@@ -196,7 +196,19 @@ function renderSourceMetrics(data){
       latest.textContent='Latest finalized blocks';
       latest.addEventListener('click',()=>loadTokenActivity(data,realRequest,null,true));controls.append(latest);
     }
-    navigation.append(title,note,controls);sourceMetricsPanel.append(navigation);
+    navigation.append(title,note,controls);
+    const windowHash=data.tokenObservation.window_end_anchor?.hash;
+    if(/^0x[0-9a-fA-F]{64}$/.test(windowHash||'')){
+      const url=new URL('/constellation',location.origin);
+      url.searchParams.set('asset',data.asset.toLowerCase());
+      url.searchParams.set('address',data.address);
+      url.searchParams.set('to_block',String(window.to));
+      url.searchParams.set('expected_hash',windowHash.toLowerCase());
+      const anchor=document.createElement('a');anchor.className='source-window-link';
+      anchor.href=url.pathname+url.search;anchor.textContent='Open this anchored window ↗';
+      navigation.append(anchor);
+    }
+    sourceMetricsPanel.append(navigation);
   }
   if(metrics.kind==='utxo_observations'&&metrics.block_activity.blocks.length){
     const panel=document.createElement('div');panel.className='source-peer-ledger';
@@ -471,7 +483,7 @@ function combineTokenActivity(wallet,activity){
     edges:activity.edges,tokenActivity:activity.activity,tokenActivityContract:activity.contract,
     tokenObservation:activity.observation,tokenAnchorComparison:anchors};
 }
-async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=false){
+async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=false,expectedHash=null){
   if(tokenActivityInFlightFor===requestId)return;
   tokenActivityInFlightFor=requestId;
   const list=document.getElementById('transaction-list');
@@ -481,6 +493,7 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
   try{
     const activityQuery=new URLSearchParams({asset:wallet.asset,address:wallet.address});
     if(toBlock!==null)activityQuery.set('to_block',String(toBlock));
+    if(expectedHash!==null)activityQuery.set('expected_hash',expectedHash);
     const response=await fetch(`/api/chain/activity?${activityQuery}`,{headers:{Accept:'application/json'}});
     let activityData;
     try{activityData=await response.json();}
@@ -494,6 +507,16 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
     selectedRealEventId=null;
     liveTransactionDetail.hidden=true;
     renderLiveSourceRecords(realObservation);
+    const windowAnchor=realObservation.tokenObservation?.window_end_anchor;
+    if(windowAnchor&&/^0x[0-9a-fA-F]{64}$/.test(windowAnchor.hash||'')){
+      const url=new URL(window.location.href);
+      url.searchParams.delete('wallet');
+      url.searchParams.set('asset',realObservation.asset.toLowerCase());
+      url.searchParams.set('address',realObservation.address);
+      url.searchParams.set('to_block',String(windowAnchor.height));
+      url.searchParams.set('expected_hash',windowAnchor.hash.toLowerCase());
+      window.history.replaceState(null,'',url);
+    }
     const anchors=realObservation.tokenAnchorComparison;
     const anchorNote=anchors.status==='same_source_anchor'
       ?`Balance and logs share source-reported block ${anchors.balance.height} (${anchors.balance.hash}). This does not reconcile the balance with the bounded logs.`
@@ -507,7 +530,7 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
       note.textContent=`Requested log window unavailable: ${error.message}. The previously loaded window remains visible.`;
       const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
       retry.textContent='Retry requested window';
-      retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock,true));
+      retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock,true,expectedHash));
       list.prepend(note,retry);
       return;
     }
@@ -517,7 +540,7 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
     note.textContent=`Bounded Transfer logs unavailable: ${error.message}. The source-reported balance remains available.`;
     const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
     retry.textContent='Retry Transfer logs';
-    retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock));
+    retry.addEventListener('click',()=>loadTokenActivity(wallet,requestId,toBlock,false,expectedHash));
     list.prepend(note,retry);
     setDataMode('source-reported',`${wallet.asset} balance remains available from ${wallet.observation?.source_id||'the configured source'}. Bounded Transfer logs are unavailable; retry the separate activity request.`);
     draw();
@@ -526,7 +549,7 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
     loading.remove();
   }
 }
-async function loadLiveAddress(){
+async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
   if(!asset){
@@ -579,7 +602,7 @@ async function loadLiveAddress(){
         :'Select returned Transfer logs in the source-record list when available.';
     canvas.setAttribute('aria-label',`Source-reported ${data.asset} ${data.asset==='BLCH'?'script hash':'address'} ${data.address}; balance ${baseUnits??'unavailable'} ${unit}. ${canvasInstruction}`);
     draw();
-    if(data.asset==='USDT'||data.asset==='USDC')await loadTokenActivity(data,requestId);
+    if(data.asset==='USDT'||data.asset==='USDC')await loadTokenActivity(data,requestId,toBlock,false,expectedHash);
   }catch(error){
     if(requestId!==realRequest)return;
     realObservation=null;
@@ -1224,7 +1247,7 @@ function renderFlows(wallet){
 }
 function updateSearchUrl() {
   const url=new URL(window.location.href);
-  url.searchParams.delete('address');url.searchParams.delete('wallet');
+  for(const key of ['address','wallet','to_block','expected_hash'])url.searchParams.delete(key);
   const entered=document.getElementById('record-search').value.trim();
   const liveAsset=assetForLiveAddress(entered);
   if(liveAsset){
@@ -1419,4 +1442,5 @@ if(initialAsset&&['btc','eth','usdt','usdc','blch'].includes(initialAsset)){
 if(initialWallet){const input=document.getElementById('record-search');input.value=initialWallet;input.dispatchEvent(new Event('input',{bubbles:true}));}
 renderList();renderSearchStatus();resize();requestAnimationFrame(frame);
 renderNetworkEvidence();
-if(initialAddress&&assetForLiveAddress(initialAddress))loadLiveAddress();
+if(initialAddress&&assetForLiveAddress(initialAddress))loadLiveAddress({
+  toBlock:initialUrl.searchParams.get('to_block'),expectedHash:initialUrl.searchParams.get('expected_hash')});

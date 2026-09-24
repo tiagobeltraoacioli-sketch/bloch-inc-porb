@@ -86,6 +86,11 @@ match the window anchor. Older, newer, and latest controls replace the visible
 window rather than merging different source snapshots. A failed page request
 keeps the previously loaded window visible. The balance remains a separate
 lookup and the JSON download contains only the current bounded window.
+The page also offers an anchored link containing the window end height and
+hash. Opening it sends `to_block` and `expected_hash`; the activity API rejects
+a different source-reported block hash before retrieving logs. This makes the
+link reproducible against the configured source, but it is not independent
+verification of the chain or a guarantee that the source will remain online.
 
 The source-aware canvas plots at most 36 other points from a bounded response
 and states the visible and returned counts. For USDT and USDC, it chooses points

@@ -93,7 +93,7 @@ export async function onRequest({request,env}) {
   if(path==='chain/activity'&&method==='GET') {
     const result=await queryEthereumActivity({
       asset:url.searchParams.get('asset'),address:url.searchParams.get('address'),
-      toBlock:url.searchParams.get('to_block'),env,
+      toBlock:url.searchParams.get('to_block'),expectedHash:url.searchParams.get('expected_hash'),env,
     });
     return json(result.body,result.status);
   }
@@ -116,7 +116,7 @@ export async function onRequest({request,env}) {
       bloch_indexed_script_ranking:{endpoint:'/api/chain/holders?asset=BLCH',limit:64,
         unit:'script_hash',coverage:'positive balances in source indexed canonical state',independently_verified:false},
       bounded_public_erc20_activity:{endpoint:'/api/chain/activity',assets:['USDT','USDC'],window_blocks:64,
-        historical_window_parameter:'to_block',native_eth:'unavailable-without-transaction-index'},
+        historical_window_parameter:'to_block',optional_anchor_guard:'expected_hash',native_eth:'unavailable-without-transaction-index'},
     },
     research:{bloch_sample:'private-bounded',structural_groups:'unsupervised-research-only',aml_model:'not-validated'},
     proposed_public_fields:['network','asset','transaction_id','event_index','observed_at','finality','source','source_version','flow_edges','feature_definitions','validated_non_score_features'],

@@ -100,7 +100,7 @@ function normalizeLog(log, {contract, address, first, last, finalizedHash}) {
   };
 }
 
-export async function queryEthereumActivity({address, asset, toBlock = null, env = {}, fetcher = fetch, now = () => new Date()}) {
+export async function queryEthereumActivity({address, asset, toBlock = null, expectedHash = null, env = {}, fetcher = fetch, now = () => new Date()}) {
   const token = String(asset || '').toUpperCase();
   if (!ADDRESS.test(address || '') || !['ETH', 'USDT', 'USDC'].includes(token)) {
     return fail('invalid_address_or_asset', 400);
@@ -108,6 +108,8 @@ export async function queryEthereumActivity({address, asset, toBlock = null, env
   if (token === 'ETH') return fail('native_eth_activity_requires_transaction_index', 501);
   if (toBlock !== null && (typeof toBlock !== 'string' || !/^(0|[1-9][0-9]*)$/.test(toBlock)
       || !Number.isSafeInteger(Number(toBlock)))) return fail('invalid_to_block', 400);
+  if (expectedHash !== null && (toBlock === null || typeof expectedHash !== 'string'
+      || !HEX32.test(expectedHash))) return fail('invalid_expected_hash', 400);
   try {
     const endpoint = rpcEndpoint(env);
     const chainId = await rpc(fetcher, endpoint, 'eth_chainId', [], 1);
@@ -123,6 +125,8 @@ export async function queryEthereumActivity({address, asset, toBlock = null, env
       : await rpc(fetcher, endpoint, 'eth_getBlockByNumber', [`0x${last.toString(16)}`, false], 5);
     if (!windowEnd || boundedNumber(windowEnd.number) !== last
         || typeof windowEnd.hash !== 'string' || !HEX32.test(windowEnd.hash)) throw new Error('invalid_rpc_response');
+    if (expectedHash !== null && windowEnd.hash.toLowerCase() !== expectedHash.toLowerCase())
+      return fail('window_anchor_mismatch', 409);
     const finalizedTime = new Date(boundedNumber(block.timestamp) * 1000);
     if (!Number.isFinite(finalizedTime.getTime())) throw new Error('invalid_rpc_response');
     const timestamp = boundedNumber(windowEnd.timestamp);
