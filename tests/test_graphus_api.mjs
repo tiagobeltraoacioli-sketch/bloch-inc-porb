@@ -4,11 +4,14 @@ import {onRequest} from '../graphus/functions/api/[[path]].js';
 
 const request=(path,method='GET',headers={})=>new Request('https://bloch-graphus.pages.dev/api/'+path,{method,headers});
 
-test('public DaaS manifest distinguishes source-reported balances from synthetic graph data',async()=>{
+test('public DaaS manifest distinguishes bounded real samples from complete chain history',async()=>{
   const response=await onRequest({request:request('daas/manifest'),env:{}});
   const body=await response.json();
   assert.equal(response.status,200);
-  assert.equal(body.live_transactions,false);
+  assert.equal(body.live_transactions,true);
+  assert.equal(body.transaction_coverage,'bounded-on-demand-public-chain-samples');
+  assert.equal(body.query_capabilities.recent_network_graph.endpoint,'/api/chain/network');
+  assert.deepEqual(body.query_capabilities.recent_network_graph.assets,['BTC','ETH','USDT','USDC','BLCH']);
   assert.equal(body.live_scores,false);
   assert.equal(body.status,'mixed-synthetic-and-source-reported-preview');
   assert.deepEqual(body.initial_assets.map(item=>item.asset),['BTC','ETH','USDT','USDC','BLCH']);
@@ -21,6 +24,12 @@ test('public DaaS manifest distinguishes source-reported balances from synthetic
   assert.equal(body.research.aml_model,'not-validated');
   assert.ok(body.proposed_public_fields.includes('source_version'));
   assert.ok(body.private_fields.includes('aml_score'));
+});
+test('network graph route rejects unknown assets and extra parameters before any source request',async()=>{
+  for(const query of ['asset=SOL','asset=BTC&url=https://example.test','asset=BTC&asset=ETH']){
+    const response=await onRequest({request:request('chain/network?'+query),env:{}});
+    assert.equal(response.status,400);
+  }
 });
 
 test('Google login stays disabled until an explicit release flag and bindings exist',async()=>{

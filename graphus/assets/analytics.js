@@ -3,6 +3,7 @@
   const A=window.GraphusAnalytics, $=id=>document.getElementById(id);
   const palette=['#c8ef9d','#8acbd1','#d2b6e8','#e4bf84','#95bba2','#d59389'];
   let dataset,filtered,summary,selected=null,focus='',path=[],page=0,balanceData=null,balanceSummary=null,requestId=0;
+  let dataMode='empty',loading=false;
   let graphPoints=[],graphEdges=[],zoom=1,pan={x:0,y:0},canvasWidth=1,canvasHeight=1;
   const canvas=$('lab-canvas'),ctx=canvas.getContext('2d');
   const node=(tag,value,className)=>{const el=document.createElement(tag);if(value!==undefined)el.textContent=value;if(className)el.className=className;return el;};
@@ -54,13 +55,14 @@
     });
     svg.append(svgElement('text',{x:203,y:243},'Origin ↓  /  Destination →'));
   }
-  function setGraph(data,description){
+  function setGraph(data,description,mode=data.status==='synthetic'?'demo':'import'){
+    dataMode=mode;
     dataset=data;balanceData=null;balanceSummary=null;focus='';selected=null;path=[];
     $('lab-graph-workspace').hidden=false;$('lab-balances-workspace').hidden=true;
     $('lab-asset').value=data.asset;
-    $('lab-badge').textContent=data.status==='synthetic'?'SYNTHETIC DEMONSTRATION':'IMPORTED OBSERVATION · UNVERIFIED';
+    $('lab-badge').textContent=data.status==='synthetic'?'SYNTHETIC DEMONSTRATION':mode==='live'?'REAL CHAIN DATA · SOURCE-REPORTED':'IMPORTED OBSERVATION · UNVERIFIED';
     $('lab-badge').dataset.mode=data.status==='synthetic'?'demo':'source';
-    $('lab-source-detail').textContent=description||`${data.source} · ${data.coverage}${data.retrieved_at?' · Retrieved '+data.retrieved_at:''}`;
+    $('lab-source-detail').textContent=description||`${data.source} · ${data.coverage}${data.retrieved_at?' · Retrieved '+data.retrieved_at:''}${data.anchor?' · Anchor '+data.anchor.height+' / '+data.anchor.hash:''}`;
     $('lab-kind').replaceChildren(new Option('All types','all'),...A.KINDS[data.asset].map(k=>new Option(human(k),k)));
     resetFilters();
   }
@@ -97,6 +99,10 @@
     $('lab-node-title').textContent=row?row.label:'Select a reference';
     $('lab-node-hint').textContent=row?'Metrics within the current filtered graph.':'Choose a point or use the searchable list. Connections describe records in this dataset.';
     if(row)for(const [key,value] of [['Kind',human(row.kind)],['Incoming',row.incoming],['Outgoing',row.outgoing],['Neighbors',row.degree],['PageRank',percent(row.rank)],['Component',row.component+1]])$('lab-node-detail').append(node('dt',key),node('dd',String(value)));
+    if(row&&dataset.status==='source-reported'&&row.kind!=='transaction'){
+      const link=node('a','Open Constellation ↗');link.href=`constellation.html?${new URLSearchParams({asset:dataset.asset.toLowerCase(),address:row.label})}`;
+      const value=node('dd');value.append(link);$('lab-node-detail').append(node('dt','Address evidence'),value);
+    }
   }
   function renderPathSelects(){
     const from=$('lab-path-from').value,to=$('lab-path-to').value;
@@ -116,6 +122,8 @@
     const rows=rowsForLedger(),pages=Math.max(1,Math.ceil(rows.length/20));page=Math.min(page,pages-1);
     $('lab-ledger-body').replaceChildren(...rows.slice(page*20,page*20+20).map(e=>{
       const tr=node('tr'),event=node('td',e.id);event.append(node('small',e.block===null?'Block unknown':`Block ${e.block}`));
+      if(e.block_hash)event.append(node('small',`Block hash ${e.block_hash}`));
+      if(e.txid){const link=node('a','Open transaction ↗');link.href=dataset.asset==='BTC'?`https://blockstream.info/tx/${e.txid}`:dataset.asset==='BLCH'?`https://blochl1.com/tx/${e.txid}`:`https://etherscan.io/tx/${e.txid}`;link.target='_blank';link.rel='noopener noreferrer';event.append(link);}
       const refs=node('td',`${short(e.from)} → ${short(e.to)}`);refs.title=`${e.from} → ${e.to}`;
       const amount=node('td',`${A.format(e.amount,dataset.asset)} ${dataset.asset}`);amount.append(node('small',`${e.amount} base units`));
       tr.append(event,refs,node('td',human(e.kind)),amount);return tr;
@@ -165,8 +173,9 @@
   canvas.addEventListener('pointercancel',()=>{drag=null;});
   new ResizeObserver(fitGraph).observe(canvas.parentElement);
   function download(name,body,type){const url=URL.createObjectURL(new Blob([body],{type})),link=node('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-  function exportRows(){return [['status','asset','source','event_id','from','to','connection_type','block','amount_base_units','amount'],...rowsForLedger().map(e=>[dataset.status,dataset.asset,dataset.source,e.id,e.from,e.to,e.kind,e.block,e.amount,A.format(e.amount,dataset.asset)])];}
+  function exportRows(){return [['status','asset','source','retrieved_at','event_id','transaction_id','from','to','connection_type','block','block_hash','amount_base_units','amount'],...rowsForLedger().map(e=>[dataset.status,dataset.asset,dataset.source,dataset.retrieved_at,e.id,e.txid,e.from,e.to,e.kind,e.block,e.block_hash,e.amount,A.format(e.amount,dataset.asset)])];}
   function showBalances(data){
+    dataMode='balances';
     const stats=A.holderStats(data);balanceData=data;balanceSummary=stats;
     $('lab-graph-workspace').hidden=true;$('lab-balances-workspace').hidden=false;
     $('lab-badge').textContent='SOURCE-REPORTED · INDEXED BALANCES';$('lab-badge').dataset.mode='source';
@@ -193,6 +202,43 @@
     catch(error){if(request===requestId)message(error.name==='TimeoutError'?'The source request timed out. Try again shortly.':error.message,true);}
     finally{if(request===requestId)$('lab-holders').disabled=false;}
   });
+  async function fetchData(url){
+    const response=await fetch(url,{signal:AbortSignal.timeout(60000),headers:{Accept:'application/json'}});
+    if(!response.ok)throw new Error(`The public source is unavailable (HTTP ${response.status}). Retry the real-data query shortly.`);
+    if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('The data source did not return JSON. Please retry.');
+    const body=await response.text();if(body.length>3000000)throw new Error('Source response exceeded the graph limit.');return JSON.parse(body);
+  }
+  async function loadNetwork(){
+    const request=++requestId,asset=$('lab-asset').value;loading=true;$('lab-live').disabled=true;
+    message(`Loading real ${asset} transactions and connection evidence…`);
+    try{const result=await fetchData(`/api/chain/network?asset=${asset}`);if(request!==requestId)return;
+      if(result.status!=='source-reported'||result.asset!==asset)throw new Error('The source returned an inconsistent asset or data mode.');
+      setGraph(A.normalize(result),null,'live');
+      message(`${result.edges.length} real connection records loaded. ${result.coverage}.`);
+      const url=new URL(location.href);url.search='';url.searchParams.set('asset',asset.toLowerCase());history.replaceState(null,'',url);
+    }catch(error){if(request===requestId){if(dataMode==='empty')$('lab-badge').textContent='REAL SOURCE UNAVAILABLE';message(error.message,true);}}
+    finally{if(request===requestId)loading=false;$('lab-live').disabled=false;}
+  }
+  $('lab-live').addEventListener('click',loadNetwork);
+  $('lab-lookup').addEventListener('submit',async event=>{
+    event.preventDefault();const asset=$('lab-asset').value,address=$('lab-address').value.trim();
+    const valid=asset==='BLCH'?/^[a-f0-9]{64}$/i.test(address):asset==='BTC'?/^(bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/i.test(address):/^0x[a-f0-9]{40}$/i.test(address);
+    if(!valid){message('Enter a public mainnet address or a 64-character Bloch script hash for the selected asset.',true);return;}
+    const request=++requestId;loading=true;message(`Querying real ${asset} records for ${address}…`);
+    try{
+      const network=asset==='BTC'?'bitcoin-mainnet':asset==='BLCH'?'bloch-mainnet':'ethereum-mainnet';
+      const params=new URLSearchParams({asset,network,address});
+      const wallet=await fetchData(`/api/chain/wallet?${params}`);
+      const activity=['USDT','USDC'].includes(asset)?await fetchData(`/api/chain/activity?${new URLSearchParams({asset,address})}`):null;
+      if(request!==requestId)return;
+      const bundle={kind:'graphus_public_chain_observation',schema_version:1,status:wallet.status,query:{asset,address},source:wallet.observation,records:{nodes:wallet.nodes,edges:wallet.edges},
+        ...(activity?{token_logs:{source:activity.observation,events:activity.activity.events}}:{})};
+      const data=A.fromBundle(bundle);setGraph(data,null,'address');$('lab-badge').textContent='REAL ADDRESS QUERY · SOURCE-REPORTED';
+      const url=new URL(location.href);url.search=new URLSearchParams({asset:asset.toLowerCase(),address}).toString();history.replaceState(null,'',url);
+      message(`${data.edges.length} real connection records returned.${asset==='ETH'?' This address endpoint supplies a balance only; use recent network data for direct ETH transfers.':''}${wallet.balance?.base_units?' Source balance: '+A.format(wallet.balance.base_units,asset)+' '+asset+'.':''}`);
+    }catch(error){if(request===requestId)message(error.message,true);}finally{if(request===requestId)loading=false;}
+  });
+  setInterval(()=>{if($('lab-auto').checked&&dataMode==='live'&&!loading&&!document.hidden)loadNetwork();},60000);
   $('lab-demo').addEventListener('click',()=>{requestId++;$('lab-holders').disabled=false;setGraph(A.fixture($('lab-asset').value));});
   $('lab-import').addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;const request=++requestId;$('lab-holders').disabled=false;
@@ -218,9 +264,12 @@
   $('lab-export-json').addEventListener('click',()=>download(`graphus-${dataset.asset.toLowerCase()}-analysis.json`,JSON.stringify({schema_version:1,kind:'graphus_local_graph_analysis',exported_at:new Date().toISOString(),independent_verification:false,dataset:filtered,metrics:summary,filters:{from_block:$('lab-from').value,to_block:$('lab-to').value,kind:$('lab-kind').value,minimum_base_units:$('lab-min').value,focus},limitations:['Filtered bounded records only; not complete chain history.','Graph structure does not establish ownership, risk, chronological flow or value continuity.']},null,2),'application/json'));
   $('lab-export-balances').addEventListener('click',()=>{if(!balanceSummary)return;download('graphus-blch-indexed-balances.csv',A.csv([['status','source','retrieved_at','anchor_height','anchor_block_id','scope','rank','script_hash','balance_base_units','balance_blch','utxo_count'],...balanceSummary.rows.map((r,i)=>['source-reported',balanceData.source,balanceData.retrieved_at,balanceData.anchor.height,balanceData.anchor.block_id,'returned indexed script subset',i+1,r.id,r.amount,A.format(r.amount,'BLCH'),r.utxos])]),'text/csv;charset=utf-8');});
   const params=new URLSearchParams(location.search),asset=params.get('asset')?.toUpperCase();
-  setGraph(A.fixture(Object.hasOwn(A.DECIMALS,asset)?asset:'ETH'));
+  $('lab-asset').value=Object.hasOwn(A.DECIMALS,asset)?asset:'BLCH';
+  $('lab-graph-workspace').hidden=true;
   if(params.get('import')==='observation'){
     try{const serialized=sessionStorage.getItem('graphus.analytics.observation.v1');sessionStorage.removeItem('graphus.analytics.observation.v1');if(!serialized||serialized.length>2000000)throw new Error('No observation is available in this tab. Import a Constellation JSON export.');setGraph(A.fromBundle(JSON.parse(serialized)));message('Constellation observation opened locally; no file was uploaded.');}
     catch(error){message(error.message,true);}
-  }
+  }else if(params.get('address')){$('lab-address').value=params.get('address');$('lab-lookup').requestSubmit();}
+  else if(params.get('mode')==='demo')setGraph(A.fixture($('lab-asset').value));
+  else loadNetwork();
 })();

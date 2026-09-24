@@ -19,7 +19,7 @@ const observation={schema_version:1,kind:'graphus_public_chain_observation',stat
     const page=await browser.newPage({viewport:{width:1440,height:1000}});
     page.on('pageerror',e=>errors.push(e.message));
     if(process.env.LIVE_SOURCE!=='1')await page.route('**/api/chain/holders?asset=BLCH',route=>route.fulfill({json:source}));
-    await page.goto(base+'/analytics.html');
+    await page.goto(base+'/analytics.html?mode=demo&asset=ETH');
     await page.waitForFunction(()=>document.querySelector('#lab-stats').innerText.includes('864'));
     assert.equal(await page.locator('.lab-charts:visible svg').count(),6);
     assert.match(await page.locator('#lab-badge').innerText(),/SYNTHETIC/);
@@ -69,7 +69,7 @@ const observation={schema_version:1,kind:'graphus_public_chain_observation',stat
     }
     const mobile=await browser.newPage({viewport:{width:390,height:844}});mobile.on('pageerror',e=>errors.push(e.message));
     for(const asset of ['ETH','USDT','USDC','BTC','BLCH']){
-      await mobile.goto(base+'/analytics.html?asset='+asset);
+      await mobile.goto(base+'/analytics.html?mode=demo&asset='+asset);
       await mobile.waitForFunction(()=>document.querySelector('#lab-stats').innerText.includes('864'));
       assert.equal(await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`Mobile overflow for ${asset}`);
       assert.equal(await mobile.locator('.lab-charts:visible svg').count(),6);

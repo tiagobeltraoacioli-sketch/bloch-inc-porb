@@ -10,7 +10,7 @@ The [Graphus preview](https://bloch-graphus.xyz/) presents the initial [three-ne
 
 ## Current status
 
-The [Analytics Lab](https://bloch-graphus.xyz/analytics.html) adds six graph charts, directed path search, components, PageRank, filters, exact-value ledgers and CSV/JSON exports. It supports five deterministic demonstrations, local Constellation observation imports, and two additional charts for source-reported indexed BLCH balance concentration. See [methods, scope and verification](docs/graphus-analytics-lab.md).
+The [Analytics Lab](https://bloch-graphus.xyz/analytics.html) loads **real public-chain records by default**, with BTC, ETH, USDT, USDC and BLCH recent-network samples and direct address queries. Six graph charts, directed paths, PageRank, filters and CSV/JSON exports preserve exact values and source anchors. Two additional charts analyze indexed BLCH balance concentration. Demonstrations are explicit opt-in; source failures never become synthetic data. See [methods, scope and verification](docs/graphus-analytics-lab.md).
 
 This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, bounded private Bitcoin, Ethereum, and Bloch transaction pilots, a private Bloch query index, deterministic graph features, offline ML research tools, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
 

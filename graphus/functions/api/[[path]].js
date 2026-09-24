@@ -2,6 +2,10 @@ import {queryChainWallet} from '../../chain/real-chain.js';
 import {queryEthereumActivity,queryEthereumReceipt} from '../../chain/ethereum-activity.js';
 import {queryBlochHolders} from '../../chain/bloch-holders.js';
 import {queryBlochHistoryPage} from '../../chain/bloch-chain.js';
+import {queryNetworkGraph} from '../../chain/network-graph.js';
+
+// At most five shared source requests per isolate per 30-second cache window.
+const networkGraphCache=new Map();
 
 const COOKIE = 'graphus_session';
 const NONCE_COOKIE = 'graphus_login_nonce';
@@ -84,6 +88,16 @@ export async function onRequest({request,env}) {
   const path=url.pathname.replace(/^\/api\/?/,'').replace(/\/$/,'');
   const method=request.method;
   const secure=url.protocol==='https:';
+  if(path==='chain/network'&&method==='GET'){
+    const asset=url.searchParams.get('asset');
+    if(url.searchParams.size!==1||!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return error('unsupported_asset',400);
+    let entry=networkGraphCache.get(asset);
+    if(!entry||entry.until<=Date.now()){
+      entry={until:Date.now()+30000,promise:queryNetworkGraph({asset,env})};networkGraphCache.set(asset,entry);
+      entry.promise.then(result=>{if(result.status!==200&&networkGraphCache.get(asset)===entry)networkGraphCache.delete(asset);});
+    }
+    const result=await entry.promise;return json(result.body,result.status);
+  }
   if(path==='chain/wallet'&&method==='GET') {
     const result=await queryChainWallet({
       network:url.searchParams.get('network'),asset:url.searchParams.get('asset'),
@@ -118,9 +132,11 @@ export async function onRequest({request,env}) {
   }
   if(path==='config'&&method==='GET')return json({google_enabled:configured(env),annotations_enabled:configured(env),google_client_id:configured(env)?env.GOOGLE_CLIENT_ID:null,daas_mode:'mixed-preview'});
   if(path==='daas/manifest'&&method==='GET')return json({
-    product:'Graphus Data as a Service',status:'mixed-synthetic-and-source-reported-preview',live_transactions:false,live_scores:false,
+    product:'Graphus Data as a Service',status:'mixed-synthetic-and-source-reported-preview',live_transactions:true,live_scores:false,
+    transaction_coverage:'bounded-on-demand-public-chain-samples',
     initial_assets:INITIAL_ASSETS,
     query_capabilities:{
+      recent_network_graph:{endpoint:'/api/chain/network',assets:['BTC','ETH','USDT','USDC','BLCH'],scope:'bounded-source-reported-samples',independently_verified:false},
       address_search:'synthetic-browser-fixture-and-bounded-source-reported-query',
       local_constellation:'synthetic-browser-fixture',production_chain_query:false,
       bounded_public_chain_address_lookup:{

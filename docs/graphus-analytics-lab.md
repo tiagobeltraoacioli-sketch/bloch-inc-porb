@@ -4,7 +4,9 @@ The [Analytics Lab](https://bloch-graphus.xyz/analytics.html) extends the Graphu
 
 ## Data modes
 
-- **Synthetic demonstration, the default:** deterministic BTC, ETH, USDT, USDC and BLCH fixtures, generated separately by asset. Each contains 144 address/script references and 864 connection records across up to 72 illustrative blocks. BTC and BLCH additionally contain 288 transaction nodes; inputs and outputs remain distinct typed records.
+- **Real recent chain records, the default:** the page automatically queries `/api/chain/network?asset=BLCH`. All five assets can be selected without supplying an address. BTC uses 20 transactions from a block selected at three source-reported confirmations, with up to 24 inputs/outputs per transaction and a best-chain recheck. BLCH uses the latest 32 indexed transactions, capped at 3,000 connection records and a bounded reference set. A separate finalized-height query is applied when available; its failure leaves finality explicitly unknown. ETH uses up to 24 positive direct-value transactions in a source-reported finalized block, requiring matched successful receipts. USDT/USDC use up to 512 fixed-contract Transfer logs in four consecutive finalized blocks. Block anchors are checked before rendering. Omitted record counts and sampling rules accompany each response. No dedicated BTC/ETH node is claimed as synchronized by these public adapters.
+- **Real address query:** the address form calls the existing public wallet and token activity endpoints directly. Exact source balances and bounded graphs are displayed without exporting/importing a file. Native ETH address lookup remains balance-only; its recent-network graph is the separate direct-value block sample above. Address URLs can be revisited, and reference inspection links to Constellation. Optional automatic network refresh runs every 60 seconds while the tab is visible; a refresh replaces the sample and resets its filters. Source failures preserve the last visible dataset or an empty error state, never substitute synthetic records.
+- **Synthetic demonstration, explicit opt-in:** deterministic BTC, ETH, USDT, USDC and BLCH fixtures, generated separately by asset. Each contains 144 address/script references and 864 connection records across up to 72 illustrative blocks. BTC and BLCH additionally contain 288 transaction nodes; inputs and outputs remain distinct typed records. Use the demonstration button or `?mode=demo&asset=ETH`.
 - **Imported observation:** an existing Constellation JSON export, opened from disk or transferred by the new “Open observation in Analytics” button. Imports are bounded to 2 MB and processed locally. The same-tab handoff is removed from session storage after reading. Source-reported metadata from a file is unverified, not authenticated evidence. Token log records are used once rather than counted again through their rendered graph edges. Native ETH balance-only observations remain graphs without transfer edges.
 - **Indexed BLCH balances:** an explicit request to the existing `/api/chain/holders?asset=BLCH` endpoint. The reported source, retrieval time and block anchor accompany the result. No private pilot data, identity labels or AML scores are published. This does not introduce a new public source or enlarge the API's existing 64-script limit.
 
@@ -19,6 +21,8 @@ Six graph charts show returned records by block, distinct-neighbor degree, conne
 The indexed balance view adds a largest-balances chart, a Lorenz curve, Gini, HHI, top-one/top-ten shares and the returned sum's share of the indexed total. All concentration statistics use the **returned balances** denominator. A truncated ranking is labeled explicitly. Complete returned sets must reconcile exactly to the indexed total; inconsistent snapshots are rejected. A script hash is not a person or a proven owner.
 
 Amounts and aggregates use `BigInt`. Chart ratios are rounded to six decimal places. Exact base units remain available in the ledger and downloads. Input and output sums remain separated by edge type; no combined transfer volume is inferred. The evidence ledger supports text search, block/amount sorting and pagination. CSV exports follow its search and sorting and neutralize spreadsheet formula prefixes. Analysis JSON includes the filtered graph, source metadata, metrics and filter parameters. Indexed balance CSV also includes its source anchor.
+
+Real network graph exports preserve transaction IDs, per-record block hashes, available outpoints and source snapshot metadata. The ledger links transactions to their public explorers. The public endpoint accepts only the five fixed asset names, bounds upstream response bytes, and coalesces source queries per asset for 30 seconds. RPC credentials remain server-side. The API publishes public chain facts only; private pilots, identity fields, customer cases and AML scores remain outside this scope.
 
 ## Development and verification
 
@@ -41,6 +45,15 @@ The default check uses a local, mocked holder response. It exercises charts for 
 GRAPHUS_URL=https://bloch-graphus.xyz LIVE_SOURCE=1 \
   PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/check_graphus_analytics.cjs
 ```
+
+Check automatic real-data loading, all five assets, exact exports, mobile layout and source failure behavior:
+
+```sh
+GRAPHUS_URL=https://bloch-graphus.xyz \
+  PLAYWRIGHT_MODULE=/absolute/path/to/playwright node scripts/check_graphus_real_browser.cjs
+```
+
+Adapter references: [Esplora API](https://github.com/Blockstream/esplora/blob/master/API.md) and [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/). A finalized tag or best-chain response is a source claim; these bounded adapters do not independently replay consensus.
 
 Publish from the `graphus/` working directory so Wrangler discovers its `functions/` API directory:
 

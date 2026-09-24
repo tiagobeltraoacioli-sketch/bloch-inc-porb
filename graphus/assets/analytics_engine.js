@@ -46,12 +46,22 @@
         if(input?(from.kind==='transaction'||to.kind!=='transaction'):(from.kind!=='transaction'||to.kind==='transaction'))
           fail('UTXO evidence must connect a reference and a transaction.');
       }
-      return {id,from:e.from,to:e.to,kind:e.kind,amount:value,block};
+      const hash=e.block_hash??e.block?.hash,txid=e.txid??e.transaction_hash;
+      return {id,from:e.from,to:e.to,kind:e.kind,amount:value,block,
+        ...(typeof hash==='string'&&/^(0x)?[a-f0-9]{64}$/i.test(hash)?{block_hash:hash}:{}),
+        ...(typeof txid==='string'&&/^(0x)?[a-f0-9]{64}$/i.test(txid)?{txid}:{}),
+        ...(Number.isSafeInteger(e.position)&&e.position>=0?{position:e.position}:{}),
+        ...(text(e.block_time,100)?{block_time:e.block_time}:{}),
+        ...(e.outpoint&&/^[a-f0-9]{64}$/i.test(e.outpoint.txid)&&Number.isSafeInteger(e.outpoint.vout)&&e.outpoint.vout>=0?{outpoint:{txid:e.outpoint.txid,vout:e.outpoint.vout}}:{}),
+      };
     });
     return {asset:data.asset,status:data.status,nodes,edges,
       source:text(data.source,300)?data.source:'Unspecified source',
       retrieved_at:text(data.retrieved_at,100)?data.retrieved_at:null,
-      coverage:text(data.coverage,1000)?data.coverage:'Bounded records only'};
+      coverage:text(data.coverage,1000)?data.coverage:'Bounded records only',
+      ...(data.anchor?{anchor:Object.fromEntries(['height','hash','time','finality','finalized_height'].filter(k=>typeof data.anchor[k]==='string'||Number.isSafeInteger(data.anchor[k])).map(k=>[k,data.anchor[k]]))}:{}),
+      ...(data.scope?{scope:Object.fromEntries(Object.entries(data.scope).filter(([key,v])=>/^[a-z_]{1,60}$/.test(key)&&(typeof v==='string'&&v.length<=500||typeof v==='boolean'||Number.isSafeInteger(v))))}:{}),
+    };
   }
   function fromBundle(bundle) {
     if(bundle?.kind!=='graphus_public_chain_observation'||bundle.schema_version!==1
@@ -69,7 +79,7 @@
       if(bundle.query.address) address(bundle.query.address);
       edges=bundle.token_logs.events.map(e=>({from:address(e.from),to:address(e.to),kind:'erc20_transfer',
         amount_base_units:e.amount_base_units,event_id:e.event_id||`${e.transaction_hash}:${e.log_index}`,
-        block_number:e.block_number}));
+        block_number:e.block_number,block_hash:e.block_hash,transaction_hash:e.transaction_hash,position:e.log_index}));
       nodes=[...refs.values()];
     }
     const source=bundle.token_logs?.source||bundle.source;
