@@ -54,14 +54,16 @@ async function json(fetcher, url, init = {}) {
   try { return JSON.parse(text); } catch { throw new Error('invalid_source_response'); }
 }
 
-async function rpc(fetcher, endpoint, method, params) {
+async function rpcResult(fetcher, endpoint, method, params, allowNull = false) {
   const body = await json(fetcher, endpoint, {
     method: 'POST', headers: {'content-type': 'application/json'},
     body: JSON.stringify({jsonrpc: '2.0', id: 1, method, params}),
   });
-  if (body?.jsonrpc !== '2.0' || body.id !== 1 || body.error || body.result == null) throw new Error('rpc_unavailable');
+  if (body?.jsonrpc !== '2.0' || body.id !== 1 || body.error || !Object.hasOwn(body, 'result') ||
+      (!allowNull && body.result == null)) throw new Error('rpc_unavailable');
   return body.result;
 }
+const rpc = (fetcher, endpoint, method, params) => rpcResult(fetcher, endpoint, method, params);
 
 function ethereumEndpoint(env) {
   const value = env.GRAPHUS_ETHEREUM_RPC_URL;
@@ -204,9 +206,8 @@ async function ethereumBlock(fetcher, env, query, now, offset = 0) {
   const byHash = isHex64(query);
   const method = byHash ? 'eth_getBlockByHash' : 'eth_getBlockByNumber';
   const tag = byHash ? `0x${query.replace(/^0x/, '')}` : `0x${BigInt(query).toString(16)}`;
-  let block;
-  try { block = await rpc(fetcher, endpoint, method, [tag, false]); }
-  catch (error) { if (error.message === 'rpc_unavailable') throw new Error('not_found'); throw error; }
+  const block = await rpcResult(fetcher, endpoint, method, [tag, false], true);
+  if (block == null) throw new Error('not_found');
   if (!isHex64(block?.hash) || !Array.isArray(block.transactions)) throw new Error('invalid_source_response');
   const finalized = await rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]);
   return {
@@ -219,17 +220,50 @@ async function ethereumBlock(fetcher, env, query, now, offset = 0) {
 
 async function ethereumTx(fetcher, env, query, now) {
   const endpoint = ethereumEndpoint(env);
-  let transaction;
-  try { transaction = await rpc(fetcher, endpoint, 'eth_getTransactionByHash', [query]); }
-  catch (error) { if (error.message === 'rpc_unavailable') throw new Error('not_found'); throw error; }
-  const [receipt, finalized] = await Promise.all([
-    rpc(fetcher, endpoint, 'eth_getTransactionReceipt', [query]).catch(() => null),
-    rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]),
+  const transaction = await rpcResult(fetcher, endpoint, 'eth_getTransactionByHash', [query], true);
+  if (transaction == null) throw new Error('not_found');
+  const [receiptResult, finalized, latest] = await Promise.all([
+    rpcResult(fetcher, endpoint, 'eth_getTransactionReceipt', [query], true).then(value => ({value, unavailable:false})).catch(() => ({value:null, unavailable:true})),
+    rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]).catch(() => null),
+    rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['latest', false]).catch(() => null),
   ]);
   if (transaction?.hash?.toLowerCase() !== query.toLowerCase()) throw new Error('invalid_source_response');
+  const receipt = receiptResult.value;
+  const receiptStatus = receiptResult.unavailable ? 'source_unavailable' : receipt == null ?
+    transaction.blockNumber == null ? 'pending' : 'missing' : ethereumReceiptMatches(transaction, receipt) ? 'available' : 'inconsistent';
+  const position = ethereumTransactionPosition(transaction, receiptStatus, finalized, latest);
   return {
-    ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Receipt status is execution success; finality is a separate checkpoint.'),
-    transaction, receipt, finalized_height: safeNumber(quantity(finalized.number)), ...ethereumReceiptFacts(receipt),
+    ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Receipt availability, execution status and finality are separate. Latest and finalized heights are separate source snapshots.'),
+    transaction, receipt, receipt_status:receiptStatus, position, finalized_height:position.finalized_height,
+    ...ethereumReceiptFacts(receiptStatus === 'available' ? receipt : null),
+  };
+}
+
+function ethereumReceiptMatches(tx, receipt) {
+  try {
+    return isHex64(receipt.transactionHash) && isHex64(receipt.blockHash) && isHex64(tx.blockHash) &&
+      receipt.transactionHash.toLowerCase() === tx.hash.toLowerCase() &&
+      receipt.blockHash?.toLowerCase() === tx.blockHash?.toLowerCase() &&
+      quantity(receipt.blockNumber) === quantity(tx.blockNumber);
+  } catch { return false; }
+}
+
+export function ethereumTransactionPosition(tx, receiptStatus, finalized, latest) {
+  const height = block => {
+    try { return isHex64(block?.hash) ? safeNumber(quantity(block.number)) : null; }
+    catch { return null; }
+  };
+  const finalizedHeight = height(finalized), headHeight = height(latest);
+  let transactionHeight = null;
+  try { if (tx.blockNumber != null) transactionHeight = safeNumber(quantity(tx.blockNumber)); }
+  catch { /* An invalid height cannot establish position. */ }
+  const confirmed = receiptStatus === 'available' && transactionHeight != null;
+  return {
+    head_height:headHeight,
+    finalized_height:finalizedHeight,
+    confirmations:confirmed && headHeight != null && headHeight >= transactionHeight ? headHeight - transactionHeight + 1 : null,
+    finality_relation:confirmed && finalizedHeight != null ?
+      transactionHeight <= finalizedHeight ? 'at_or_below_reported_checkpoint' : 'above_reported_checkpoint' : 'unavailable',
   };
 }
 

@@ -47,9 +47,12 @@ for network in ("bitcoin", "ethereum", "bloch"):
         assert transaction["facts"]["fee_rate_sat_vb"] is not None
         if transaction["facts"]["head_height"] is not None and transaction["transaction"]["status"]["confirmed"]:
             assert transaction["facts"]["confirmations"] == transaction["facts"]["head_height"] - transaction["transaction"]["status"]["block_height"] + 1
-    if network == "ethereum" and transaction["receipt"]:
+    if network == "ethereum" and transaction["receipt_status"] == "available":
         receipt = transaction["receipt"]
+        assert receipt["transactionHash"].lower() == transaction["transaction"]["hash"].lower()
+        assert receipt["blockHash"].lower() == transaction["transaction"]["blockHash"].lower()
         assert transaction["gas_fee_wei"] == str(int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16))
+        assert transaction["position"]["confirmations"] is not None
     if network == "bloch":
         position = transaction["position"]
         assert position["indexed_depth_blocks"] == transaction["transaction"]["as_of_height"] - transaction["transaction"]["height"] + 1

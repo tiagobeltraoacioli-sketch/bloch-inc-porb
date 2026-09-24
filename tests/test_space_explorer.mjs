@@ -41,15 +41,54 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
   const methods=[];
   const fetcher=async (_input,init) => {
     const request=JSON.parse(init.body);methods.push(request.method);
-    const result={eth_getTransactionByHash:{hash:`0x${hash}`,value:'0x0',blockNumber:'0x11'},eth_getTransactionReceipt:{status:'0x1',gasUsed:'0x5208'},eth_getBlockByNumber:{number:'0x10'}}[request.method];
+    const result=request.method==='eth_getBlockByNumber'?
+      request.params[0]==='latest'?{number:'0x12',hash:`0x${hash}`}:{number:'0x10',hash:`0x${block}`}:
+      {eth_getTransactionByHash:{hash:`0x${hash}`,value:'0x0',blockNumber:'0x11',blockHash:`0x${block}`},
+        eth_getTransactionReceipt:{transactionHash:`0x${hash}`,blockHash:`0x${block}`,blockNumber:'0x11',status:'0x1',gasUsed:'0x5208'}}[request.method];
     return answer({jsonrpc:'2.0',id:1,result});
   };
   const response=await handleExplore(url('tx',`network=ethereum&query=0x${hash}`),{fetcher,env:{GRAPHUS_ETHEREUM_RPC_URL:'https://ethereum-rpc.publicnode.com'}});
   assert.equal(response.status,200);
   assert.equal(response.body.transaction.hash,`0x${hash}`);
   assert.equal(response.body.receipt.status,'0x1');
+  assert.equal(response.body.receipt_status,'available');
   assert.equal(response.body.finalized_height,16);
-  assert.deepEqual(methods.sort(),['eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
+  assert.equal(response.body.position.confirmations,2);
+  assert.equal(response.body.position.finality_relation,'above_reported_checkpoint');
+  assert.deepEqual(methods.sort(),['eth_getBlockByNumber','eth_getBlockByNumber','eth_getTransactionByHash','eth_getTransactionReceipt'].sort());
+});
+
+test('Ethereum distinguishes pending receipts, source failure and mismatched block identity', async () => {
+  const baseTx={hash:`0x${hash}`,value:'0x0',blockNumber:'0x11',blockHash:`0x${block}`};
+  const baseReceipt={transactionHash:`0x${hash}`,blockHash:`0x${block}`,blockNumber:'0x11',status:'0x1',gasUsed:'0x5208'};
+  const run=async (tx, receipt, failReceipt=false) => handleExplore(url('tx',`network=ethereum&query=0x${hash}`),{
+    env:{GRAPHUS_ETHEREUM_RPC_URL:'https://ethereum-rpc.publicnode.com'},
+    fetcher:async (_input,init) => {
+      const request=JSON.parse(init.body);
+      if(request.method==='eth_getTransactionReceipt'&&failReceipt)throw new Error('timeout');
+      const result=request.method==='eth_getTransactionByHash'?tx:request.method==='eth_getTransactionReceipt'?receipt:
+        {number:'0x12',hash:`0x${block}`};
+      return answer({jsonrpc:'2.0',id:1,result});
+    },
+  });
+  const pending=await run({...baseTx,blockNumber:null,blockHash:null},null);
+  assert.equal(pending.body.receipt_status,'pending');
+  assert.equal(pending.body.position.finality_relation,'unavailable');
+  const unavailable=await run(baseTx,baseReceipt,true);
+  assert.equal(unavailable.body.receipt_status,'source_unavailable');
+  assert.equal(unavailable.body.position.confirmations,null);
+  const inconsistent=await run(baseTx,{...baseReceipt,blockHash:`0x${hash}`});
+  assert.equal(inconsistent.body.receipt_status,'inconsistent');
+  assert.equal(inconsistent.body.gas_fee_wei,null);
+});
+
+test('Ethereum block lookup separates a missing block from an RPC error', async () => {
+  const env={GRAPHUS_ETHEREUM_RPC_URL:'https://ethereum-rpc.publicnode.com'};
+  const query=url('block','network=ethereum&query=123');
+  const missing=await handleExplore(query,{env,fetcher:async()=>answer({jsonrpc:'2.0',id:1,result:null})});
+  assert.equal(missing.status,404);
+  const failed=await handleExplore(query,{env,fetcher:async()=>answer({jsonrpc:'2.0',id:1,error:{code:-32000,message:'upstream error'}})});
+  assert.equal(failed.status,503);
 });
 
 test('Bitcoin transaction fee rate uses virtual bytes and replacement needs a sequence signal', () => {
