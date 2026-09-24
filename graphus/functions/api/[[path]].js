@@ -4,6 +4,7 @@ import {queryBlochHolders} from '../../chain/bloch-holders.js';
 import {queryBlochHistoryPage} from '../../chain/bloch-chain.js';
 import {queryNetworkGraph} from '../../chain/network-graph.js';
 import {queryBalanceSample} from '../../chain/balance-sample.js';
+import {systemMapManifest,PUBLIC_READ_CORS} from '../../chain/system-map-api.js';
 
 // Bounded recent and cursor-page cache; failed responses are never retained.
 const networkGraphCache=new Map();
@@ -89,9 +90,17 @@ export async function onRequest({request,env}) {
   const path=url.pathname.replace(/^\/api\/?/,'').replace(/\/$/,'');
   const method=request.method;
   const secure=url.protocol==='https:';
+  if(['system/map','chain/network'].includes(path)){
+    if(method==='OPTIONS')return new Response(null,{status:204,headers:PUBLIC_READ_CORS});
+    if(method!=='GET')return json({error:'read_only'},405,{...PUBLIC_READ_CORS,Allow:'GET, OPTIONS'});
+  }
+  if(path==='system/map'){
+    if(url.searchParams.size)return json({error:'unexpected_query'},400,PUBLIC_READ_CORS);
+    return json(systemMapManifest(),200,{...PUBLIC_READ_CORS,'Cache-Control':'public, max-age=60'});
+  }
   if(path==='chain/network'&&method==='GET'){
     const asset=url.searchParams.get('asset'),cursor=url.searchParams.get('cursor');
-    if(url.searchParams.size!==(cursor===null?1:2)||[...url.searchParams.keys()].some(k=>!['asset','cursor'].includes(k))||!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return error('unsupported_asset',400);
+    if(url.searchParams.size!==(cursor===null?1:2)||[...url.searchParams.keys()].some(k=>!['asset','cursor'].includes(k))||!['BTC','ETH','USDT','USDC','BLCH'].includes(asset))return json({error:'unsupported_asset'},400,PUBLIC_READ_CORS);
     const key=`${asset}:${cursor??'latest'}`;
     let entry=networkGraphCache.get(key);
     if(!entry||entry.until<=Date.now()){
@@ -99,7 +108,7 @@ export async function onRequest({request,env}) {
       entry={until:Date.now()+30000,promise:queryNetworkGraph({asset,cursor,env})};networkGraphCache.set(key,entry);
       entry.promise.then(result=>{if(result.status!==200&&networkGraphCache.get(key)===entry)networkGraphCache.delete(key);});
     }
-    const result=await entry.promise;return json(result.body,result.status);
+    const result=await entry.promise;return json(result.body,result.status,PUBLIC_READ_CORS);
   }
   if(path==='chain/balances'&&method==='GET'){
     if(url.searchParams.size!==2||[...url.searchParams.keys()].some(k=>!['asset','addresses'].includes(k)))return error('invalid_balance_sample',400);

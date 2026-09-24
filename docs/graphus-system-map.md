@@ -27,6 +27,14 @@ Applicable module inspectors show reference, transaction, returned-block and mis
 
 The panel updates after each committed page. A failed or canceled continuation keeps those pages and their original digest available, while reporting the interruption. Switching the capture asset or clearing the workspace removes stale indicators. Switching only a map filter never clears or changes the underlying capture. Captures remain in tab memory and are not a permanent multi-asset data store.
 
+## Public integration API
+
+`GET /api/system/map` returns schema version 1 of the central module registry: supported assets, layers, categories, implementation labels, module contracts, connections and per-asset action links. Registry version `2026-09-24.1` describes implementation availability, not current source health. No query parameters are accepted.
+
+The registry endpoint and `GET /api/chain/network` permit credential-free browser reads through public CORS (`GET, OPTIONS`). Error responses on the network read retain these headers. Account/session, annotation and private portal routes do not inherit this CORS policy. These public endpoints do not require or accept a portal API key to authorize their public observations.
+
+The native [Bloch Explorer System Map](https://blochl1.com/system-map) consumes the registry and network API directly in the browser. The BLCH adapter itself reads the explorer indexer; a server-side explorer → Graphus → explorer proxy would form a circular Worker path. Explorer code instead validates and packages the browser response using a pinned copy of the same evidence routines. Its full and filtered JSON exports can be opened by Graphus's existing local evidence import.
+
 ## AML evidence preparation
 
 The workbench queries the existing public `/api/chain/network?asset=...` endpoint only when requested. BTC, ETH, Ethereum USDT/USDC and BLCH use their existing bounded source adapters. This does not activate a sanctions matcher, case manager, automatic monitoring schedule, identity resolver or AML classifier. Those modules retain their documented prototype/planned stages. The private Red/Blue portal provides descriptive observation scores under its existing model and organization access contract.
@@ -60,7 +68,7 @@ Full and filtered collections also open directly in Constellation through **Grap
 ## Verification and deployment
 
 ```sh
-node --test tests/test_system_map.mjs tests/test_system_observation.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
+node --test tests/test_system_map_api.mjs tests/test_system_map.mjs tests/test_system_observation.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
 GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_browser.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_system_map_panel_browser.mjs
