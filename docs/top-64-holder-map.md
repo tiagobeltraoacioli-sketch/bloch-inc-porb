@@ -12,9 +12,11 @@ The public Bloch historical indexer exposes `/indexer/holders?limit=64`. It
 sorts positive script-hash balances in its indexed canonical state and reports
 the number of positive script hashes, indexed total satoshis, block height,
 slot, and block ID. Graphus fetches this list and `/indexer/health`, requires
-matching anchors and zero reported lag, checks rank order and unique scripts,
+zero reported lag and a matching or newer health head, checks rank order and unique scripts,
 and reconciles the sum with the indexed total when all positive scripts fit in
-the list. A moving or malformed source fails closed.
+the list. A mismatched same-height block or malformed source fails closed. A
+newer health head is identified separately while the ranking retains its own
+reported block anchor.
 
 The UI identifies this as a **source-reported indexed-script ranking**. It
 does not establish beneficial ownership, combine scripts controlled by the same

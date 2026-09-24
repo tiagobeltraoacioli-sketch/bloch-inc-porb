@@ -4,7 +4,7 @@ const DECIMAL = /^(0|[1-9][0-9]*)$/;
 const MAX_BYTES = 128 * 1024;
 
 async function sourceJson(fetcher, path) {
-  const response = await fetcher(`${BASE}/${path}`, {signal: AbortSignal.timeout(8000)});
+  const response = await fetcher(`${BASE}/${path}`, {signal: AbortSignal.timeout(15000)});
   if (!response.ok) throw new Error('bloch_indexer_unavailable');
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > MAX_BYTES) throw new Error('bloch_indexer_response_too_large');
@@ -27,9 +27,11 @@ function validate(holders, health) {
     || !DECIMAL.test(holders.indexed_total_sat || '')
     || holders.returned !== holders.holders.length || holders.returned > 64
     || holders.returned !== Math.min(64, holders.total_script_hashes_with_balance)
-    || holders.chain_tip.toLowerCase() !== health.chain_tip.toLowerCase()
-    || holders.as_of_height !== health.indexed_to_height
-    || holders.as_of_slot !== health.indexed_to_slot) return false;
+    || health.indexed_to_height < holders.as_of_height
+    || health.indexed_to_slot < holders.as_of_slot
+    || (health.indexed_to_height === holders.as_of_height
+      && (holders.as_of_slot !== health.indexed_to_slot
+        || holders.chain_tip.toLowerCase() !== health.chain_tip.toLowerCase()))) return false;
   let previous = null;
   const seen = new Set();
   for (const [index, row] of holders.holders.entries()) {
@@ -52,8 +54,9 @@ function validate(holders, health) {
 export async function queryBlochHolders({fetcher = fetch, now = () => new Date()} = {}) {
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const holders = await sourceJson(fetcher, 'holders?limit=64');
-      const health = await sourceJson(fetcher, 'health');
+      const [holders, health] = await Promise.all([
+        sourceJson(fetcher, 'holders?limit=64'), sourceJson(fetcher, 'health'),
+      ]);
       if (validate(holders, health)) return {status: 200, body: {
         status: 'source-reported', asset: 'BLCH', network: 'bloch-mainnet',
         ranking_unit: 'script_hash', scope: 'indexed_canonical_state',
@@ -65,6 +68,7 @@ export async function queryBlochHolders({fetcher = fetch, now = () => new Date()
           positive_script_hashes_in_index: holders.total_script_hashes_with_balance,
           indexed_total_sat: holders.indexed_total_sat,
           lag_slots: health.lag_slots,
+          health_head_advanced: health.indexed_to_height > holders.as_of_height,
           source_verification: health.verification,
           source: health.source || null,
         },

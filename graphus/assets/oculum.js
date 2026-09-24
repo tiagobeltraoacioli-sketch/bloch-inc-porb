@@ -291,6 +291,7 @@ function renderCoverage(items){
     for(const line of [
       `Indexed total: ${formattedAmount(blochIndex.coverage.indexed_total_sat,'BLCH',8)} across the source UTXO view.`,
       `Source lag: ${blochIndex.coverage.lag_slots} slots at retrieval ${observedTime(blochIndex.retrieved_at)}.`,
+      blochIndex.coverage.health_head_advanced?'The source health head advanced after this ranked snapshot; values remain anchored to the earlier reported block.':'The source health check reported the same block as this ranked snapshot.',
       `Source verification: ${blochIndex.coverage.source_verification}; Graphus has not independently replayed state.`,
       'A script hash is not a person or proof of common ownership. A reorganization can change the reported tip.',
     ]){const li=document.createElement('li');li.textContent=line;facts.append(li);}

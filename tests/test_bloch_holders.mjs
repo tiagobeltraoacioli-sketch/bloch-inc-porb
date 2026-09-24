@@ -34,6 +34,15 @@ test('moving source tip fails closed after a second check',async()=>{
   assert.equal(calls,4);
 });
 
+test('a newer health head does not invalidate an anchored earlier source snapshot',async()=>{
+  const newer={...health,indexed_to_height:101,indexed_to_slot:121,chain_tip:first};
+  const fetcher=url=>Promise.resolve(response(url.includes('/holders?')?holders:newer));
+  const result=await queryBlochHolders({fetcher});
+  assert.equal(result.status,200);
+  assert.equal(result.body.anchor.block_id,tip);
+  assert.equal(result.body.coverage.health_head_advanced,true);
+});
+
 test('inconsistent indexed balance totals are rejected',async()=>{
   const fetcher=url=>Promise.resolve(response(url.includes('/holders?')?{...holders,indexed_total_sat:'101'}:health));
   const result=await queryBlochHolders({fetcher});
