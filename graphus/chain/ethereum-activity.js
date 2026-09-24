@@ -173,6 +173,7 @@ export async function queryEthereumActivity({address, asset, env = {}, fetcher =
     }};
   } catch (error) {
     if (error.message === 'ethereum_rpc_not_configured') return fail(error.message, 503);
+    console.error('ethereum_activity_source_failure', error.name, error.message);
     return fail('chain_source_unavailable');
   }
 }
