@@ -23,6 +23,7 @@ let blochIndex=null;
 const MAX_SAMPLE_PER_ASSET=64;
 const MAX_BATCH=16;
 let selectedKey=null;
+let comparisonA=null,comparisonB=null;
 let points=[];
 let width=0,height=0,dpr=1;
 
@@ -71,6 +72,7 @@ function clearBlochRecords(){
   }
   blochIndex=null;
   selectedKey=null;
+  comparisonA=null;comparisonB=null;
 }
 function setStatus(message,kind='neutral'){
   const dot=document.createElement('span');dot.className='oculum-source-dot';dot.setAttribute('aria-hidden','true');
@@ -134,7 +136,18 @@ function renderDetail(record){
   caveat.textContent=record.origin==='indexed Bloch script hash'
     ?'This ranks positive script hashes in the Bloch source index at one reported chain tip. A script hash does not identify an owner or all holdings controlled by one wallet. Graphus has not independently replayed the source state.'
     :'An address or script hash does not identify an owner or all holdings controlled by one wallet. Retrieval times and block anchors can differ. This queried sample is not a network-wide holder ranking.';
-  detail.append(title,dl,caveat);
+  const comparisonActions=document.createElement('div');comparisonActions.className='oculum-compare-assign';
+  for(const [slot,label] of [['a','Compare as A'],['b','Compare as B']]){
+    const button=document.createElement('button');button.type='button';button.textContent=label;
+    button.setAttribute('aria-pressed',String((slot==='a'?comparisonA:comparisonB)===record.key));
+    button.addEventListener('click',()=>{
+      if(slot==='a'){comparisonA=record.key;if(comparisonB===record.key)comparisonB=null;}
+      else{comparisonB=record.key;if(comparisonA===record.key)comparisonA=null;}
+      render();
+    });
+    comparisonActions.append(button);
+  }
+  detail.append(title,comparisonActions,dl,caveat);
   const graphUrl=new URL('/constellation',location.origin);
   graphUrl.searchParams.set('asset',record.asset.toLowerCase());
   graphUrl.searchParams.set('address',record.address);
@@ -355,7 +368,38 @@ function render(){
   renderCoverage(items);
   renderList(items);
   renderDetail(items.find(item=>item.key===selectedKey));
+  renderComparison();
   draw();
+}
+function renderComparison(){
+  const a=records.get(comparisonA),b=records.get(comparisonB);
+  const left=document.getElementById('oculum-compare-a');
+  const right=document.getElementById('oculum-compare-b');
+  const result=document.getElementById('oculum-compare-result');
+  const asset=assetSelect.value.toUpperCase();
+  left.textContent=a&&a.asset===asset?`${a.address} · ${formattedAmount(a.baseUnits,a.asset,a.decimals)}`:'Choose a point';
+  right.textContent=b&&b.asset===asset?`${b.address} · ${formattedAmount(b.baseUnits,b.asset,b.decimals)}`:'Choose another point';
+  result.replaceChildren();
+  if(!a||!b||a.asset!==asset||b.asset!==asset){
+    result.textContent='Choose two identifiers for the same asset to compare their source-reported balances.';
+    return;
+  }
+  let comparison;
+  try{comparison=GraphusOculumCompare.compareSourceBalances(a,b);}
+  catch{result.textContent='These observations cannot be compared: asset, network, contract or amount units differ.';return;}
+  const headline=document.createElement('strong');
+  headline.textContent=comparison.larger==='equal'
+    ?`A and B have equal source-reported balances: ${formattedAmount(a.baseUnits,a.asset,a.decimals)}.`
+    :`${comparison.larger.toUpperCase()} exceeds ${comparison.larger==='a'?'B':'A'} by ${formattedAmount(comparison.differenceBaseUnits,a.asset,a.decimals)}.`;
+  const anchor=document.createElement('small');
+  anchor.textContent=comparison.sameSnapshot
+    ?`Same source and block hash · ${a.source} · ${a.block.hash}`
+    :comparison.anchor==='different_blocks'
+      ?'Different block hashes: these balances are separate source observations, not one snapshot.'
+      :'No shared block anchor: these balances are separate source observations, not one snapshot.';
+  const limit=document.createElement('small');
+  limit.textContent='Comparison covers only these selected network references. It does not establish common ownership or a network-wide holder rank.';
+  result.append(headline,anchor,limit);
 }
 function renderCoverage(items){
   coverage.replaceChildren();
@@ -491,6 +535,7 @@ form.addEventListener('submit',addAddress);
 batchButton.addEventListener('click',addBatch);
 blochButton.addEventListener('click',loadBlochIndex);
 assetSelect.addEventListener('change',()=>{
+  comparisonA=null;comparisonB=null;
   updateIdentifierInput();render();
   const record=records.get(selectedKey);
   if(record&&record.asset===assetSelect.value.toUpperCase())updateSelectedUrl(record);
@@ -503,6 +548,9 @@ function updateIdentifierInput(){
   addressInput.maxLength=blch?64:128;
 }
 filter.addEventListener('input',()=>renderList(currentRecords()));
+document.getElementById('oculum-compare-clear').addEventListener('click',()=>{
+  comparisonA=null;comparisonB=null;render();
+});
 canvas.addEventListener('click',event=>{
   const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;
   const hit=[...points].reverse().find(point=>Math.hypot(x-point.x,y-point.y)<Math.max(14,point.radius+7));
