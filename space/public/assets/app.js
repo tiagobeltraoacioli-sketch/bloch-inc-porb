@@ -185,6 +185,17 @@ function renderActivityCharts(network,data){
     historyBars(panel,'Gas used / block limit',ratios.map((ratio,index)=>({height:(oldest+BigInt(index)).toString(),value:`${(ratio*100).toFixed(0)}%`,detail:`${(ratio*100).toFixed(2)}% gas used at block #${oldest+BigInt(index)}`,percent:ratio*100})));
     historyBars(panel,'Base fee per gas',fees.map((fee,index)=>({height:(oldest+BigInt(index)).toString(),value:`${Number(BigInt(fee)*10n**2n/10n**9n)/100} gwei`,detail:`${exactInteger(fee)} wei base fee at block #${oldest+BigInt(index)}`,percent:Number(BigInt(fee)*10000n/maxFee)/100})));
     panel.append(element('p','history-note','RPC fee-history sample, oldest to newest, retrieved separately from the displayed head. Base-fee bars scale to this sample; they are observations, not fee recommendations. Axis labels show the last four height digits; select a bar for its full block.'));
+  }else if(network==='bloch'){
+    const head=data.head||{},slots=head.slots_per_epoch,index=head.slot_in_epoch;
+    const valid=value=>Number.isSafeInteger(value)&&value>=0;
+    if(!valid(head.epoch)||!valid(head.slot)||!valid(slots)||slots<2||slots>128||!valid(index)||index>=slots||!valid(head.justified?.epoch)||!valid(head.finalized?.epoch))return;
+    panel.hidden=false;panel.append(element('strong','history-heading','BLOCH / SOURCE-REPORTED POS POSITION'));
+    const stages=element('div','consensus-stages');for(const [label,epoch] of [['Finalized epoch',head.finalized.epoch],['Justified epoch',head.justified.epoch],['Head epoch',head.epoch]]){const stage=element('div','consensus-stage');stage.append(element('span','',label),element('strong','',count(epoch)));stages.append(stage);}panel.append(stages);
+    const position=element('div','epoch-position');position.append(element('span','',`Epoch ${count(head.epoch)} · slot ${count(index+1)} of ${count(slots)}`),element('strong','',`Absolute slot ${count(head.slot)}`));panel.append(position);
+    const grid=element('div','epoch-slots');grid.style.gridTemplateColumns=`repeat(${slots},minmax(0,1fr))`;grid.setAttribute('role','img');grid.setAttribute('aria-label',`Epoch ${head.epoch}, current slot ${index+1} of ${slots}. Earlier positions are elapsed; later positions are upcoming.`);
+    for(let slot=0;slot<slots;slot++){const cell=element('span',slot===index?'epoch-slot-current':slot<index?'epoch-slot-elapsed':'epoch-slot-future');cell.title=`Epoch position ${slot+1} of ${slots}`;grid.append(cell);}panel.append(grid);
+    if(typeof head.block_id==='string'&&/^[0-9a-f]{64}$/i.test(head.block_id)){const button=element('button','consensus-head-link','Inspect reported head block ↗');button.type='button';button.addEventListener('click',()=>openRecord('block',head.block_id));panel.append(button);}
+    panel.append(element('p','history-note','Epoch markers and slot position come from one reported network-head response. The indexer position below is a separate retrieval. Elapsed slot positions do not imply that every slot produced a block.'));
   }
 }
 
@@ -214,7 +225,12 @@ function renderOverview(data) {
   }else{
     const h=data.head,health=data.health,holders=data.holders;
     metrics.append(metric('Head height',count(h.height),'PoS block count'),metric('Head slot',count(h.slot),'Epoch position'),metric('Finalized height',count(h.finalized_height),'Network claim'),metric('Epoch',count(h.epoch)),metric('Indexed transactions',count(health?.transactions)),metric('Funded script references',count(holders?.total_script_hashes_with_balance),'eUTXO only'));
-    signals.append(signal('Head block',compact(h.block_id)),signal('Indexer slot',count(health?.indexed_to_slot)),signal('Corroboration',data.corroboration?.level||'unknown'));
+    if(Number.isSafeInteger(h.validators?.active)&&Number.isSafeInteger(h.validators?.total))metrics.append(metric('Active validators',`${count(h.validators.active)} / ${count(h.validators.total)}`,'Network-head report'));
+    if(typeof h.total_active_stake_sat==='string'&&/^[0-9]+$/.test(h.total_active_stake_sat))metrics.append(metric('Active stake',`${decimal(h.total_active_stake_sat,8)} BLCH`,'Network-head report'));
+    if(Number.isSafeInteger(h.mempool)&&h.mempool>=0)metrics.append(metric('Observed mempool',count(h.mempool),'Reporting node'));
+    if(Number.isSafeInteger(h.behind_by_slots)&&h.behind_by_slots>=0)metrics.append(metric('Wall-slot distance',`${count(h.behind_by_slots)} slots`,'Network-head report'));
+    const matchedTip=health?.chain_tip===h.block_id&&health?.indexed_to_height===h.height&&health?.indexed_to_slot===h.slot;
+    signals.append(signal('Head block',compact(h.block_id)),signal('Indexer slot',count(health?.indexed_to_slot)),signal('Indexer snapshot',matchedTip?'Same reported head ID, height and slot':'Separate or unavailable position'),signal('Corroboration',data.corroboration?.level||'unknown'));
     $('#latest-note').textContent='Recent indexed transfers; blocks without transactions remain visible by slot search.';
     for(const tx of data.recent_transactions||[])latest.append(row(compact(tx.txid),`Slot ${count(tx.slot)} · ${tx.kind}`,`${tx.fee_sat??'—'} sat fee`,()=>openRecord('tx',tx.txid)));
   }

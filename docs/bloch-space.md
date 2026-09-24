@@ -15,7 +15,7 @@ choice in the browser.
 | --- | --- | --- | --- |
 | Bitcoin | Blockstream Esplora best-chain blocks, recent block transaction and size charts, mempool fee-depth histogram, bounded recent mempool entries and fee estimates | Esplora block, transaction, outspend facts, source-head confirmation depth, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
 | Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price, and optional 12-block gas-use and base-fee history | JSON-RPC block and identity-checked receipt; confirmation depth, execution and blob gas fees, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
-| Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts with indexed depth and finalized-height comparison | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
+| Bloch | Bloch Explorer network head, epoch-position and finality markers, validator/stake/mempool claims, and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts with indexed depth and finalized-height comparison | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
 
 The API is read-only and validates network, record type, identifier, asset, and
 parameter count before a source call. Responses are capped at 3 MiB, have an
@@ -87,6 +87,12 @@ The two Ethereum charts show gas-used ratio and exact-base-fee observations;
 bars open their source block. Bar heights for transaction count, Bitcoin block
 size and Ethereum base fee scale to the maximum in each displayed sample.
 No series extrapolates past its returned range.
+The Bloch overview draws the current slot within its reported epoch and shows
+the source head's finalized, justified, and current epoch markers. These fields
+come from one network-head response; the indexer remains a separate snapshot.
+The additional validator, stake, mempool, and wall-slot metrics are reported
+node observations. Slot positions are not a count of produced blocks, and the
+panel does not claim a network-wide peer count.
 Ethereum receipt state distinguishes pending, missing, unavailable and a block
 identity mismatch. Execution fields, token events, confirmation depth and the
 relation to the finalized height are shown only after the receipt transaction

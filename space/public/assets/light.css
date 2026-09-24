@@ -61,6 +61,15 @@ html[data-theme="light"] .history-value{color:#22341c}
 html[data-theme="light"] .history-axis,html[data-theme="light"] .history-note{color:#4b6044}
 html[data-theme="light"] .history-track{background:#e3eddb}
 html[data-theme="light"] .history-bar{background:#83bd20}
+html[data-theme="light"] .consensus-stage{border-color:#c1d3b8;background:#f0f8e8}
+html[data-theme="light"] .consensus-stage span,html[data-theme="light"] .epoch-position span{color:#41523c}
+html[data-theme="light"] .epoch-position strong{color:#315900}
+html[data-theme="light"] .epoch-slots span{border-color:#a3b797}
+html[data-theme="light"] .epoch-slot-elapsed{background:#8cbb46}
+html[data-theme="light"] .epoch-slot-current{background:#5b9800;box-shadow:0 0 9px #81b63488}
+html[data-theme="light"] .epoch-slot-future{background:#e0ebd7}
+html[data-theme="light"] .consensus-head-link{border-color:#8aaa74;background:#eff8e4;color:#315900}
+html[data-theme="light"] .consensus-head-link:hover{border-color:#4f7e18}
 html[data-theme="light"] .flow-legend,html[data-theme="light"] .flow-note{color:#41533d}
 html[data-theme="light"] .flow-legend strong{color:#315900}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}
