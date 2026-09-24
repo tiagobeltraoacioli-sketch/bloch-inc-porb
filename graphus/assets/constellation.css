@@ -30,3 +30,4 @@
 .source-block-timeline-controls small{color:#aac39e;font-size:.59rem}
 .source-block-timeline-bar{display:block;height:4px;background:#344832}
 .source-block-timeline-bar i{display:block;height:100%;background:#baff28}
+.live-export[hidden]{display:none}

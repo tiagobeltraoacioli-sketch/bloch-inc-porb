@@ -38,12 +38,30 @@ liveTransactionDetail.before(sourceMetricsPanel);
 const liveButton=document.createElement('button');
 liveButton.type='button';liveButton.id='load-live-address';liveButton.textContent='Load public-chain address';
 document.querySelector('.constellation-controls').append(liveButton);
+const exportButton=document.createElement('button');
+exportButton.type='button';exportButton.id='download-observation';exportButton.className='live-export';
+exportButton.textContent='Download current observation JSON';exportButton.hidden=true;
+liveButton.after(exportButton);
+exportButton.addEventListener('click',()=>{
+  try{
+    const bundle=GraphusObservationExport.buildObservationBundle(realObservation);
+    const blob=new Blob([JSON.stringify(bundle,null,2)+'\n'],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const filename=`graphus_${bundle.query.asset.toLowerCase()}_${bundle.query.address.replace(/[^a-zA-Z0-9]/g,'').slice(0,20)}_${bundle.exported_at.replace(/[-:]/g,'').replace(/\.\d{3}Z$/,'Z')}.json`;
+    const link=document.createElement('a');link.href=url;link.download=filename;
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }catch(error){
+    document.getElementById('wallet-search-status').textContent=`Observation export unavailable: ${error.message}`;
+  }
+});
 function setDataMode(mode,detail){
   const status=document.getElementById('constellation-data-status');
   status.dataset.mode=mode;
   document.body.dataset.constellationMode=mode;
   document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':'Synthetic preview';
   document.getElementById('constellation-data-detail').textContent=detail;
+  exportButton.hidden=mode!=='source-reported';
   document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   document.getElementById('constellation-help').textContent=mode==='source-reported'
