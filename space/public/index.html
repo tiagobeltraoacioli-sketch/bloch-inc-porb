@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050706">
+  <meta name="description" content="Bloch Space is a source-aware explorer for Bitcoin, Ethereum and Bloch. Blocks, transactions, addresses, network state and Graphus relationships in one place.">
+  <meta property="og:title" content="Bloch Space — Blocks meet epochs">
+  <meta property="og:description" content="Explore Bitcoin, Ethereum and Bloch with exact chain facts, source context and Graphus relationships.">
+  <title>Bloch Space — Blocks meet epochs</title>
+  <link rel="icon" href="/assets/favicon.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <script src="/assets/app.js" type="module"></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to explorer</a>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Bloch Space home"><img src="/assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-rule"></span><span class="brand-word">SPACE<span class="brand-pulse"></span></span></a>
+      <div class="topbar-tag">BLOCKS <span>×</span> EPOCHS <span>×</span> EVIDENCE</div>
+      <nav class="top-links" aria-label="Bloch network and company"><a href="https://bloch-graphus.xyz/">Graphus ↗</a><a href="https://blochl1.com/">Bloch L1 ↗</a><a href="https://blochinc.xyz/">Bloch Inc ↗</a></nav>
+    </header>
+    <main id="content">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy"><p class="eyebrow"><span class="live-pip"></span> BLOCH SPACE / MULTICHAIN EXPLORER</p><h1 id="hero-title">Blocks meet<br><em>epochs.</em></h1><p class="hero-lede">One research surface for Bitcoin, Ethereum and Bloch. Inspect live chain facts, trace a public identifier, and see exactly which source supports each answer.</p><div class="hero-line"><span>BTC / UTXO</span><span>ETH / EXECUTION + FINALITY</span><span>BLCH / GENESIS-4 PoS</span></div></div>
+        <div class="hero-orbit" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit orbit-three"></div><span class="orbit-core">B<span>·</span>S</span><span class="orbit-label orbit-label-a">BITCOIN</span><span class="orbit-label orbit-label-b">ETHEREUM</span><span class="orbit-label orbit-label-c">BLOCH</span></div>
+      </section>
+      <section class="explore" aria-labelledby="explore-title">
+        <div class="section-head"><div><p class="eyebrow">01 / EXPLORE THE NETWORKS</p><h2 id="explore-title">Choose a chain.<br><span>Follow the evidence.</span></h2></div><p>Amounts stay in exact base units at the API boundary. Each network keeps its own transaction and finality model.</p></div>
+        <div class="network-tabs" role="tablist" aria-label="Choose network"><button type="button" role="tab" data-network="bitcoin" aria-selected="true"><span class="tab-symbol">₿</span><span>Bitcoin<small>Proof of work</small></span><i class="tab-light"></i></button><button type="button" role="tab" data-network="ethereum" aria-selected="false"><span class="tab-symbol">◇</span><span>Ethereum<small>Execution + consensus</small></span><i class="tab-light"></i></button><button type="button" role="tab" data-network="bloch" aria-selected="false"><span class="tab-symbol">✳</span><span>Bloch<small>Genesis-4 PoS</small></span><i class="tab-light"></i></button></div>
+        <form id="search-form" class="search" role="search"><label class="search-label" for="search-input">Search this network</label><div class="search-line"><div class="search-icon" aria-hidden="true">⌕</div><input id="search-input" type="search" spellcheck="false" autocomplete="off" placeholder="Block height, transaction ID or address" required><select id="search-kind" aria-label="Search type"><option value="auto">Detect type</option><option value="block">Block / slot</option><option value="tx">Transaction</option><option value="address">Address / script</option></select><select id="search-asset" aria-label="Asset"><option value="ETH">ETH</option><option value="USDT">USDT</option><option value="USDC">USDC</option></select><button type="submit">Explore <span aria-hidden="true">↗</span></button></div><p id="search-hint">Search a Bitcoin address, transaction ID, block hash or height.</p></form>
+        <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+        <div class="dashboard-grid"><section class="network-panel" aria-labelledby="network-title"><div class="panel-head"><div><p class="eyebrow">LIVE NETWORK</p><h3 id="network-title">Bitcoin / mainnet</h3></div><span id="network-status" class="status-pill">Connecting</span></div><div id="metrics" class="metric-grid" aria-live="polite"></div><div id="holder-map" class="holder-map" hidden></div><div id="source-line" class="source-line"></div></section><section class="signal-panel" aria-labelledby="signal-title"><div class="panel-head"><div><p class="eyebrow">NETWORK SIGNAL</p><h3 id="signal-title">What the source sees</h3></div></div><div id="signal" class="signal-body"></div></section></div>
+      </section>
+      <section id="result-section" class="result-section" aria-labelledby="result-title" hidden><div class="section-head"><div><p class="eyebrow">02 / INSPECT A RECORD</p><h2 id="result-title">The record,<br><span>with context.</span></h2></div><button type="button" id="clear-result" class="text-button">Clear record ×</button></div><div id="result"></div></section>
+      <section class="latest-section" aria-labelledby="latest-title"><div class="section-head"><div><p class="eyebrow">03 / RECENT OBSERVATIONS</p><h2 id="latest-title">Latest in view.</h2></div><p id="latest-note">A bounded window from the selected source.</p></div><div id="latest-list" class="latest-list" aria-live="polite"></div></section>
+      <section class="graphus-band"><div><p class="eyebrow">GRAPHUS / CONNECTED RESEARCH</p><h2>From records<br>to relationships.</h2><p>Bloch Space brings Graphus public address observations into the explorer. Continue into Graphus for its Oculum map, constellation and data atlas. Source observations remain distinct from ownership or AML conclusions.</p></div><div class="graphus-links"><a href="https://bloch-graphus.xyz/constellation.html">Explore constellation <span>↗</span></a><a href="https://bloch-graphus.xyz/oculum.html">Open Oculum <span>↗</span></a><a href="https://bloch-graphus.xyz/catalog.html">Data atlas <span>↗</span></a><a href="https://blochl1.com/graphus/constellation">Bloch Graphus <span>↗</span></a></div></section>
+    </main>
+    <footer><span>© 2026 Bloch Inc · Bloch Space</span><span>Public chain references are not people. Source coverage and finality vary by network.</span><a href="https://blochinc.xyz/">A Matter of Data ↗</a></footer>
+  </div>
+</body>
+</html>

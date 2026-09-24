@@ -1,0 +1,6 @@
+name = "bloch-space"
+compatibility_date = "2026-09-24"
+pages_build_output_dir = "public"
+
+[vars]
+GRAPHUS_ETHEREUM_RPC_URL = "https://ethereum-rpc.publicnode.com"

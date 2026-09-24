@@ -1,0 +1,186 @@
+const $ = selector => document.querySelector(selector);
+const state = {network:'bitcoin', overview:null, result:null, request:0};
+const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
+const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Choose ETH, USDT or USDC for addresses.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
+const assetDecimals = {BTC:8, ETH:18, USDT:6, USDC:6, BLCH:8};
+const clear = node => node.replaceChildren();
+const element = (tag, className, text) => {const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
+const compact = value => {const text=String(value??'—');return text.length>27?`${text.slice(0,15)}…${text.slice(-9)}`:text;};
+const count = value => Number.isSafeInteger(value)?new Intl.NumberFormat('en-US').format(value):value==null?'—':String(value);
+const hexNumber = value => {try{return count(Number(BigInt(value)));}catch{return '—';}};
+const decimal = (raw, places) => {try{const n=BigInt(raw);const base=10n**BigInt(places);const whole=(n/base).toString();const part=(n%base).toString().padStart(places,'0').replace(/0+$/,'');return `${new Intl.NumberFormat('en-US').format(BigInt(whole))}${part?'.'+part.slice(0,8):''}`;}catch{return '—';}};
+const time = value => {const date=new Date(typeof value==='number'?value*1000:value);return Number.isFinite(date.getTime())?date.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'})+' UTC':'—';};
+const message = (text, error=false) => {const node=$('#message');node.hidden=!text;node.textContent=text;node.dataset.state=error?'error':'info';};
+const note = text => element('p','result-copy',text);
+
+async function api(route, network, query, asset) {
+  const params=new URLSearchParams({network});
+  if(query)params.set('query',query);
+  if(asset && route==='address')params.set('asset',asset);
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
+    const body=await response.json();
+    if(!response.ok)throw new Error(body.error||`Source returned ${response.status}`);
+    return body;
+  }finally{clearTimeout(timer);}
+}
+
+function metric(label,value,detail='') {const box=element('div','metric');box.append(element('span','',label),element('strong','',value));if(detail)box.append(element('small','',detail));return box;}
+function signal(label,value) {const box=element('div','signal-item');box.append(element('span','',label),element('strong','',value));return box;}
+function row(label,detail,side='',action=null) {const item=element('div','record-row');const main=element('div');if(action){const button=element('button','',label);button.type='button';button.addEventListener('click',action);main.append(button);}else main.append(element('strong','',label));if(detail)main.append(element('small','',detail));item.append(main,element('span','',side));return item;}
+function card(kicker,title) {const section=element('section','result-card');section.append(element('p','eyebrow',kicker),element('h3','',title));return section;}
+function fields(container, entries) {const list=element('dl','field-grid');for(const [label,value] of entries){const item=element('div','field');item.append(element('dt','',label),element('dd','',value??'—'));list.append(item);}container.append(list);}
+function provenance(data, additional=[]) {const section=card('SOURCE / SCOPE','How this answer was made');const list=element('div','provenance');for(const [label,value] of [['Source',data.source],['Retrieved',time(data.retrieved_at)],['Independent verification',data.independent_verification?'Yes':'No'],['Boundary',data.note],...additional]){const box=element('div');box.append(element('span','',label),element('strong','',value??'—'));list.append(box);}section.append(list);return section;}
+function openRecord(kind,query,asset) {$('#search-kind').value=kind;$('#search-input').value=query;if(asset)$('#search-asset').value=asset;search(kind,query,asset);}
+
+function renderHolders(page) {
+  const panel=$('#holder-map');clear(panel);panel.hidden=!page?.holders?.length;
+  if(panel.hidden)return;
+  const title=element('div','holder-map-head');title.append(element('strong','',`GRAPHUS OCULUM / TOP ${count(page.returned)} SCRIPT REFERENCES`),element('span','',`H${count(page.as_of_height)} · ${64-page.returned} open positions`));panel.append(title);
+  const grid=element('div','holder-map-grid');grid.setAttribute('role','list');grid.setAttribute('aria-label','64 ranked Bloch script positions');
+  const largest=BigInt(page.holders[0].balance_sat);
+  for(let index=0;index<64;index++){
+    const holder=page.holders[index];const cell=element('div','holder-map-cell');cell.setAttribute('role','listitem');
+    if(holder){const ratio=Math.log1p(99*Number(holder.balance_sat)/Number(largest))/Math.log(100);const size=Math.round(8+ratio*31);const button=element('button','holder-dot',String(index+1));button.type='button';button.style.setProperty('--dot-size',`${size}px`);button.style.setProperty('--dot-glow',`${Math.round(2+ratio*24)}px`);button.title=`#${index+1} · ${decimal(holder.balance_sat,8)} BLCH · ${holder.utxo_count} UTXOs`;button.setAttribute('aria-label',`Rank ${index+1}: ${decimal(holder.balance_sat,8)} BLCH, inspect script`);button.addEventListener('click',()=>openRecord('address',holder.script_hash,'BLCH'));cell.append(button);}
+    else{cell.classList.add('holder-map-empty');cell.setAttribute('aria-label',`Position ${index+1}: no funded script reference`);cell.append(element('span','holder-empty-dot'));}
+    grid.append(cell);
+  }
+  panel.append(grid,element('p','holder-map-note','Exact indexed eUTXO balances. Size and glow use a visual scale; script references do not identify wallet owners.'));
+}
+
+function renderOverview(data) {
+  state.overview=data;
+  const network=state.network;
+  $('#network-title').textContent=titles[network];
+  const metrics=$('#metrics'),signals=$('#signal'),latest=$('#latest-list');clear(metrics);clear(signals);clear(latest);
+  renderHolders(network==='bloch'?data.holders:null);
+  $('#network-status').textContent='Source live';$('#network-status').dataset.state='ok';
+  $('#source-line').textContent=`${data.source} · retrieved ${time(data.retrieved_at)} · ${data.note}`;
+  if(network==='bitcoin'){
+    const h=data.head, mem=data.mempool||{}, fees=data.fee_estimates_sat_vbyte||{};
+    metrics.append(metric('Best chain height',count(h.height),'Source reported'),metric('Transactions in block',count(h.tx_count)),metric('Block size',`${count(h.size)} bytes`),metric('Mempool count',count(mem.count),'Node view'),metric('Mempool volume',mem.vsize==null?'—':`${count(mem.vsize)} vB`),metric('Fee target / 3 blocks',fees['3']==null?'—':`${Number(fees['3']).toFixed(1)} sat/vB`));
+    signals.append(signal('Current block',compact(h.id)),signal('Block timestamp',time(h.timestamp)),signal('Confirmation model','Probabilistic proof of work'));
+    $('#latest-note').textContent='Ten best-chain blocks reported by Blockstream Esplora.';
+    for(const block of data.recent_blocks||[])latest.append(row(`#${count(block.height)} · ${compact(block.id)}`,`${count(block.tx_count)} transactions · ${time(block.timestamp)}`,`${count(block.size)} B`,()=>openRecord('block',String(block.height))));
+  }else if(network==='ethereum'){
+    const h=data.head,f=data.finalized;
+    const height=hexNumber(h.number),final=hexNumber(f.number);
+    metrics.append(metric('Latest block',height,'Source reported'),metric('Finalized block',final,'Consensus checkpoint'),metric('Transactions',count(h.transactions?.length)),metric('Gas used',hexNumber(h.gasUsed)),metric('Gas limit',hexNumber(h.gasLimit)),metric('Gas price',`${decimal(data.gas_price_wei,'9')} gwei`));
+    signals.append(signal('Latest hash',compact(h.hash)),signal('Finalized hash',compact(f.hash)),signal('Finality gap',`${count(Number(BigInt(h.number)-BigInt(f.number)))} blocks`));
+    $('#latest-note').textContent='First 24 transaction IDs from the latest RPC block.';
+    for(const tx of (h.transactions||[]).slice(0,24))latest.append(row(compact(tx),'Transaction in latest block','ETH',()=>openRecord('tx',tx)));
+  }else{
+    const h=data.head,health=data.health,holders=data.holders;
+    metrics.append(metric('Head height',count(h.height),'PoS block count'),metric('Head slot',count(h.slot),'Epoch position'),metric('Finalized height',count(h.finalized_height),'Network claim'),metric('Epoch',count(h.epoch)),metric('Indexed transactions',count(health?.transactions)),metric('Funded script references',count(holders?.total_script_hashes_with_balance),'eUTXO only'));
+    signals.append(signal('Head block',compact(h.block_id)),signal('Indexer slot',count(health?.indexed_to_slot)),signal('Corroboration',data.corroboration?.level||'unknown'));
+    $('#latest-note').textContent='Recent indexed transfers; blocks without transactions remain visible by slot search.';
+    for(const tx of data.recent_transactions||[])latest.append(row(compact(tx.txid),`Slot ${count(tx.slot)} · ${tx.kind}`,`${tx.fee_sat??'—'} sat fee`,()=>openRecord('tx',tx.txid)));
+  }
+}
+
+function graph(wallet, activity) {
+  const nodes=(activity?.nodes?.length?activity.nodes:wallet?.nodes)||[];
+  const edges=(activity?.edges?.length?activity.edges:wallet?.edges)||[];
+  if(!nodes.length || !edges.length)return note('No bounded relationship edges were returned for this identifier. A balance alone cannot supply a transaction graph.');
+  const panel=element('div','graph-panel');const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 700 330');svg.setAttribute('role','img');svg.setAttribute('aria-label','Observed network references and transaction edges; source limitations follow below.');
+  const positions=new Map();const shown=nodes.slice(0,15);const center=shown[0];positions.set(center.id,{x:350,y:165});shown.slice(1).forEach((node,index)=>{const angle=2*Math.PI*index/Math.max(1,shown.length-1)-Math.PI/2;positions.set(node.id,{x:350+245*Math.cos(angle),y:165+120*Math.sin(angle)});});
+  const ns='http://www.w3.org/2000/svg';const svgEl=(name,attrs)=>{const item=document.createElementNS(ns,name);for(const [key,value] of Object.entries(attrs))item.setAttribute(key,String(value));return item;};
+  for(const edge of edges.slice(0,24)){const a=positions.get(edge.from),b=positions.get(edge.to);if(!a||!b)continue;const line=svgEl('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#60884b','stroke-width':1.2,opacity:.75});svg.append(line);}
+  for(const node of shown){const p=positions.get(node.id);const root=node.id===center.id;const circle=svgEl('circle',{cx:p.x,cy:p.y,r:root?24:node.kind==='transaction'?10:15,fill:root?'#baff28':node.kind==='transaction'?'#4e7050':'#1d3a20',stroke:'#baff28','stroke-width':root?2:1});const title=svgEl('title',{});title.textContent=node.address||node.txid||node.id;circle.append(title);svg.append(circle);const label=svgEl('text',{x:p.x,y:p.y+(root?42:29),'text-anchor':'middle',fill:'#b9cbb3','font-size':10,'font-family':'monospace'});label.textContent=compact(node.address||node.txid||node.id).slice(0,15);svg.append(label);}
+  panel.append(svg);const wrapper=element('div');wrapper.append(panel,element('p','graph-caption',`Observed sample: ${shown.length} of ${nodes.length} references, up to 24 of ${edges.length} direct evidence edges. Lines show source events, not ownership or inferred value paths.`));return wrapper;
+}
+
+function renderAddress(data,query,asset) {
+  const wallet=data.wallet||{},balance=wallet.balance||{},observed=wallet.observation||{};
+  const unit=asset==='BTC'?'BTC':asset==='ETH'?'ETH':asset==='BLCH'?'BLCH':asset;
+  const left=card(`${state.network.toUpperCase()} / ${asset} / ADDRESS`,`Public reference`);
+  left.append(element('div','record-id',wallet.address||query));
+  fields(left,[['Source-reported balance',`${decimal(balance.base_units,assetDecimals[asset])} ${unit}`],['Exact base units',`${balance.base_units??'—'} ${balance.unit??''}`],['Balance scope',balance.scope],['Block height',balance.block?.height==null?'Not pinned':count(balance.block.height)],['Observed transactions',wallet.activity?.confirmed_tx_count??wallet.activity?.bounded_events??'Bounded or unavailable'],['Mempool transactions',wallet.activity?.mempool_tx_count??'—']]);
+  left.append(element('h4','subhead','Observed relationships'),graph(wallet,data.token_activity));
+  const activity=data.token_activity?.activity?.events||[];
+  if(activity.length){left.append(element('h4','subhead',`${asset} Transfer logs / bounded window`));const list=element('div','record-list');for(const event of activity.slice(0,30))list.append(row(`${event.direction} · ${decimal(event.amount_base_units,6)} ${asset}`,`Block ${count(event.block_number)} · ${compact(event.transaction_hash)}`,compact(event.from===wallet.address?.toLowerCase()?event.to:event.from),()=>openRecord('tx',event.transaction_hash)));left.append(list);}
+  const aside=provenance(data,[['Graphus source',observed.source_id],['Coverage',observed.coverage],['Balance block',balance.block?.hash??'Moving source state'],['Limitations',(observed.limitations||[]).join(' ')]]);
+  return [left,aside];
+}
+
+function renderBlock(data,query) {
+  const block=data.block||{},network=state.network;
+  const id=block.id||block.hash||block.block_id||query;
+  const height=network==='ethereum'?hexNumber(block.number):count(block.height);
+  const left=card(`${network.toUpperCase()} / BLOCK`,`Block ${network==='bloch'?'at slot '+count(block.slot):'#'+height}`);
+  left.append(element('div','record-id',id));
+  const values=network==='bitcoin'?[['Height',height],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Size',`${count(block.size)} bytes`],['Weight',count(block.weight)],['Merkle root',block.merkle_root],['Previous block',block.previousblockhash],['Best chain',data.status?.in_best_chain?'Yes':'No']]
+    :network==='ethereum'?[['Height',height],['Timestamp',time(Number(BigInt(block.timestamp)))],['Transactions',count(data.total_transactions)],['Finalized checkpoint',count(data.finalized_height)],['Gas used',hexNumber(block.gasUsed)],['Gas limit',hexNumber(block.gasLimit)],['Base fee',block.baseFeePerGas?`${decimal(BigInt(block.baseFeePerGas).toString(),9)} gwei`:'—'],['Parent hash',block.parentHash]]
+    :[['Height',height],['Slot',count(block.slot)],['Epoch',count(block.epoch)],['Timestamp',time(block.timestamp)],['Transactions',count(block.tx_count)],['Attestations',count(block.attestation_count)],['Finality',block.finality||'—'],['Proposer index',count(block.proposer_index)],['State root',block.state_root],['Parent',block.parent]];
+  fields(left,values);
+  const ids=network==='bitcoin'?data.transaction_ids:network==='ethereum'?block.transactions:data.transactions?.transactions?.map(tx=>tx.txid);
+  if(ids?.length){left.append(element('h4','subhead',`Transactions / showing ${ids.length} of ${count(data.total_transactions??block.tx_count??ids.length)}`));const list=element('div','record-list');for(const tx of ids)list.append(row(compact(tx),'Open transaction','↗',()=>openRecord('tx',tx)));left.append(list);}
+  const aside=provenance(data,[['Block identity',id],['Finality / corroboration',network==='bloch'?`${block.finality||'unknown'} · ${data.corroboration?.level||'unknown'}`:network==='ethereum'?(BigInt(block.number)<=BigInt(data.finalized_height)?'At or below finalized checkpoint':'Above finalized checkpoint'):data.status?.in_best_chain?'Source best chain; reorganization possible':'Outside source best chain']]);
+  return [left,aside];
+}
+
+function renderTransaction(data,query) {
+  const tx=data.transaction||{},network=state.network;
+  const id=tx.txid||tx.hash||query;
+  const left=card(`${network.toUpperCase()} / TRANSACTION`,'Transaction detail');left.append(element('div','record-id',id));
+  const values=network==='bitcoin'?[['Confirmation',tx.status?.confirmed?'Source confirmed':'Unconfirmed'],['Block height',tx.status?.block_height==null?'Mempool':count(tx.status.block_height)],['Fee',`${count(tx.fee)} sat`],['Size',`${count(tx.size)} bytes`],['Weight',count(tx.weight)],['Version',count(tx.version)],['Locktime',count(tx.locktime)],['Inputs',count(tx.vin?.length)],['Outputs',count(tx.vout?.length)]]
+    :network==='ethereum'?[['Block',tx.blockNumber?hexNumber(tx.blockNumber):'Pending'],['Execution',data.receipt?.status==null?'Pending / unavailable':BigInt(data.receipt.status)===1n?'Successful':'Reverted'],['Finality',tx.blockNumber&&BigInt(tx.blockNumber)<=BigInt(data.finalized_height)?'At or below finalized checkpoint':'Not finalized at source'],['From',tx.from],['To',tx.to||'Contract creation'],['Value',`${decimal(BigInt(tx.value||'0x0').toString(),18)} ETH`],['Gas limit',hexNumber(tx.gas)],['Gas used',data.receipt?hexNumber(data.receipt.gasUsed):'—'],['Effective gas price',data.receipt?.effectiveGasPrice?`${decimal(BigInt(data.receipt.effectiveGasPrice).toString(),9)} gwei`:'—'],['Nonce',hexNumber(tx.nonce)]]
+    :[['Height',count(tx.height)],['Slot',count(tx.slot)],['Kind',tx.kind],['Fee',`${tx.fee_sat??'—'} sat`],['Stake',`${tx.stake_sat??'—'} sat`],['Size',`${count(tx.size_bytes)} bytes`],['Block',tx.block_id],['Inputs',count(tx.inputs?.length)],['Outputs',count(tx.outputs?.length)]];
+  fields(left,values);
+  const sides=network==='bitcoin'?[['Inputs',tx.vin?.map(input=>({id:input.prevout?.scriptpubkey_address||input.txid||'Coinbase',amount:input.prevout?.value,detail:`${compact(input.txid)}:${input.vout}`}))],['Outputs',tx.vout?.map((out,index)=>({id:out.scriptpubkey_address||out.scriptpubkey||`Output ${index}`,amount:out.value,detail:`vout ${index} · ${data.outspends?.[index]?.spent?'spent':'unspent at source'}`}))]]
+    :network==='bloch'?[['Inputs',tx.inputs?.map(input=>({id:input.script_hash,amount:input.value_sat,detail:`${compact(input.txid)}:${input.vout}`}))],['Outputs',tx.outputs?.map(out=>({id:out.script_hash,amount:out.value_sat,detail:`vout ${out.vout}`}))]]:[];
+  for(const [title,entries] of sides){if(!entries?.length)continue;left.append(element('h4','subhead',`${title} / ${entries.length}`));const list=element('div','record-list');for(const entry of entries.slice(0,60))list.append(row(compact(entry.id),entry.detail,entry.amount==null?'—':`${decimal(entry.amount,8)} ${network==='bitcoin'?'BTC':'BLCH'}`,network==='bloch'&&/^[0-9a-f]{64}$/i.test(entry.id)?()=>openRecord('address',entry.id,'BLCH'):network==='bitcoin'&&entry.id!=='Coinbase'?()=>openRecord('address',entry.id,'BTC'):null));left.append(list);}
+  if(network==='ethereum'&&data.receipt?.logs?.length){left.append(element('h4','subhead',`Receipt logs / ${data.receipt.logs.length}`));const list=element('div','record-list');for(const log of data.receipt.logs.slice(0,32))list.append(row(compact(log.address),`Log ${hexNumber(log.logIndex)} · ${compact(log.topics?.[0])}`,`${log.topics?.length??0} topics`));left.append(list);}
+  const aside=provenance(data,[['Block reference',tx.block_id||tx.blockHash||tx.status?.block_hash||'Unconfirmed'],['Source scope',network==='bitcoin'?'Mempool and best-chain state can change.':network==='ethereum'?'Receipt status and consensus finality are separate.':'Canonical indexed history with chain tip anchor.']]);
+  return [left,aside];
+}
+
+function showResult(kind,data,query,asset) {
+  const section=$('#result-section'),root=$('#result');clear(root);const grid=element('div','result-grid');
+  grid.append(...(kind==='address'?renderAddress(data,query,asset):kind==='block'?renderBlock(data,query):renderTransaction(data,query)));
+  root.append(grid);section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function detect(query) {if(/^[0-9]+$/.test(query))return 'block';if(/^0x[0-9a-f]{40}$/i.test(query))return 'address';if(/^(bc1|[13])[a-z0-9]{20,90}$/i.test(query))return 'address';return 'tx';}
+async function search(kind,query,asset) {
+  const network=state.network;const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
+  message('Looking up the source record…');
+  try{
+    let resolved=requested;let data;
+    try{data=await api(resolved,network,query,asset);}catch(error){
+      if(kind==='auto'&&/^(?:0x)?[0-9a-f]{64}$/i.test(query)&&resolved==='tx'&&error.message==='not_found'){
+        resolved='block';
+        try{data=await api(resolved,network,query,asset);}catch(blockError){
+          if(network==='bloch'&&blockError.message==='not_found'){resolved='address';data=await api(resolved,network,query,'BLCH');asset='BLCH';}
+          else throw blockError;
+        }
+      }else throw error;
+    }
+    if(sequence!==state.request)return;
+    state.result={kind:resolved,query,asset};message('');showResult(resolved,data,query,asset);
+    const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);
+    history.replaceState(null,'',`/?${params}`);
+  }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}
+}
+
+async function switchNetwork(network,updateUrl=true) {
+  if(!titles[network])return;
+  state.network=network;const sequence=++state.request;
+  for(const tab of document.querySelectorAll('[data-network]'))tab.setAttribute('aria-selected',String(tab.dataset.network===network));
+  $('#network-title').textContent=titles[network];$('#search-hint').textContent=hints[network];$('#search-input').placeholder=network==='bloch'?'Script hash, transaction ID, block ID or slot':network==='ethereum'?'Ethereum address, transaction, block hash or height':'Bitcoin address, transaction, block hash or height';
+  $('#search-asset').style.display=network==='ethereum'?'block':'none';
+  $('#network-status').textContent='Connecting';$('#network-status').dataset.state='pending';
+  clear($('#metrics'));clear($('#signal'));clear($('#latest-list'));$('#source-line').textContent='Querying the selected public source…';
+  clear($('#holder-map'));$('#holder-map').hidden=true;
+  $('#result-section').hidden=true;message('');
+  if(updateUrl)history.replaceState(null,'',`/?network=${network}`);
+  try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}
+}
+
+document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
+$('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
+$('#clear-result').addEventListener('click',()=>{state.result=null;$('#result-section').hidden=true;message('');history.replaceState(null,'',`/?network=${state.network}`);});
+const initial=new URLSearchParams(location.search);const network=titles[initial.get('network')]?initial.get('network'):'bitcoin';
+switchNetwork(network,false).then(()=>{if(initial.get('query')){const kind=['auto','block','tx','address'].includes(initial.get('kind'))?initial.get('kind'):'auto';$('#search-kind').value=kind;$('#search-input').value=initial.get('query');if(['ETH','USDT','USDC'].includes(initial.get('asset')))$('#search-asset').value=initial.get('asset');search(kind,initial.get('query'),$('#search-asset').value);}});
+setInterval(()=>{if(!document.hidden&&!state.result)switchNetwork(state.network,false);},60000);
