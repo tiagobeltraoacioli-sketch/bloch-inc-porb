@@ -61,6 +61,19 @@ const exportButton=document.createElement('button');
 exportButton.type='button';exportButton.id='download-observation';exportButton.className='live-export';
 exportButton.textContent='Download current observation JSON';exportButton.hidden=true;
 liveButton.after(exportButton);
+const analyticsButton=document.createElement('button');
+analyticsButton.type='button';analyticsButton.id='analyze-observation';analyticsButton.className='live-export';
+analyticsButton.textContent='Open observation in Analytics';analyticsButton.hidden=true;
+exportButton.after(analyticsButton);
+analyticsButton.addEventListener('click',()=>{
+  try{
+    const bundle=GraphusObservationExport.buildObservationBundle(realObservation);
+    sessionStorage.setItem('graphus.analytics.observation.v1',JSON.stringify(bundle));
+    window.location.assign('analytics.html?import=observation');
+  }catch(error){
+    document.getElementById('wallet-search-status').textContent=`Analytics handoff unavailable: ${error.message}. Download the observation JSON and import it in Analytics.`;
+  }
+});
 exportButton.addEventListener('click',()=>{
   try{
     const bundle=GraphusObservationExport.buildObservationBundle(realObservation);
@@ -81,6 +94,7 @@ function setDataMode(mode,detail){
   document.getElementById('constellation-data-mode').textContent=mode==='source-reported'?'Source-reported public-chain data':mode==='loading'?'Loading public-chain data':'Synthetic preview';
   document.getElementById('constellation-data-detail').textContent=detail;
   exportButton.hidden=mode!=='source-reported';
+  analyticsButton.hidden=mode!=='source-reported';
   document.querySelector('.constellation-stage-top span').textContent=mode==='source-reported'?(realObservation?.asset==='BLCH'?'GRAPHUS / PUBLIC-CHAIN SCRIPT HASH':'GRAPHUS / PUBLIC-CHAIN ADDRESS'):'GRAPHUS / SYNTHETIC WALLETS';
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   document.getElementById('constellation-help').textContent=mode==='source-reported'

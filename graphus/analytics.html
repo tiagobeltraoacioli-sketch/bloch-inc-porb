@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b0a">
+  <meta name="description" content="Graphus Analytics: explore graph topology, connection paths, activity, distributions and source-reported Bloch balances.">
+  <title>Analytics Lab — Graphus of Bloch Inc</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="assets/style.css"><link rel="stylesheet" href="assets/silver.css">
+  <link rel="stylesheet" href="assets/bloch-brand.css?v=20260923"><link rel="stylesheet" href="assets/analytics.css?v=20260924">
+  <script src="assets/analytics_engine.js?v=20260924" defer></script><script src="assets/analytics.js?v=20260924" defer></script>
+</head>
+<body class="analytics-page">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead"><a class="brand" href="/" aria-label="Graphus home"><img src="assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-divider"></span><span>GRAPHUS</span></a><nav aria-label="Main navigation"><a href="app.html">Workspace</a><a href="analytics.html" aria-current="page">Analytics</a><a href="constellation.html">Constellation</a><a href="oculum.html">Oculum</a></nav></header>
+  <main id="main" class="lab">
+    <section class="lab-hero"><div><p class="lab-eyebrow">GRAPHUS / ANALYTICS LAB</p><h1>Connections.<br><em>In context.</em></h1><p class="lab-lede">Move from a network to its evidence. Explore structure, follow connections and inspect the data behind every chart.</p></div><div class="lab-hero-meta"><span class="lab-orbit" aria-hidden="true">◎</span><p>05 ASSETS<br>01 CONNECTED WORKSPACE</p><a href="#lab-method">Read the methods ↗</a></div></section>
+    <section class="lab-source" aria-label="Choose a dataset">
+      <div class="lab-source-heading"><span class="lab-eyebrow">01 / DATA SOURCE</span><span id="lab-badge" class="lab-badge">SYNTHETIC DEMONSTRATION</span></div>
+      <div class="lab-source-controls"><label>Demonstration asset<select id="lab-asset"><option>ETH</option><option>USDT</option><option>USDC</option><option>BTC</option><option>BLCH</option></select></label><button id="lab-demo" type="button">Load demonstration</button><label class="lab-file">Import observation JSON<input id="lab-import" type="file" accept="application/json,.json"></label><button id="lab-holders" type="button">Load indexed BLCH balances ↗</button></div>
+      <p id="lab-source-detail">Deterministic synthetic records. Import a Constellation export to analyze an observed graph locally.</p>
+      <p id="lab-message" role="status" aria-live="polite">Preparing the workspace…</p>
+    </section>
+    <div id="lab-graph-workspace">
+      <section class="lab-filters" aria-label="Graph filters">
+        <label>Connection type<select id="lab-kind"><option value="all">All types</option></select></label>
+        <label>From block<input id="lab-from" type="number" min="0" step="1" placeholder="Any"></label>
+        <label>To block<input id="lab-to" type="number" min="0" step="1" placeholder="Any"></label>
+        <label>Minimum base units<input id="lab-min" inputmode="numeric" value="0" maxlength="78"></label>
+        <button id="lab-apply" type="button">Apply filters</button><button id="lab-reset" type="button">Reset</button>
+      </section>
+      <section class="lab-stats" id="lab-stats" aria-label="Filtered graph statistics"></section>
+      <section class="lab-network-grid">
+        <article class="lab-panel lab-network"><div class="lab-panel-head"><div><span class="lab-eyebrow">02 / NETWORK STRUCTURE</span><h2>Follow the connections</h2></div><div class="lab-actions"><button id="lab-zoom-out" aria-label="Zoom out" type="button">−</button><button id="lab-zoom-in" aria-label="Zoom in" type="button">+</button><button id="lab-fit" type="button">Fit</button></div></div>
+          <div class="lab-canvas-wrap"><canvas id="lab-canvas" aria-label="Interactive graph; all nodes can also be selected in the reference list below"></canvas><span class="lab-canvas-note">DRAG TO PAN · CLICK TO INSPECT</span></div>
+          <p id="lab-graph-caption" class="lab-caption"></p><div class="lab-legend"><span>● Address / script reference</span><span>◇ Transaction</span><span>Color = connected component</span></div>
+        </article>
+        <aside class="lab-panel lab-inspector"><span class="lab-eyebrow">REFERENCE INSPECTOR</span><h2 id="lab-node-title">Select a reference</h2><p id="lab-node-hint">Choose a point or use the searchable list. Connections describe records in this dataset.</p><dl id="lab-node-detail"></dl><div class="lab-actions"><button id="lab-focus" disabled type="button">Isolate neighborhood</button><button id="lab-node-origin" disabled type="button">Use as path start</button></div><label>Search references<input id="lab-node-search" type="search" placeholder="Identifier or transaction…" maxlength="200"></label><div id="lab-node-list" class="lab-node-list" aria-label="Graph references"></div><p id="lab-node-count" class="lab-caption"></p></aside>
+      </section>
+      <section class="lab-panel lab-path"><div><span class="lab-eyebrow">03 / CONNECTION EXPLORER</span><h2>Trace an evidence path</h2><p>A shortest directed path through the filtered records. It does not establish chronological order, ownership or continuity of value.</p></div><form id="lab-path-form"><label>From<select id="lab-path-from"></select></label><label>To<select id="lab-path-to"></select></label><label>Maximum steps<select id="lab-path-steps"><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label><button type="submit">Find path →</button></form><div id="lab-path-result" role="status">Select two references to inspect their connection.</div></section>
+      <section class="lab-charts" aria-label="Graph analysis charts">
+        <article class="lab-panel"><span class="lab-eyebrow">04 / ACTIVITY</span><h2>Records by block</h2><div id="lab-chart-activity" class="lab-chart"></div><p class="lab-caption" id="lab-activity-caption"></p></article>
+        <article class="lab-panel"><span class="lab-eyebrow">05 / TOPOLOGY</span><h2>Degree distribution</h2><div id="lab-chart-degree" class="lab-chart"></div><p class="lab-caption">Number of references by distinct connected neighbors. Direction and repeated events do not increase this degree.</p></article>
+        <article class="lab-panel"><span class="lab-eyebrow">06 / COMPOSITION</span><h2>Connection types</h2><div id="lab-chart-types" class="lab-chart"></div><div id="lab-type-totals" class="lab-exact-totals"></div></article>
+        <article class="lab-panel"><span class="lab-eyebrow">07 / VALUE DISTRIBUTION</span><h2>Amount bands</h2><div id="lab-chart-amounts" class="lab-chart"></div><p class="lab-caption">Count by order of magnitude in base units. Input references and created outputs are separate records, not additive transfer volume.</p></article>
+        <article class="lab-panel"><span class="lab-eyebrow">08 / CONNECTION MATRIX</span><h2>Most connected references</h2><div id="lab-chart-matrix" class="lab-chart"></div><p class="lab-caption">Directed record counts among the 12 highest-degree references. Rows are origins; columns are destinations.</p></article>
+        <article class="lab-panel"><span class="lab-eyebrow">09 / STRUCTURAL RANK</span><h2>PageRank</h2><div id="lab-chart-rank" class="lab-chart"></div><p class="lab-caption">Top 10 references by directed PageRank within this filtered graph. A measure of graph structure, never a reputation or risk score.</p></article>
+      </section>
+      <section class="lab-panel lab-ledger"><div class="lab-panel-head"><div><span class="lab-eyebrow">10 / UNDERLYING RECORDS</span><h2>Evidence ledger</h2></div><div class="lab-actions"><button id="lab-export-csv" type="button">Export filtered CSV</button><button id="lab-export-json" type="button">Export analysis JSON</button></div></div><div class="lab-ledger-controls"><label>Search records<input id="lab-record-search" type="search" placeholder="Reference, event or type…" maxlength="200"></label><label>Sort<select id="lab-sort"><option value="newest">Block: newest first</option><option value="oldest">Block: oldest first</option><option value="largest">Amount: largest first</option></select></label></div><div class="lab-table-wrap"><table><caption>Exact amounts for filtered connection records</caption><thead><tr><th>Event / block</th><th>Origin → destination</th><th>Type</th><th>Amount</th></tr></thead><tbody id="lab-ledger-body"></tbody></table></div><div class="lab-pagination"><button id="lab-prev" type="button">← Previous</button><span id="lab-page"></span><button id="lab-next" type="button">Next →</button></div></section>
+    </div>
+    <section id="lab-balances-workspace" hidden>
+      <section id="lab-balance-stats" class="lab-stats" aria-label="Indexed balance statistics"></section>
+      <p class="lab-balance-boundary" id="lab-balance-boundary"></p>
+      <div class="lab-charts"><article class="lab-panel"><span class="lab-eyebrow">BALANCE DISTRIBUTION</span><h2>Largest returned balances</h2><div id="lab-chart-balances" class="lab-chart"></div><p class="lab-caption">Share of the sum of returned balances; top 12 shown.</p></article><article class="lab-panel"><span class="lab-eyebrow">CONCENTRATION</span><h2>Lorenz curve</h2><div id="lab-chart-lorenz" class="lab-chart"></div><p class="lab-caption">Cumulative share of returned scripts against cumulative share of their balances. The diagonal represents equal balances.</p></article></div>
+      <article class="lab-panel"><div class="lab-panel-head"><div><span class="lab-eyebrow">SOURCE RECORDS</span><h2>Indexed script balances</h2></div><button id="lab-export-balances" type="button">Export balances CSV</button></div><div class="lab-table-wrap"><table><caption>Source-reported balances; script hashes do not identify people</caption><thead><tr><th>Rank</th><th>Script hash</th><th>BLCH balance</th><th>UTXOs</th><th>Explore</th></tr></thead><tbody id="lab-balance-body"></tbody></table></div></article>
+    </section>
+    <section class="lab-method" id="lab-method"><p class="lab-eyebrow">METHODS / SCOPE / REPRODUCIBILITY</p><h2>Know what you are measuring.</h2><div><article><h3>Bounded observations</h3><p>All graph statistics describe the selected records. Imports stay in this browser tab and are not uploaded or independently verified. Missing blocks remain unknown. Native ETH balance exports can contain no connections.</p></article><article><h3>Explicit graph semantics</h3><p>Components ignore direction; paths follow direction. Density counts unique non-self directed links. PageRank uses unique outgoing links, damping 0.85 and up to 60 iterations. BTC and BLCH connect references to transaction nodes.</p></article><article><h3>Exact amounts</h3><p>Calculations and exports preserve integer base units. Charts use rounded ratios. Gini, HHI and top shares describe only returned script balances. A truncated ranking cannot measure concentration across the entire network.</p></article></div><a href="constellation.html">Collect a public-chain observation in Constellation ↗</a></section>
+  </main><footer><span>© 2026 Bloch Inc · Graphus Analytics</span><a href="app.html">Research workspace ↗</a><a href="catalog.html">Data atlas ↗</a></footer>
+</body></html>
