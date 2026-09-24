@@ -7,6 +7,7 @@ const form=document.getElementById('oculum-form');
 const addButton=document.getElementById('oculum-add');
 const batchInput=document.getElementById('oculum-batch-input');
 const batchButton=document.getElementById('oculum-batch-add');
+const blochButton=document.getElementById('oculum-load-bloch');
 const sourceStatus=document.getElementById('oculum-source-status');
 const coverage=document.getElementById('oculum-coverage');
 const count=document.getElementById('oculum-count');
@@ -17,6 +18,7 @@ const tooltip=document.getElementById('oculum-tooltip');
 const colors={BTC:'#e9c985',ETH:'#b4d7a4',USDT:'#87c9ab',USDC:'#c6ced1',BLCH:'#baff28'};
 const records=new Map();
 const activityByKey=new Map();
+let blochIndex=null;
 const MAX_SAMPLE_PER_ASSET=64;
 const MAX_BATCH=16;
 let selectedKey=null;
@@ -62,6 +64,11 @@ function currentRecords(){
     .sort((a,b)=>BigInt(a.baseUnits)===BigInt(b.baseUnits)?a.address.localeCompare(b.address):(BigInt(a.baseUnits)>BigInt(b.baseUnits)?-1:1));
 }
 function assetRecordCount(asset){return [...records.values()].filter(record=>record.asset===asset).length;}
+function clearBlochRecords(){
+  for(const [key,record] of records)if(record.asset==='BLCH')records.delete(key);
+  blochIndex=null;
+  selectedKey=null;
+}
 function setStatus(message,kind='neutral'){
   const dot=document.createElement('span');dot.className='oculum-source-dot';dot.setAttribute('aria-hidden','true');
   const body=document.createElement('div');
@@ -120,7 +127,9 @@ function renderDetail(record){
   appendTime(dl,'Retrieved at (UTC)',record.retrievedAt);
   if(record.block?.time)appendTime(dl,'Source block time (UTC)',record.block.time);
   const caveat=document.createElement('p');
-  caveat.textContent='An address or script hash does not identify an owner or all holdings controlled by one wallet. Retrieval times and block anchors can differ. This is not a network-wide holder ranking.';
+  caveat.textContent=record.origin==='indexed Bloch script hash'
+    ?'This ranks positive script hashes in the Bloch source index at one reported chain tip. A script hash does not identify an owner or all holdings controlled by one wallet. Graphus has not independently replayed the source state.'
+    :'An address or script hash does not identify an owner or all holdings controlled by one wallet. Retrieval times and block anchors can differ. This queried sample is not a network-wide holder ranking.';
   detail.append(title,dl,caveat);
   if(record.limitations.length){
     const heading=document.createElement('h4');heading.textContent='Source limitations';
@@ -192,7 +201,7 @@ function renderList(items){
     const button=document.createElement('button');button.type='button';
     button.className=record.key===selectedKey?'selected':'';
     button.setAttribute('aria-pressed',String(record.key===selectedKey));
-    const rank=document.createElement('small');rank.textContent=`SAMPLE RANK ${String(index+1).padStart(2,'0')} · ${record.origin}`;
+    const rank=document.createElement('small');rank.textContent=`${blochIndex&&record.asset==='BLCH'?'INDEX RANK':'SAMPLE RANK'} ${String(index+1).padStart(2,'0')} · ${record.origin}`;
     const address=document.createElement('strong');address.textContent=record.address;
     const amount=document.createElement('span');amount.textContent=formattedAmount(record.baseUnits,record.asset,record.decimals);
     const source=document.createElement('small');source.textContent=`${record.source} · ${observedTime(record.retrievedAt)} · ${record.block?'block anchored':'no shared block anchor'}`;
@@ -260,6 +269,9 @@ function draw(){
 }
 function render(){
   const items=currentRecords();
+  const indexed=assetSelect.value.toUpperCase()==='BLCH'&&Boolean(blochIndex);
+  document.getElementById('oculum-map-label').textContent=indexed?'OCULUM / BLOCH INDEXED SCRIPT BALANCES':'OCULUM / TOP 64 QUERIED IDENTIFIERS';
+  document.getElementById('oculum-scope-label').textContent=indexed?'WITHIN BLOCH INDEX · ONE CHAIN TIP':'WITHIN ASSET · QUERIED SAMPLE';
   if(selectedKey&&!items.some(item=>item.key===selectedKey))selectedKey=items[0]?.key||null;
   if(!selectedKey&&items.length)selectedKey=items[0].key;
   count.textContent=`${items.length} ${items.length===1?'point':'points'}`;
@@ -271,6 +283,20 @@ function render(){
 }
 function renderCoverage(items){
   coverage.replaceChildren();
+  if(assetSelect.value.toUpperCase()==='BLCH'&&blochIndex){
+    const intro=document.createElement('p');
+    intro.textContent=`${blochIndex.coverage.returned} ranked positive script hashes from ${blochIndex.coverage.positive_script_hashes_in_index} with positive balance in the Bloch source index. One reported tip: height ${blochIndex.anchor.height}, slot ${blochIndex.anchor.slot}, block ${blochIndex.anchor.block_id}.`;
+    coverage.append(intro);
+    const facts=document.createElement('ul');facts.className='oculum-quality-facts';
+    for(const line of [
+      `Indexed total: ${formattedAmount(blochIndex.coverage.indexed_total_sat,'BLCH',8)} across the source UTXO view.`,
+      `Source lag: ${blochIndex.coverage.lag_slots} slots at retrieval ${observedTime(blochIndex.retrieved_at)}.`,
+      `Source verification: ${blochIndex.coverage.source_verification}; Graphus has not independently replayed state.`,
+      'A script hash is not a person or proof of common ownership. A reorganization can change the reported tip.',
+    ]){const li=document.createElement('li');li.textContent=line;facts.append(li);}
+    coverage.append(facts);
+    return;
+  }
   const intro=document.createElement('p');
   intro.textContent=items.length
     ?`${items.length} source-reported balances in this session's ${assetSelect.value.toUpperCase()} sample. Ranking is limited to these identifiers; there is no global holder denominator.`
@@ -305,13 +331,14 @@ function renderCoverage(items){
   coverage.append(facts);
 }
 async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
-  if(!records.has(recordKey(asset,address))&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)throw new Error(`This asset sample is limited to ${MAX_SAMPLE_PER_ASSET} identifiers.`);
+  if(!blochIndex&&!records.has(recordKey(asset,address))&&assetRecordCount(asset)>=MAX_SAMPLE_PER_ASSET)throw new Error(`This asset sample is limited to ${MAX_SAMPLE_PER_ASSET} identifiers.`);
   if(asset==='BLCH'&&!/^[0-9a-f]{64}$/i.test(address))throw new Error('BLCH requires a 64-hex script hash.');
   const network=asset==='BTC'?'bitcoin':asset==='BLCH'?'bloch':'ethereum';
   const query=new URLSearchParams({network,asset,address});
   const response=await fetch(`/api/chain/wallet?${query}`,{headers:{Accept:'application/json'}});
   const data=await response.json();
   if(!response.ok||data.status!=='source-reported')throw new Error(data.message||data.error||`HTTP ${response.status}`);
+  if(asset==='BLCH'&&blochIndex)clearBlochRecords();
   if(!addRecord({asset,address:data.address,balance:data.balance,observation:data.observation,network:data.network,origin:asset==='BLCH'?'queried script hash':'queried address',independentVerification:data.independent_verification}))throw new Error('Asset sample capacity was reached.');
   let enriched=0;
   if(includeNeighbors){
@@ -324,6 +351,29 @@ async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
   selectedKey=recordKey(asset,data.address);
   render();
   return {source:data.observation?.source_id||'public source',enriched};
+}
+async function loadBlochIndex(){
+  blochButton.disabled=true;addButton.disabled=true;batchButton.disabled=true;
+  setStatus('Loading the ranked Bloch script balances and checking the source tip…','loading');
+  try{
+    const response=await fetch('/api/chain/holders?asset=BLCH',{headers:{Accept:'application/json'}});
+    const data=await response.json();
+    if(!response.ok||data.status!=='source-reported'||!Array.isArray(data.holders))throw new Error(data.error||`HTTP ${response.status}`);
+    clearBlochRecords();
+    for(const row of data.holders){
+      addRecord({asset:'BLCH',address:row.script_hash,
+        balance:{base_units:row.balance_sat,decimals:8,unit:'sat',scope:'indexed_canonical_script_hash_balance',
+          utxo_count:row.utxo_count,block:{height:data.anchor.height,hash:data.anchor.block_id,slot:data.anchor.slot}},
+        observation:{source_id:data.source,retrieved_at:data.retrieved_at,
+          coverage:'positive script hashes in indexed canonical state',limitations:data.limitations},
+        network:data.network,origin:'indexed Bloch script hash',independentVerification:data.independent_verification});
+    }
+    blochIndex=data;
+    assetSelect.value='blch';updateIdentifierInput();
+    render();
+    setStatus(`${data.coverage.returned} Bloch scripts ranked at source height ${data.anchor.height}; ${data.coverage.positive_script_hashes_in_index} positive scripts in the index. Source-reported, with no owner attribution.`,'success');
+  }catch(error){setStatus(`Bloch index unavailable: ${error.message}. Previously loaded values, if any, remain on screen with their original anchor.`,'error');}
+  finally{blochButton.disabled=false;addButton.disabled=false;batchButton.disabled=false;}
 }
 async function addAddress(event){
   event?.preventDefault();
@@ -360,6 +410,7 @@ async function addBatch(){
 
 form.addEventListener('submit',addAddress);
 batchButton.addEventListener('click',addBatch);
+blochButton.addEventListener('click',loadBlochIndex);
 assetSelect.addEventListener('change',()=>{updateIdentifierInput();render();});
 function updateIdentifierInput(){
   const blch=assetSelect.value.toUpperCase()==='BLCH';
@@ -390,4 +441,5 @@ const initialAsset=url.searchParams.get('asset');
 if(initialAsset&&colors[initialAsset.toUpperCase()])assetSelect.value=initialAsset.toLowerCase();
 updateIdentifierInput();
 if(initialAddress){addressInput.value=initialAddress;addAddress();}
+else if(assetSelect.value==='blch')loadBlochIndex();
 render();

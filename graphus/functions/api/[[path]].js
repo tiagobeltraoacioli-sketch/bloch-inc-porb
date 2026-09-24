@@ -1,5 +1,6 @@
 import {queryChainWallet} from '../../chain/real-chain.js';
 import {queryEthereumActivity} from '../../chain/ethereum-activity.js';
+import {queryBlochHolders} from '../../chain/bloch-holders.js';
 
 const COOKIE = 'graphus_session';
 const NONCE_COOKIE = 'graphus_login_nonce';
@@ -9,7 +10,7 @@ const INITIAL_ASSETS = [
   {network:'ethereum-mainnet',asset:'ETH',status:'adapter-prototype'},
   {network:'ethereum-mainnet',asset:'USDT',standard:'ERC-20',status:'adapter-prototype'},
   {network:'ethereum-mainnet',asset:'USDC',standard:'ERC-20',status:'adapter-prototype'},
-  {network:'bloch-mainnet',asset:'BLCH',status:'bounded-private-research-sample-and-public-script-hash-lookup'},
+  {network:'bloch-mainnet',asset:'BLCH',status:'public-indexed-script-hash-ranking-and-public-script-hash-lookup'},
 ];
 
 function json(data, status=200, headers={}) {
@@ -95,9 +96,14 @@ export async function onRequest({request,env}) {
     });
     return json(result.body,result.status);
   }
-  if(path==='config'&&method==='GET')return json({google_enabled:configured(env),annotations_enabled:configured(env),google_client_id:configured(env)?env.GOOGLE_CLIENT_ID:null,daas_mode:'synthetic-preview'});
+  if(path==='chain/holders'&&method==='GET') {
+    if(url.searchParams.get('asset')!=='BLCH')return error('holder_index_unavailable_for_asset',400);
+    const result=await queryBlochHolders();
+    return json(result.body,result.status);
+  }
+  if(path==='config'&&method==='GET')return json({google_enabled:configured(env),annotations_enabled:configured(env),google_client_id:configured(env)?env.GOOGLE_CLIENT_ID:null,daas_mode:'mixed-preview'});
   if(path==='daas/manifest'&&method==='GET')return json({
-    product:'Graphus Data as a Service',status:'synthetic-preview',live_transactions:false,live_scores:false,
+    product:'Graphus Data as a Service',status:'mixed-synthetic-and-source-reported-preview',live_transactions:false,live_scores:false,
     initial_assets:INITIAL_ASSETS,
     query_capabilities:{
       address_search:'synthetic-browser-fixture-and-bounded-source-reported-query',
@@ -106,6 +112,8 @@ export async function onRequest({request,env}) {
         endpoint:'/api/chain/wallet',bitcoin:'public-esplora-address-aggregate-and-bounded-transactions',
         ethereum:'requires-GRAPHUS_ETHEREUM_RPC_URL',bloch:'source-reported-archival-script-hash-balance',independently_verified:false,
       },
+      bloch_indexed_script_ranking:{endpoint:'/api/chain/holders?asset=BLCH',limit:64,
+        unit:'script_hash',coverage:'positive balances in source indexed canonical state',independently_verified:false},
       bounded_public_erc20_activity:{endpoint:'/api/chain/activity',assets:['USDT','USDC'],window_blocks:64,native_eth:'unavailable-without-transaction-index'},
     },
     research:{bloch_sample:'private-bounded',structural_groups:'unsupervised-research-only',aml_model:'not-validated'},
