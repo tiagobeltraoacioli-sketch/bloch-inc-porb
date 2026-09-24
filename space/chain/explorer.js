@@ -149,23 +149,30 @@ async function bitcoinBlock(fetcher, query, now, offset = 0) {
 }
 
 async function bitcoinTx(fetcher, query, now) {
-  const [transaction, outspends] = await Promise.all([
+  const [transaction, outspends, blocks] = await Promise.all([
     json(fetcher, `${BTC}/tx/${query}`), json(fetcher, `${BTC}/tx/${query}/outspends`),
+    json(fetcher, `${BTC}/blocks`).catch(() => null),
   ]);
   if (transaction?.txid !== query || !Array.isArray(transaction.vin) || !Array.isArray(transaction.vout) || !Array.isArray(outspends)) throw new Error('invalid_source_response');
-  return {...source('bitcoin', 'Blockstream Esplora', now(), 'Inputs identify spent outpoints, not a single sender or owner. Sequence-based replacement is a signal, not a guarantee.'), transaction, outspends, facts:bitcoinTransactionFacts(transaction)};
+  const headHeight = Number.isSafeInteger(blocks?.[0]?.height) && blocks[0].height >= 0 && isHex64(blocks[0].id) ? blocks[0].height : null;
+  return {...source('bitcoin', 'Blockstream Esplora', now(), 'Transaction status and best-chain head are separate source snapshots; confirmation depth may change. Inputs do not establish ownership.'), transaction, outspends, facts:bitcoinTransactionFacts(transaction, headHeight)};
 }
 
-export function bitcoinTransactionFacts(tx) {
+export function bitcoinTransactionFacts(tx, headHeight = null) {
   const coinbase = tx.vin?.some(input => input.is_coinbase === true) ?? false;
   const weight = Number(tx.weight);
   const fee = Number(tx.fee);
   const virtualSize = Number.isSafeInteger(weight) && weight > 0 ? Math.ceil(weight / 4) : null;
+  const blockHeight = tx.status?.block_height;
+  const confirmations = tx.status?.confirmed !== true ? 0 : Number.isSafeInteger(headHeight) && Number.isSafeInteger(blockHeight) &&
+    blockHeight >= 0 && headHeight >= blockHeight ? headHeight - blockHeight + 1 : null;
   return {
     coinbase,
     virtual_size_vb: virtualSize,
     fee_rate_sat_vb: !coinbase && virtualSize && Number.isSafeInteger(fee) && fee >= 0 ? (fee / virtualSize).toFixed(2) : null,
     signals_rbf: !coinbase && tx.vin?.some(input => Number.isSafeInteger(input.sequence) && input.sequence < 0xfffffffe) === true,
+    confirmations,
+    head_height:headHeight,
   };
 }
 

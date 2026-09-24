@@ -53,10 +53,11 @@ test('Ethereum transaction preserves receipt status and a separate finalized che
 });
 
 test('Bitcoin transaction fee rate uses virtual bytes and replacement needs a sequence signal', () => {
-  assert.deepEqual(bitcoinTransactionFacts({weight:561,fee:282,vin:[{sequence:0xfffffffd}]}),
-    {coinbase:false,virtual_size_vb:141,fee_rate_sat_vb:'2.00',signals_rbf:true});
+  assert.deepEqual(bitcoinTransactionFacts({weight:561,fee:282,vin:[{sequence:0xfffffffd}],status:{confirmed:true,block_height:98}},100),
+    {coinbase:false,virtual_size_vb:141,fee_rate_sat_vb:'2.00',signals_rbf:true,confirmations:3,head_height:100});
   assert.deepEqual(bitcoinTransactionFacts({weight:400,fee:0,vin:[{is_coinbase:true}]}),
-    {coinbase:true,virtual_size_vb:100,fee_rate_sat_vb:null,signals_rbf:false});
+    {coinbase:true,virtual_size_vb:100,fee_rate_sat_vb:null,signals_rbf:false,confirmations:0,head_height:null});
+  assert.equal(bitcoinTransactionFacts({vin:[],status:{confirmed:true,block_height:98}}).confirmations,null);
 });
 
 test('Ethereum receipt decodes only successful allowlisted Transfer logs and preserves exact units', () => {

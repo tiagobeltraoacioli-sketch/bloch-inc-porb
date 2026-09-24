@@ -45,6 +45,8 @@ for network in ("bitcoin", "ethereum", "bloch"):
     if network == "bitcoin" and not transaction["facts"]["coinbase"]:
         assert transaction["facts"]["virtual_size_vb"] == (transaction["transaction"]["weight"] + 3) // 4
         assert transaction["facts"]["fee_rate_sat_vb"] is not None
+        if transaction["facts"]["head_height"] is not None and transaction["transaction"]["status"]["confirmed"]:
+            assert transaction["facts"]["confirmations"] == transaction["facts"]["head_height"] - transaction["transaction"]["status"]["block_height"] + 1
     if network == "ethereum" and transaction["receipt"]:
         receipt = transaction["receipt"]
         assert transaction["gas_fee_wei"] == str(int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16))
