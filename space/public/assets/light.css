@@ -70,6 +70,14 @@ html[data-theme="light"] .epoch-slot-current{background:#5b9800;box-shadow:0 0 9
 html[data-theme="light"] .epoch-slot-future{background:#e0ebd7}
 html[data-theme="light"] .consensus-head-link{border-color:#8aaa74;background:#eff8e4;color:#315900}
 html[data-theme="light"] .consensus-head-link:hover{border-color:#4f7e18}
+html[data-theme="light"] .raw-response{border-color:#b7cca9;background:#f7fbf3}
+html[data-theme="light"] .raw-response summary,html[data-theme="light"] .raw-endpoint{color:#315900}
+html[data-theme="light"] .raw-response summary:hover{background:#eaf4e1}
+html[data-theme="light"] .raw-body{border-top-color:#b7cca9}
+html[data-theme="light"] .raw-actions button{border-color:#9fba8c;background:#eff8e8;color:#315900}
+html[data-theme="light"] .raw-actions button:hover{border-color:#4f7e18}
+html[data-theme="light"] .raw-note{color:#4b5d46}
+html[data-theme="light"] .raw-preview{border-color:#b6caa9;background:#fff;color:#20311a}
 html[data-theme="light"] .flow-legend,html[data-theme="light"] .flow-note{color:#41533d}
 html[data-theme="light"] .flow-legend strong{color:#315900}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}

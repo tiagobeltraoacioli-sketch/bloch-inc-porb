@@ -35,6 +35,11 @@ The browser pages block transaction IDs in groups of 32, bounds graph edges,
 and shows up to 32 UTXOs for Bitcoin and Bloch identifiers when those separate
 source queries respond. It retains
 exact base-unit strings in source responses; decimal rendering is a view only.
+Overview and record views include a collapsible raw API response. The rendered
+preview is limited to 120,000 characters to bound the page, while copy and
+download use the complete response. The panel links to the canonical read-only
+API URL, including address asset and block transaction offset. Opening that URL
+queries the source again and may return a different snapshot.
 Observed graph points can open their source address, Bloch script reference, or
 transaction with a pointer or keyboard. A point is interactive only when the
 source supplied a valid identifier for that network.

@@ -26,11 +26,15 @@ const time = value => {const date=new Date(typeof value==='number'?value*1000:va
 const message = (text, error=false) => {const node=$('#message');node.hidden=!text;node.textContent=text;node.dataset.state=error?'error':'info';};
 const note = text => element('p','result-copy',text);
 
-async function api(route, network, query, asset, offset=0) {
+function apiParams(route,network,query,asset,offset=0){
   const params=new URLSearchParams({network});
   if(query)params.set('query',query);
   if(asset && route==='address')params.set('asset',asset);
   if(route==='block'&&offset>0)params.set('offset',String(offset));
+  return params;
+}
+async function api(route, network, query, asset, offset=0) {
+  const params=apiParams(route,network,query,asset,offset);
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
   try{
     const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
@@ -54,6 +58,28 @@ async function copyRecordText(value,button){
     button.textContent='Copied ✓';
   }catch{button.textContent='Copy unavailable';}
   setTimeout(()=>{button.textContent=original;},2300);
+}
+function rawResponse(data,route,network,query,asset,offset=0){
+  const details=element('details','raw-response');details.append(element('summary','',`Raw API response / ${route.toUpperCase()}`));
+  const body=element('div','raw-body');
+  const endpoint=new URL(`/api/${route}?${apiParams(route,network,query,asset,offset)}`,'https://bloch.space').href;
+  const link=element('a','raw-endpoint',endpoint);link.href=endpoint;link.target='_blank';link.rel='noopener noreferrer';body.append(link);
+  const actions=element('div','raw-actions');
+  const copyUrl=element('button','','Copy API URL');copyUrl.type='button';copyUrl.setAttribute('aria-live','polite');copyUrl.addEventListener('click',()=>copyRecordText(endpoint,copyUrl));
+  const copyJson=element('button','','Copy full JSON');copyJson.type='button';copyJson.setAttribute('aria-live','polite');
+  const download=element('button','','Download JSON');download.type='button';
+  const preview=element('pre','raw-preview');
+  let formatted=null;
+  const fullJson=()=>formatted??(formatted=JSON.stringify(data,null,2));
+  copyJson.addEventListener('click',()=>copyRecordText(fullJson(),copyJson));
+  download.addEventListener('click',()=>{
+    const name=`bloch-space-${network}-${route}-${query||'overview'}${route==='block'&&offset?`-offset-${offset}`:''}`.replace(/[^a-z0-9-]/gi,'_').slice(0,110);
+    const url=URL.createObjectURL(new Blob([fullJson()],{type:'application/json'}));
+    const anchor=element('a');anchor.href=url;anchor.download=`${name}.json`;document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+  actions.append(copyUrl,copyJson,download);body.append(actions,element('p','raw-note','Exact base-unit strings are preserved. The preview is bounded; copy and download contain this complete response. Opening the API URL makes a new request and may return a newer snapshot.'),preview);details.append(body);
+  details.addEventListener('toggle',()=>{if(details.open&&!preview.textContent){const value=fullJson();preview.textContent=value.length>120000?`${value.slice(0,120000)}\n… Preview limited to 120,000 characters; use copy or download for the full response.`:value;}});
+  return details;
 }
 function recordIdentity(value){
   const container=element('div','record-identity');container.append(element('div','record-id',value));
@@ -209,6 +235,7 @@ function renderOverview(data) {
   if(network==='bitcoin')renderBitcoinMempool(data.mempool,data.recent_mempool);else{clear($('#btc-mempool'));$('#btc-mempool').hidden=true;}
   $('#network-status').textContent='Source live';$('#network-status').dataset.state='ok';
   $('#source-line').textContent=`${data.source} · retrieved ${time(data.retrieved_at)} · ${data.note}`;
+  $('#overview-raw').replaceChildren(rawResponse(data,'overview',network));
   if(network==='bitcoin'){
     const h=data.head, mem=data.mempool||{}, fees=data.fee_estimates_sat_vbyte||{};
     metrics.append(metric('Best chain height',count(h.height),'Source reported'),metric('Transactions in block',count(h.tx_count)),metric('Block size',`${count(h.size)} bytes`),metric('Mempool count',count(mem.count),'Node view'),metric('Mempool volume',mem.vsize==null?'—':`${count(mem.vsize)} vB`),metric('Fee target / 3 blocks',fees['3']==null?'—':`${Number(fees['3']).toFixed(1)} sat/vB`));
@@ -329,7 +356,7 @@ function renderTransaction(data,query) {
 function showResult(kind,data,query,asset) {
   const section=$('#result-section'),root=$('#result');clear(root);const grid=element('div','result-grid');
   grid.append(...(kind==='address'?renderAddress(data,query,asset):kind==='block'?renderBlock(data,query):renderTransaction(data,query)));
-  root.append(grid);section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});
+  root.append(grid,rawResponse(data,kind,state.network,query,asset,state.result?.offset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function detect(query) {if(/^[0-9]+$/.test(query))return 'block';if(/^0x[0-9a-f]{40}$/i.test(query))return 'address';if(/^(bc1|[13])[a-z0-9]{20,90}$/i.test(query))return 'address';return 'tx';}
@@ -375,6 +402,7 @@ async function switchNetwork(network,historyMode='push') {
   clear($('#holder-map'));$('#holder-map').hidden=true;
   clear($('#btc-mempool'));$('#btc-mempool').hidden=true;
   clear($('#activity-charts'));$('#activity-charts').hidden=true;
+  clear($('#overview-raw'));
   $('#result-section').hidden=true;message('');
   setHistory(new URLSearchParams({network}),historyMode);
   try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}
