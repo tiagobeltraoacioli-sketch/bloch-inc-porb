@@ -7,7 +7,16 @@ let realTransactionTargets=[];
 let selectedRealTransactionId=null;
 let selectedRealEventId=null;
 let selectedTokenBlockBucket=null;
+let realGraphViewCache=null;
 let realKeyboardIndex=0;
+function getRealGraphView(data){
+  if(realGraphViewCache?.data===data&&realGraphViewCache.eventId===selectedRealEventId
+    &&realGraphViewCache.transactionId===selectedRealTransactionId)return realGraphViewCache.view;
+  const view=GraphusSourceGraphView.selectVisibleSourceNodes(data,{
+    selectedEventId:selectedRealEventId,selectedTransactionId:selectedRealTransactionId});
+  realGraphViewCache={data,eventId:selectedRealEventId,transactionId:selectedRealTransactionId,view};
+  return view;
+}
 const syntheticCanvasHelp=document.getElementById('constellation-help').textContent;
 const sourceStatus = document.createElement('details');
 sourceStatus.className = 'source-status';
@@ -66,7 +75,7 @@ function setDataMode(mode,detail){
   document.querySelector('.constellation-stage-bottom span').textContent=mode==='source-reported'?'CENTRAL STAR = SOURCE-REPORTED HELD AMOUNT':'STAR SIZE + BRIGHTNESS = HELD AMOUNT / ASSET';
   document.getElementById('constellation-help').textContent=mode==='source-reported'
     ?(realObservation?.tokenActivity
-      ?'The central star is the queried public address. Each arrow is one returned ERC-20 Transfer log in a bounded finalized-block window. Select a log in the source-record list to inspect its exact evidence. Other addresses have no balance scale or owner attribution.'
+      ?'The central star is the queried public address. The canvas plots up to 36 other addresses ranked by returned log count; the selected log peer is always included. The source-record list and JSON export retain the full bounded response. Other addresses have no balance scale or owner attribution.'
       :'The central star is the queried public identifier. Squares are returned transaction records; select one by clicking it, using the source-record list, or focusing the canvas and pressing the arrow keys and Enter. Arrows show only source-returned input/output references. Bitcoin and Bloch inputs do not prove sender ownership.')
     :syntheticCanvasHelp;
   if(mode==='synthetic'){
@@ -94,8 +103,11 @@ function assetForLiveAddress(address){
 }
 function renderSourceMetrics(data){
   sourceMetricsPanel.replaceChildren();
-  let metrics;
-  try{metrics=GraphusSourceMetrics.summarizeObservation(data);}
+  let metrics,graphView;
+  try{
+    metrics=GraphusSourceMetrics.summarizeObservation(data);
+    graphView=getRealGraphView(data);
+  }
   catch{
     const message=document.createElement('p');message.textContent='Bounded observation metrics are unavailable for this source response.';
     sourceMetricsPanel.append(message);sourceMetricsPanel.hidden=false;return;
@@ -109,6 +121,8 @@ function renderSourceMetrics(data){
     const caption=document.createElement('span');caption.textContent=note;
     item.append(name,number,caption);grid.append(item);
   };
+  add('Canvas points',`${graphView.visible.length} / ${graphView.total}`,
+    graphView.omitted?`${graphView.omitted} returned points omitted from the canvas; full bounded evidence remains in the JSON export`:'All returned source points are plotted');
   if(metrics.kind==='utxo_observations'){
     add('Transaction records',String(metrics.transaction_records),'Returned in this bounded response');
     add('Directed references',String(metrics.returned_edges),'Input and output references remain separate');
@@ -195,7 +209,7 @@ function renderLiveSourceRecords(data){
     heading.className='live-source-record';
     heading.textContent=`${activity.event_count} source-reported Transfer logs, blocks ${window?.from??'—'}–${window?.to??'—'}. ${selectedTokenBlockBucket?`Showing ${shown.length} in selected range ${selectedTokenBlockBucket.from}–${selectedTokenBlockBucket.to}. `:''}The balance above was queried separately. Peer balances are unknown.`;
     list.append(heading);
-    for(const event of shown.slice(-24).reverse()){
+    for(const event of shown.slice().reverse()){
       const row=document.createElement('button');row.type='button';row.className='live-source-record';
       row.dataset.eventId=event.event_id;
       row.setAttribute('aria-pressed',String(event.event_id===selectedRealEventId));
@@ -203,14 +217,9 @@ function renderLiveSourceRecords(data){
       row.addEventListener('click',()=>selectRealTokenEvent(event.event_id));
       list.append(row);
     }
-    if(shown.length>24){
-      const note=document.createElement('p');note.className='live-source-record';
-      note.textContent=`Showing the latest 24 of ${shown.length} returned events in this ${selectedTokenBlockBucket?'selected range':'64-block-or-smaller window'}. Earlier activity is unknown here.`;
-      list.append(note);
-    }
     if(!shown.length){const empty=document.createElement('p');empty.className='live-source-record';empty.textContent='No Transfer logs were returned in this selected range.';list.append(empty);}
   }else{
-    (data.nodes||[]).slice(0,40).forEach(node=>{
+    (data.nodes||[]).forEach(node=>{
       const actionable=(node.kind==='address'&&node.address)||node.kind==='transaction';
       const row=document.createElement(actionable?'button':'div');
       row.className='live-source-record';
@@ -720,7 +729,8 @@ function drawRealObservation(observation){
   const sameAddress=(address)=>['ETH','USDT','USDC'].includes(observation.asset)
     ?address?.toLowerCase()===observation.address.toLowerCase()
     :address===observation.address;
-  const satellites=nodes.filter(node=>!sameAddress(node.address)).slice(0,36);
+  const graphView=getRealGraphView(observation);
+  const satellites=graphView.visible;
   const orbit=Math.max(80,Math.min(width*.34,height*.34,225));
   const positions=new Map();
   realAddressTargets=[];
@@ -761,7 +771,7 @@ function drawRealObservation(observation){
   context.fillText(observation.address.slice(0,12)+'…',center.x+radius+12,center.y-9);
   context.font='11px ui-monospace, monospace';context.fillStyle='#aac39b';
   context.fillText(observation.asset==='BLCH'?'SOURCE-REPORTED SCRIPT BALANCE':'SOURCE-REPORTED ADDRESS BALANCE',20,32);
-  context.fillText(`${satellites.length} SOURCE RECORDS · NO OWNERSHIP INFERENCE`,20,height-22);
+  context.fillText(`${satellites.length} / ${graphView.total} SOURCE POINTS SHOWN · NO OWNER CLAIM`,20,height-22);
 }
 function frame() {if(!paused){tick++;draw();}requestAnimationFrame(frame);}
 function setText(id,value) {document.getElementById(id).textContent=value;}

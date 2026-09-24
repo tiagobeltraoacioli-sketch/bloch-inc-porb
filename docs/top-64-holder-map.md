@@ -46,7 +46,7 @@ In a source-reported USDT or USDC query, each returned `Transfer` log in the
 source-record list can be selected. Its detail shows the exact amount, direction,
 transaction hash, block hash and height, transaction and log indexes, contract,
 both public addresses, source, and observation scope. The matching constellation
-arrow is highlighted. The list shows at most the latest 24 events from the
+arrow is highlighted. The scrollable list contains all logs returned by the
 bounded response; it is not a complete token history or an ownership inference.
 The bounded metrics panel also shows active blocks, the busiest returned block,
 and up to eight block-range bars based on returned logs. Selecting a bar filters
@@ -60,6 +60,15 @@ log response only if the token contract matches the balance contract. A
 same-height hash conflict is rejected; differing valid heads remain separate
 and their amounts must not be reconciled as one snapshot. Ethereum address case
 is normalized when matching a queried address to returned log nodes.
+
+The source-aware canvas plots at most 36 other points from a bounded response
+and states the visible and returned counts. For USDT and USDC, it chooses points
+by the number of returned logs; selecting a log brings its address into view
+even when it was previously outside the canvas cap. For BTC and BLCH,
+transaction records take precedence over other points. This display selection
+is not a risk ranking. The scrollable source-record list keeps every returned
+token log and source node; the JSON export keeps all returned nodes, edges, and
+token logs, including those omitted from the canvas.
 
 Any source-reported Constellation query can be downloaded as a versioned
 `graphus_public_chain_observation` JSON file. The browser builds it from the

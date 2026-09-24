@@ -31,3 +31,4 @@
 .source-block-timeline-bar{display:block;height:4px;background:#344832}
 .source-block-timeline-bar i{display:block;height:100%;background:#baff28}
 .live-export[hidden]{display:none}
+body[data-constellation-mode="source-reported"] #transaction-list{max-height:430px;overflow:auto;overscroll-behavior:contain}
