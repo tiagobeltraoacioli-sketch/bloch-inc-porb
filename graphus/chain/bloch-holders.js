@@ -27,8 +27,7 @@ function validate(holders, health) {
     || !DECIMAL.test(holders.indexed_total_sat || '')
     || holders.returned !== holders.holders.length || holders.returned > 64
     || holders.returned !== Math.min(64, holders.total_script_hashes_with_balance)
-    || health.indexed_to_height < holders.as_of_height
-    || health.indexed_to_slot < holders.as_of_slot
+    || Math.abs(health.indexed_to_slot - holders.as_of_slot) > 16
     || (health.indexed_to_height === holders.as_of_height
       && (holders.as_of_slot !== health.indexed_to_slot
         || holders.chain_tip.toLowerCase() !== health.chain_tip.toLowerCase()))) return false;
@@ -69,6 +68,7 @@ export async function queryBlochHolders({fetcher = fetch, now = () => new Date()
           indexed_total_sat: holders.indexed_total_sat,
           lag_slots: health.lag_slots,
           health_head_advanced: health.indexed_to_height > holders.as_of_height,
+          health_head_behind: health.indexed_to_height < holders.as_of_height,
           source_verification: health.verification,
           source: health.source || null,
         },

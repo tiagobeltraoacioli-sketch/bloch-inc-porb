@@ -43,6 +43,15 @@ test('a newer health head does not invalidate an anchored earlier source snapsho
   assert.equal(result.body.coverage.health_head_advanced,true);
 });
 
+test('a nearby older health response is marked separately from the ranking anchor',async()=>{
+  const older={...health,indexed_to_height:99,indexed_to_slot:119,chain_tip:first};
+  const fetcher=url=>Promise.resolve(response(url.includes('/holders?')?holders:older));
+  const result=await queryBlochHolders({fetcher});
+  assert.equal(result.status,200);
+  assert.equal(result.body.coverage.health_head_behind,true);
+  assert.equal(result.body.anchor.height,100);
+});
+
 test('inconsistent indexed balance totals are rejected',async()=>{
   const fetcher=url=>Promise.resolve(response(url.includes('/holders?')?{...holders,indexed_total_sat:'101'}:health));
   const result=await queryBlochHolders({fetcher});
