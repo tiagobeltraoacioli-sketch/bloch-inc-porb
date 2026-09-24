@@ -6,6 +6,8 @@ import {sample} from '../tests/system_map_fixture.mjs';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const live=process.env.GRAPHUS_MAP_ORIGIN;
 if(live)assert.equal(live,'https://bloch-graphus.xyz');
+const assets=live?(process.env.GRAPHUS_MAP_ASSETS||'BTC,ETH,BLCH,USDT,USDC').split(','):['ETH','BLCH'];
+assert.ok(assets.length>0&&assets.every(asset=>['BTC','ETH','BLCH','USDT','USDC'].includes(asset)));
 let server;
 if(!live){
   const root=resolve(new URL('../graphus/',import.meta.url).pathname);
@@ -14,6 +16,11 @@ if(!live){
 }
 const browser=await webkit.launch(),page=await browser.newPage({viewport:{width:1440,height:1000},hasTouch:true}),origin=live||`http://127.0.0.1:${server.address().port}`,errors=[];
 page.on('pageerror',error=>errors.push(error.message));
+if(live)page.on('response',async response=>{
+  const url=new URL(response.url());if(url.origin!==origin||url.pathname!=='/api/chain/network'||response.status()<400)return;
+  const body=await response.text().catch(()=>'Response body unavailable');
+  console.log(JSON.stringify({asset:url.searchParams.get('asset'),cursor:url.searchParams.get('cursor'),status:response.status(),source_error:body.slice(0,500)}));
+});
 const fixture=url=>{const q=new URL(url).searchParams,asset=q.get('asset'),cursor=q.get('cursor');return sample(asset,cursor===null?0:asset==='BLCH'?Number(cursor.split('-').at(-1)):100-Number(cursor));};
 const idle=()=>page.waitForFunction(()=>!document.querySelector('#capture-button').disabled,{},{timeout:150000});
 async function exported(selector='#capture-export'){const download=page.waitForEvent('download');await page.click(selector);return JSON.parse(await readFile(await(await download).path(),'utf8'));}
@@ -29,7 +36,7 @@ try{
   const initial=await page.locator('#graphus-map').getAttribute('viewBox');await page.click('#zoom-in');assert.notEqual(await page.locator('#graphus-map').getAttribute('viewBox'),initial);await page.click('#zoom-reset');
   await mkdir(new URL('../.data/system-map/',import.meta.url),{recursive:true});
   let last;
-  for(const asset of live?['BTC','ETH','BLCH','USDT','USDC']:['ETH','BLCH']){
+  for(const asset of assets){
     await page.selectOption('#capture-asset',asset);
     // A failed real public request remains explicit; retry the same read once.
     for(let attempt=0;attempt<2;attempt++){
@@ -84,5 +91,5 @@ try{
     await page.click('#baseline-pin');await page.selectOption('#capture-pages','1');await page.click('#capture-button');await idle();assert.equal((await exported('#comparison-export')).counts.only_baseline,175);
     await page.click('#baseline-clear');assert.equal(await page.locator('#comparison-export').isDisabled(),true);
   }
-  assert.deepEqual(errors,[]);console.log('System Map browser passed: navigation, cursor collection, baseline comparison, exact filters and exports, filtered Analytics handoff, partial failures/cancellation, capacity and mobile layout.');
+  assert.deepEqual(errors,[]);console.log(`System Map ${live?'live':'local'} browser passed for ${assets.join(', ')}: navigation, cursor collection, baseline comparison, exact filters/exports, filtered Analytics handoff and mobile layout.${live?'':' Local fixtures also verified partial failures/cancellation, asset-switch races and capacity.'}`);
 }finally{await browser.close();if(server)await new Promise(resolve=>server.close(resolve));}

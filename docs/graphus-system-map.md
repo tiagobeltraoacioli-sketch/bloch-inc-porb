@@ -47,6 +47,8 @@ GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwrig
 
 Unit checks cover module contracts, fixed product routes, exact values, stripped fields, reproducible digests, cursor/anchor binding, atomic deduplication, page/record capacity, exact filters, subset lineage and comparisons with conflicting anchors. Local WebKit uses explicitly synthetic fixtures and checks module navigation, keyboard/connection selection, historical collection, baseline retention/comparison, filtered exports, ledger controls, partial failures/cancellation, asset-switch races, capacity, Analytics handoff and mobile layout. Live mode uses actual deployed APIs for all five assets, collects two pages and retries a failed public read once. The browser harness prints only aggregate counts, not private data.
 
+Set `GRAPHUS_MAP_ASSETS=USDC` (or a comma-separated subset of the five supported assets) to repeat only a failed live source check. Live failures log the public response status, cursor and a bounded error-body excerpt for diagnosis.
+
 Deploy from `graphus/` with `wrangler pages deploy . --project-name bloch-graphus --branch main` so its existing Functions are included. The portal screen-link change deploys separately from `site/` to `rednblue-space`. Neither deployment contains private handoff files or operator research artifacts.
 
 ### Initial production verification — 2026-09-24
@@ -62,3 +64,21 @@ Graphus release `f76fcf6f` and portal release `7c2fbad6` are published. The five
 | USDC | 377 | 352 | 352 |
 
 These are changing source samples, not network totals. Missing source timestamps were retained as missing. A separate production browser check verified that the access/API deep link survives the authorized master login, that science and analysis links open their respective private screens with the existing session, and that logout succeeds. No credential was printed or included in the public release.
+
+### Historical collection release — 2026-09-24
+
+Graphus release `24321752` publishes commit `61a4a28`. Eleven unit tests passed. Local WebKit verified eight-page collection, exact filtering, immutable baselines, comparisons, exports, filtered Analytics handoff, mobile layouts, completed-page retention after failure/cancellation and asset-switch races.
+
+Production browser checks collected and compared two real source pages for each asset:
+
+| Asset | Source pages | References, including transaction nodes | Unique records | Baseline records | Records without timestamps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| BTC | 2 | 146 | 134 | 62 | 0 |
+| ETH | 2 | 80 | 48 | 24 | 0 |
+| BLCH | 2 | 81 | 910 | 844 | 910 |
+| USDT | 2 | 644 | 511 | 215 | 511 |
+| USDC | 2 | 548 | 680 | 287 | 680 |
+
+Each check verified unique event IDs, exact amount filters, baseline/current digests, comparison counts, subset lineage and mobile overflow. The completed USDC browser run also verified the filtered packet's production Analytics handoff. These observations came from separate requests and represent bounded samples, not synchronized chain totals.
+
+Temporary HTTP 502 responses interrupted the initial Ethereum capture and a later USDC historical page. Targeted reruns succeeded with real responses. The failed USDC continuation retained its first completed page and displayed the failure explicitly. No synthetic replacement was used. Missing token/Bloch timestamps remain absent in the exported records. This release deploys the public Graphus workbench; the existing private portal remains a separate service.
