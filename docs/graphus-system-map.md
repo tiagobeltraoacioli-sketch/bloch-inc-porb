@@ -36,3 +36,17 @@ GRAPHUS_MAP_ORIGIN=https://bloch-graphus.xyz PLAYWRIGHT_MODULE=/path/to/playwrig
 Unit checks cover module contracts, fixed product routes, combined filters, exact amounts, stripped fields, reproducible digests, conflicting anchors, source failures and body bounds. Local WebKit uses explicitly synthetic test fixtures and checks filters, deep links, keyboard module/connection selection, captures, exports, ledger search/pagination, cancellation, source failures, Analytics handoff and mobile layout. The live mode uses actual deployed APIs for all five assets and retries a failed public read once.
 
 Deploy from `graphus/` with `wrangler pages deploy . --project-name bloch-graphus --branch main` so its existing Functions are included. The portal screen-link change deploys separately from `site/` to `rednblue-space`. Neither deployment contains private handoff files or operator research artifacts.
+
+### Production verification — 2026-09-24
+
+Graphus release `f76fcf6f` and portal release `7c2fbad6` are published. The five contract/evidence tests and both local browser flows passed. Production WebKit verified System Map filters, module links, keyboard interactions, connection contracts, exact exports, record searches, Analytics handoff and mobile layouts with these real one-page observations:
+
+| Asset | References, including transaction nodes | Returned records | Records without timestamps |
+| --- | ---: | ---: | ---: |
+| BTC | 78 | 72 | 0 |
+| ETH | 46 | 24 | 0 |
+| BLCH | 49 | 844 | 844 |
+| USDT | 388 | 317 | 317 |
+| USDC | 377 | 352 | 352 |
+
+These are changing source samples, not network totals. Missing source timestamps were retained as missing. A separate production browser check verified that the access/API deep link survives the authorized master login, that science and analysis links open their respective private screens with the existing session, and that logout succeeds. No credential was printed or included in the public release.
