@@ -74,3 +74,18 @@ test('Export rejects unbounded or non-source observations',()=>{
   assert.throws(()=>buildObservationBundle({status:'synthetic',asset:'BTC',address:'x',nodes:[],edges:[]},EXPORTED_AT),/No bounded/);
   assert.throws(()=>buildObservationBundle({status:'source-reported',asset:'BTC',address:'x',nodes:[],edges:Array(513).fill({})},EXPORTED_AT),/Unbounded/);
 });
+
+test('Bloch history export keeps page scope and cursor without unknown source fields',()=>{
+  const address='a'.repeat(64);
+  const bundle=buildObservationBundle({status:'source-reported',network:'bloch-mainnet',asset:'BLCH',address,
+    balance:{base_units:'7',unit:'sat',scope:'source_reported_script_hash_state'},
+    nodes:[{id:'root',kind:'script_hash',address}],edges:[],
+    observation:{source_id:'bloch-archival-rpc',coverage:'bounded_64_script_hash_history_page',
+      history:{as_of_slot:100,total:800,events_returned:0,has_more:true,next_cursor:'after_64',
+        source:'bloch-historical-indexer',private_label:'omit'},
+      history_page_retrieved_at:'2026-09-24T06:00:00Z'}},EXPORTED_AT);
+  assert.equal(bundle.source.history.next_cursor,'after_64');
+  assert.equal(bundle.source.history.total,800);
+  assert.equal(bundle.source.history_page_retrieved_at,'2026-09-24T06:00:00Z');
+  assert.equal('private_label' in bundle.source.history,false);
+});

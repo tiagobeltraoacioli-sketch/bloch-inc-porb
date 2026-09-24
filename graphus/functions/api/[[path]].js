@@ -1,6 +1,7 @@
 import {queryChainWallet} from '../../chain/real-chain.js';
 import {queryEthereumActivity,queryEthereumReceipt} from '../../chain/ethereum-activity.js';
 import {queryBlochHolders} from '../../chain/bloch-holders.js';
+import {queryBlochHistoryPage} from '../../chain/bloch-chain.js';
 
 const COOKIE = 'graphus_session';
 const NONCE_COOKIE = 'graphus_login_nonce';
@@ -104,6 +105,12 @@ export async function onRequest({request,env}) {
     });
     return json(result.body,result.status);
   }
+  if(path==='chain/bloch-history'&&method==='GET') {
+    const result=await queryBlochHistoryPage({
+      address:url.searchParams.get('address'),cursor:url.searchParams.get('cursor'),
+    });
+    return json(result.body,result.status);
+  }
   if(path==='chain/holders'&&method==='GET') {
     if(url.searchParams.get('asset')!=='BLCH')return error('holder_index_unavailable_for_asset',400);
     const result=await queryBlochHolders();
@@ -122,6 +129,7 @@ export async function onRequest({request,env}) {
       },
       bloch_indexed_script_ranking:{endpoint:'/api/chain/holders?asset=BLCH',limit:64,
         unit:'script_hash',coverage:'positive balances in source indexed canonical state',independently_verified:false},
+      bloch_script_history_page:{endpoint:'/api/chain/bloch-history',limit:64,cursor:'source_opaque'},
       bounded_public_erc20_activity:{endpoint:'/api/chain/activity',assets:['USDT','USDC'],window_blocks:64,
         historical_window_parameter:'to_block',optional_anchor_guard:'expected_hash',native_eth:'unavailable-without-transaction-index'},
       selected_ethereum_receipt:{endpoint:'/api/chain/transaction-receipt',

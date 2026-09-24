@@ -143,10 +143,14 @@ explicit public-chain fields are copied; no private score, person label, or
 unrecognized source field is exported. A balance-only download remains marked
 as balance-only if a separate activity call is pending or unavailable.
 
-Selecting a Bloch indexed point fetches up to 12 separate script-history
-events from the public archival lookup. The history observation does not change
-the ranked snapshot balance or its block anchor. Created outputs and spent
-outpoint references are displayed as transaction edges, not ownership claims.
+Selecting a Bloch indexed point fetches up to 64 script-history events from the
+public archival lookup. When the source supplies a cursor, older and newer
+controls replace the current page with another bounded page. Each page shows
+its source-reported as-of slot, returned-event count, and total; its JSON export
+contains only that page and its cursor metadata. The history observation does
+not change the separately queried balance or its block anchor. Created outputs
+and spent outpoint references are displayed as transaction edges, not ownership
+claims. Paging does not imply that Graphus has indexed the full script history.
 
 ## Bitcoin and Ethereum queries
 

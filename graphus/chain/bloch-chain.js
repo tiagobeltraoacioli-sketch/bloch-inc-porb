@@ -3,6 +3,8 @@ const INDEXER_BASE='https://blochl1.com/indexer';
 const MAX_BYTES=2*1024*1024;
 const HASH=/^[0-9a-f]{64}$/i;
 const DECIMAL=/^(0|[1-9][0-9]*)$/;
+const HISTORY_LIMIT=64;
+const CURSOR=/^[a-zA-Z0-9_-]{1,160}$/;
 
 async function sourceJson(fetcher,url,init={}){
   const response=await fetcher(url,{signal:AbortSignal.timeout(8000),...init});
@@ -59,17 +61,21 @@ function safeBalance(balance,scriptHash){
 
 function historyEvidence(scriptHash,page){
   if(page?.script_hash?.toLowerCase()!==scriptHash||!Array.isArray(page?.events)
-    ||!Number.isSafeInteger(page?.as_of_slot)||page.as_of_slot<0){
+    ||page.events.length>HISTORY_LIMIT
+    ||!Number.isSafeInteger(page?.as_of_slot)||page.as_of_slot<0
+    ||page.next_cursor!=null&&(!CURSOR.test(page.next_cursor)||typeof page.next_cursor!=='string')
+    ||page.total!=null&&(!Number.isSafeInteger(page.total)||page.total<page.events.length)){
     throw new Error('invalid_bloch_history');
   }
   const nodes=[{id:`bloch:script:${scriptHash}`,kind:'script_hash',address:scriptHash}];
   const edges=[];
   const seen=new Set();
-  for(const event of page.events.slice(0,12)){
+  for(const event of page.events){
     if(!['created','spent'].includes(event?.kind)||!HASH.test(event?.transaction_id||'')
       ||!HASH.test(event?.txid||'')||!DECIMAL.test(event?.value_sat||'')
       ||!Number.isSafeInteger(event?.vout)||event.vout<0
-      ||!Number.isSafeInteger(event?.slot)||!Number.isSafeInteger(event?.height))continue;
+      ||!Number.isSafeInteger(event?.slot)||!Number.isSafeInteger(event?.height))
+      throw new Error('invalid_bloch_history_event');
     const txid=event.transaction_id.toLowerCase();
     const id=`bloch:tx:${txid}`;
     if(!seen.has(id)){seen.add(id);nodes.push({id,kind:'transaction',txid,block:{height:event.height,slot:event.slot,hash:HASH.test(event.block_id||'')?event.block_id.toLowerCase():null}});}
@@ -82,7 +88,37 @@ function historyEvidence(scriptHash,page){
       block:{height:event.height,slot:event.slot,hash:HASH.test(event.block_id||'')?event.block_id.toLowerCase():null},
     });
   }
-  return {nodes,edges,history:{as_of_slot:page.as_of_slot,total:page.total??null,events_returned:page.events.length,has_more:Boolean(page.next_cursor),source:page.source||'bloch-historical-indexer'}};
+  return {nodes,edges,history:{as_of_slot:page.as_of_slot,total:page.total??null,
+    events_returned:page.events.length,has_more:Boolean(page.next_cursor),
+    next_cursor:page.next_cursor||null,source:page.source||'bloch-historical-indexer'}};
+}
+
+async function fetchHistoryEvidence(scriptHash,cursor,fetcher){
+  const query=new URLSearchParams({limit:String(HISTORY_LIMIT)});
+  if(cursor!==null)query.set('cursor',cursor);
+  const page=await sourceJson(fetcher,`${INDEXER_BASE}/history/${scriptHash}?${query}`);
+  return historyEvidence(scriptHash,page);
+}
+
+export async function queryBlochHistoryPage({address,cursor=null,fetcher=fetch,now=()=>new Date()}){
+  if(typeof address!=='string'||!HASH.test(address))
+    return {status:400,body:{error:'invalid_bloch_script_hash'}};
+  if(cursor!==null&&(typeof cursor!=='string'||!CURSOR.test(cursor)))
+    return {status:400,body:{error:'invalid_history_cursor'}};
+  const scriptHash=address.toLowerCase();
+  try{
+    const evidence=await fetchHistoryEvidence(scriptHash,cursor,fetcher);
+    return {status:200,body:{status:'source-reported',independent_verification:false,
+      network:'bloch-mainnet',asset:'BLCH',address:scriptHash,
+      activity:{bounded_events:evidence.history.events_returned,total_source_reported:evidence.history.total},
+      observation:{source_id:evidence.history.source,retrieved_at:now().toISOString(),
+        coverage:'bounded_64_script_hash_history_page',history:evidence.history,
+        limitations:['This cursor page is a separate source-reported history observation, not a balance snapshot or complete history.',
+          'Input outpoint references do not establish the identity or owner of a sender.']},
+      nodes:evidence.nodes,edges:evidence.edges}};
+  }catch(error){
+    return {status:502,body:{error:error.message==='bloch_response_too_large'?error.message:'bloch_source_unavailable'}};
+  }
 }
 
 export async function queryBlochScriptHash({address,fetcher=fetch,now=()=>new Date()}){
@@ -94,8 +130,7 @@ export async function queryBlochScriptHash({address,fetcher=fetch,now=()=>new Da
     const retrievedAt=now().toISOString();
     let evidence={nodes:[{id:`bloch:script:${scriptHash}`,kind:'script_hash',address:scriptHash}],edges:[],history:null};
     try{
-      const page=await sourceJson(fetcher,`${INDEXER_BASE}/history/${scriptHash}?limit=12`);
-      evidence=historyEvidence(scriptHash,page);
+      evidence=await fetchHistoryEvidence(scriptHash,null,fetcher);
     }catch{
       // History is optional for a positive balance, but required to disambiguate a zero.
     }
@@ -109,7 +144,7 @@ export async function queryBlochScriptHash({address,fetcher=fetch,now=()=>new Da
       activity:evidence.history?{bounded_events:evidence.history.events_returned,total_source_reported:evidence.history.total}:null,
       observation:{
         source_id:'bloch-archival-rpc',retrieved_at:retrievedAt,
-        coverage:evidence.history?'bounded_first_12_script_hash_events':'balance_only_history_unavailable',
+        coverage:evidence.history?'bounded_first_64_script_hash_events':'balance_only_history_unavailable',
         head_before_balance:head,history:evidence.history,
         corroboration:balance.corroboration,
         limitations:[

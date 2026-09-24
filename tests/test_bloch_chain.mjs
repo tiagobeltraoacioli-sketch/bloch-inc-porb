@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {queryBlochScriptHash} from '../graphus/chain/bloch-chain.js';
+import {queryBlochScriptHash,queryBlochHistoryPage} from '../graphus/chain/bloch-chain.js';
 import {queryChainWallet} from '../graphus/chain/real-chain.js';
 
 const hash='4cc4f2fc217206107ccecf277663678b9fce6891000000000000000000000000';
@@ -67,4 +67,34 @@ test('chain wallet dispatch accepts BLCH only on Bloch network',async()=>{
   assert.equal(ok.status,200);
   const wrong=await queryChainWallet({network:'ethereum',asset:'BLCH',address:hash,fetcher:source()});
   assert.equal(wrong.status,400);
+});
+
+test('Bloch history cursor exposes a bounded 64-event page and rejects malformed pages',async()=>{
+  const event=index=>({kind:'created',transaction_id:txid,txid,vout:index,
+    value_sat:String(index+1),slot:90,height:75,block_id:'c'.repeat(64)});
+  const first=Array.from({length:64},(_,index)=>event(index));
+  const cursor='after_64';
+  const calls=[];
+  const fetcher=async url=>{
+    calls.push(url);
+    const older=url.includes('cursor=')?{script_hash:hash,events:[event(64)],as_of_slot:101,
+      total:65,next_cursor:null,source:'archival-indexer'}
+      :{script_hash:hash,events:first,as_of_slot:100,total:65,next_cursor:cursor,source:'archival-indexer'};
+    return Response.json(older);
+  };
+  const page=await queryBlochHistoryPage({address:hash,fetcher,now:()=>observed});
+  assert.equal(page.status,200);
+  assert.equal(page.body.edges.length,64);
+  assert.equal(page.body.observation.history.next_cursor,cursor);
+  assert.equal(page.body.observation.coverage,'bounded_64_script_hash_history_page');
+  assert.equal(calls[0].includes('limit=64'),true);
+  const second=await queryBlochHistoryPage({address:hash,cursor,fetcher});
+  assert.equal(second.body.edges.length,1);
+  assert.equal(second.body.observation.history.as_of_slot,101);
+  assert.equal(second.body.observation.history.has_more,false);
+  assert.equal(calls[1].includes('cursor=after_64'),true);
+  assert.equal((await queryBlochHistoryPage({address:hash,cursor:'bad/cursor',fetcher})).status,400);
+  const tooMany=await queryBlochHistoryPage({address:hash,
+    fetcher:async()=>Response.json({script_hash:hash,events:[...first,event(64)],as_of_slot:100,total:65})});
+  assert.equal(tooMany.status,502);
 });

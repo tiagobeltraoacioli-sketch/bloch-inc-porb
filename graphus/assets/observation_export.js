@@ -22,7 +22,9 @@
       ...(value.block_window?{block_window:pick(value.block_window,['from','to','width'])}:{}),
       ...(value.source_response_consistency?{source_response_consistency:pick(value.source_response_consistency,
         ['block_heights','transaction_hashes','log_positions','duplicate_direction_hits'])}:{}),
-      ...(value.head_before_balance?{head_before_balance:pick(value.head_before_balance,['slot','height','finalized_height','state_root'])}:{})}
+      ...(value.head_before_balance?{head_before_balance:pick(value.head_before_balance,['slot','height','finalized_height','state_root'])}:{}),
+      ...(value.history?{history:pick(value.history,['as_of_slot','total','events_returned','has_more','next_cursor','source'])}:{}),
+      ...(value.history_page_retrieved_at?{history_page_retrieved_at:value.history_page_retrieved_at}:{})}
     :null;
   const node=value=>({
     ...pick(value,['id','kind','address','txid']),

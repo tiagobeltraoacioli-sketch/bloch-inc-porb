@@ -11,6 +11,9 @@ let selectedRealPeerAddress=null;
 let selectedTokenBlockBucket=null;
 let selectedTokenTransactionHash=null;
 let selectedUtxoBlockHeight=null;
+let blochHistoryCursors=[null];
+let blochHistoryPageIndex=0;
+let blochHistoryInFlightFor=null;
 let realGraphViewCache=null;
 let realKeyboardIndex=0;
 function getRealGraphView(data){
@@ -92,6 +95,7 @@ function setDataMode(mode,detail){
     selectedTokenBlockBucket=null;
     selectedTokenTransactionHash=null;
     selectedUtxoBlockHeight=null;
+    blochHistoryCursors=[null];blochHistoryPageIndex=0;
     liveTransactionDetail.hidden=true;
     sourceMetricsPanel.hidden=true;
     document.querySelector('.transaction-fan > p').textContent='TRANSACTION FAN / SYNTHETIC';
@@ -141,6 +145,11 @@ function renderSourceMetrics(data){
     add('Other identifiers',String(metrics.observed_other_identifiers),'Observed in returned records; no owner grouping');
     if(metrics.source_reported_confirmed_tx_count!==null)
       add('Source tx count',String(metrics.source_reported_confirmed_tx_count),'Address aggregate reported by source; not this page size');
+    if(metrics.asset==='BLCH'&&data.observation?.history){
+      const history=data.observation.history;
+      add('History page',String(blochHistoryPageIndex+1),`${history.events_returned} returned events in this page; ${history.total??'unknown'} source-reported total`);
+      add('History as of slot',String(history.as_of_slot),'Source index snapshot for this page; separate from the balance query');
+    }
     const labels=metrics.asset==='BTC'
       ?[['observed_input_prevout','Input prevouts referenced'],['created_output','Outputs created']]
       :[['observed_spent_outpoint_reference','Spent outpoints referenced'],['observed_created_output','Script outputs created']];
@@ -180,6 +189,27 @@ function renderSourceMetrics(data){
     }
   }else add('Activity coverage','Balance only','No transaction index is connected for this observation');
   sourceMetricsPanel.append(heading,grid);
+  if(metrics.kind==='utxo_observations'&&metrics.asset==='BLCH'&&data.observation?.history){
+    const history=data.observation.history;
+    const navigation=document.createElement('div');navigation.className='source-block-timeline';
+    const title=document.createElement('h4');title.textContent='Bloch script-history pages';
+    const note=document.createElement('p');
+    note.textContent=`Page ${blochHistoryPageIndex+1}: ${history.events_returned} returned events as of source slot ${history.as_of_slot}. Each page replaces the graph and JSON export. The balance above was queried separately and is not recalculated from this page.`;
+    const controls=document.createElement('div');controls.className='source-block-timeline-controls';
+    if(blochHistoryPageIndex>0){
+      const newer=document.createElement('button');newer.type='button';newer.dataset.blochHistory='newer';
+      newer.textContent='Newer script events';
+      newer.addEventListener('click',()=>loadBlochHistoryPage(data,blochHistoryCursors[blochHistoryPageIndex-1],blochHistoryPageIndex-1));
+      controls.append(newer);
+    }
+    if(history.next_cursor){
+      const older=document.createElement('button');older.type='button';older.dataset.blochHistory='older';
+      older.textContent='Older script events';
+      older.addEventListener('click',()=>loadBlochHistoryPage(data,history.next_cursor,blochHistoryPageIndex+1));
+      controls.append(older);
+    }
+    navigation.append(title,note,controls);sourceMetricsPanel.append(navigation);
+  }
   if(metrics.kind==='erc20_transfer_logs'&&data.tokenObservation?.block_window){
     const window=data.tokenObservation.block_window;
     const navigation=document.createElement('div');navigation.className='source-block-timeline';
@@ -611,6 +641,51 @@ async function loadTokenActivity(wallet,requestId,toBlock=null,preservePrevious=
     loading.remove();
   }
 }
+async function loadBlochHistoryPage(current,cursor,pageIndex){
+  const requestId=realRequest;
+  if(blochHistoryInFlightFor===requestId)return;
+  blochHistoryInFlightFor=requestId;
+  const list=document.getElementById('transaction-list');
+  const loading=document.createElement('p');loading.className='live-source-record';
+  loading.textContent='Loading a bounded Bloch script-history page…';list.prepend(loading);
+  try{
+    const query=new URLSearchParams({address:current.address});
+    if(cursor!==null)query.set('cursor',cursor);
+    const response=await fetch(`/api/chain/bloch-history?${query}`,{headers:{Accept:'application/json'}});
+    let page;
+    try{page=await response.json();}catch{throw new Error(`HTTP ${response.status}`);}
+    if(requestId!==realRequest||realObservation!==current)return;
+    if(!response.ok||page.status!=='source-reported')throw new Error(page.error||`HTTP ${response.status}`);
+    if(page.asset!=='BLCH'||page.network!==current.network||page.address!==current.address
+      ||!Array.isArray(page.nodes)||!Array.isArray(page.edges)||page.edges.length>64
+      ||page.observation?.history?.events_returned!==page.edges.length)
+      throw new Error('inconsistent_bloch_history_page');
+    const root=current.nodes.find(node=>node.address===current.address);
+    const nodes=page.nodes.map(node=>node.address===current.address?{...node,balance:root?.balance}:node);
+    const updated={...current,nodes,edges:page.edges,activity:page.activity,
+      observation:{...current.observation,coverage:page.observation.coverage,
+        history:page.observation.history,history_page_retrieved_at:page.observation.retrieved_at}};
+    blochHistoryCursors[pageIndex]=cursor;
+    blochHistoryCursors.length=pageIndex+1;
+    blochHistoryPageIndex=pageIndex;
+    selectedUtxoBlockHeight=null;selectedRealTransactionId=null;liveTransactionDetail.hidden=true;
+    realObservation=updated;
+    renderLiveSourceRecords(updated);
+    setDataMode('source-reported',`BLCH balance retrieved ${current.observation?.retrieved_at||'time unavailable'}; separate script-history page ${pageIndex+1} retrieved ${page.observation.retrieved_at}, as of source slot ${page.observation.history.as_of_slot}. No independent Graphus verification or owner inference.`);
+    draw();
+  }catch(error){
+    if(requestId!==realRequest||realObservation!==current)return;
+    const note=document.createElement('p');note.className='live-source-record';
+    note.textContent=`Bloch history page unavailable: ${error.message}. The current page and balance remain visible.`;
+    const retry=document.createElement('button');retry.type='button';retry.className='live-source-record';
+    retry.textContent='Retry script-history page';
+    retry.addEventListener('click',()=>loadBlochHistoryPage(current,cursor,pageIndex));
+    list.prepend(note,retry);
+  }finally{
+    if(blochHistoryInFlightFor===requestId)blochHistoryInFlightFor=null;
+    loading.remove();
+  }
+}
 async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
   const address=document.getElementById('record-search').value.trim();
   const asset=assetForLiveAddress(address);
@@ -626,6 +701,7 @@ async function loadLiveAddress({toBlock=null,expectedHash=null}={}){
   selectedTokenBlockBucket=null;
   selectedTokenTransactionHash=null;
   selectedUtxoBlockHeight=null;
+  blochHistoryCursors=[null];blochHistoryPageIndex=0;
   realKeyboardIndex=0;
   liveTransactionDetail.hidden=true;
   sourceMetricsPanel.hidden=true;
