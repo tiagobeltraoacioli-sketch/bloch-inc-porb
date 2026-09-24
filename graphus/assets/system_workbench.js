@@ -58,20 +58,19 @@ export function createEvidenceWorkbench(){
     bars('capture-blocks',[...blocks].sort((a,b)=>Number(a[0])-Number(b[0])).slice(-32),block=>{$('filter-from').value=$('filter-to').value=block;recordPage=0;ledger();});
     bars('capture-types',Object.entries(q.record_types),kind=>{$('filter-kind').value=kind;recordPage=0;ledger();});
     const kind=$('filter-kind').value;$('filter-kind').replaceChildren(new Option('All types','all'),...Object.keys(q.record_types).map(value=>new Option(value.replaceAll('_',' '),value)));if(Object.hasOwn(q.record_types,kind))$('filter-kind').value=kind;
-    $('capture-graph').href=`constellation.html?asset=${d.asset.toLowerCase()}`;
     $('capture-provenance').textContent=JSON.stringify({dataset_sha256:packet.dataset_sha256,digest_encoding:packet.digest_encoding,diagnostics:q,collection:packet.collection,pagination:packet.pagination,snapshots:d.snapshots,aml_score_included:false},null,2);
     ledger();renderComparison();controls();
   }
   function bars(id,rows,select){const max=Math.max(1,...rows.map(r=>r[1]));$(id).replaceChildren(...rows.map(([title,count])=>{const row=el('div'),meter=el('meter');meter.max=max;meter.value=count;meter.setAttribute('aria-label',`${title}: ${count} returned records`);row.append(button(title.replaceAll('_',' '),()=>select(title)),meter,el('b',count.toLocaleString()));return row;}));if(!rows.length)$(id).append(el('p','No records were returned in these source pages.'));}
   function transactionUrl(asset,txid){return `${asset==='BTC'?'https://blockstream.info':asset==='BLCH'?'https://blochl1.com':'https://etherscan.io'}/tx/${txid}`;}
-  function referenceLink(node,asset){const ref=node.address||node.txid,a=link(short(ref),node.kind==='transaction'?transactionUrl(asset,ref):`constellation.html?${new URLSearchParams({asset:asset.toLowerCase(),address:ref})}`);a.title=ref;return a;}
+  function referenceLink(node){const ref=node.address||node.txid,b=button(short(ref),()=>useFiltered('graph',node.id));b.title=ref;b.setAttribute('aria-label',`Inspect ${ref} in the filtered collection graph`);return b;}
   function ledger(){
     if(!packet)return;const d=packet.dataset,refs=new Map(d.nodes.map(n=>[n.id,n]));let rows;
     try{rows=selectRecords(packet,options()).rows;$('filter-status').textContent=`${rows.length} / ${d.edges.length} collected records match. Amount filters use exact integer base units; each record type is summed separately.`;}
-    catch(error){$('filter-status').textContent=error.message;$('capture-ledger').replaceChildren();$('filter-totals').replaceChildren();$('capture-page').textContent='Correct the filters to display records.';for(const id of ['capture-prev','capture-next','capture-filtered-export','capture-filtered-analytics'])$(id).disabled=true;return;}
-    $('capture-filtered-export').disabled=$('capture-filtered-analytics').disabled=rows.length===0;
+    catch(error){$('filter-status').textContent=error.message;$('capture-ledger').replaceChildren();$('filter-totals').replaceChildren();$('capture-page').textContent='Correct the filters to display records.';for(const id of ['capture-prev','capture-next','capture-filtered-export','capture-filtered-analytics','capture-filtered-graph'])$(id).disabled=true;return;}
+    $('capture-filtered-export').disabled=$('capture-filtered-analytics').disabled=$('capture-filtered-graph').disabled=rows.length===0;
     const pages=Math.max(1,Math.ceil(rows.length/20));recordPage=Math.min(recordPage,pages-1);
-    $('capture-ledger').replaceChildren(...rows.slice(recordPage*20,recordPage*20+20).map(e=>{const row=el('tr'),block=el('td',String(e.block_number)),tx=link(short(e.txid),transactionUrl(d.asset,e.txid));tx.title=e.txid;block.append(tx);const endpoints=el('td');endpoints.append(referenceLink(refs.get(e.from),d.asset),el('span',' → '),referenceLink(refs.get(e.to),d.asset));row.append(block,endpoints,el('td',e.kind.replaceAll('_',' ')),el('td',e.amount_base_units));return row;}));
+    $('capture-ledger').replaceChildren(...rows.slice(recordPage*20,recordPage*20+20).map(e=>{const row=el('tr'),block=el('td',String(e.block_number)),tx=link(short(e.txid),transactionUrl(d.asset,e.txid));tx.title=e.txid;block.append(tx);const endpoints=el('td');endpoints.append(referenceLink(refs.get(e.from)),el('span',' → '),referenceLink(refs.get(e.to)));row.append(block,endpoints,el('td',e.kind.replaceAll('_',' ')),el('td',e.amount_base_units));return row;}));
     const totals=new Map();for(const e of rows)totals.set(e.kind,(totals.get(e.kind)||0n)+BigInt(e.amount_base_units));
     $('filter-totals').replaceChildren(...[...totals].map(([kind,total])=>{const box=el('div');box.append(el('span',kind.replaceAll('_',' ')),el('strong',total.toString()),el('small','sum of returned record amounts / base units'));return box;}));
     $('capture-page').textContent=`${rows.length} matching records · Page ${recordPage+1} / ${pages}`;$('capture-prev').disabled=recordPage===0;$('capture-next').disabled=recordPage>=pages-1;
@@ -83,8 +82,10 @@ export function createEvidenceWorkbench(){
   $('capture-export').onclick=()=>{if(packet)download(packet,filename(packet,'collection'));};
   function analyze(value){try{sessionStorage.setItem('graphus.analytics.network.v1',JSON.stringify(value));location.href='analytics.html?import=network';}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and import it into Analytics.';}}
   $('capture-analytics').onclick=()=>{if(packet)analyze(packet);};
-  async function useFiltered(open=false){if(!packet)return;const source=packet;try{const subset=await filteredEvidence(source,options());if(packet!==source)return;if(open)analyze(subset);else download(subset,filename(subset,'filtered'));}catch(error){$('filter-status').textContent=error.message;}}
-  $('capture-filtered-export').onclick=()=>useFiltered();$('capture-filtered-analytics').onclick=()=>useFiltered(true);
+  function graph(value,reference=''){try{sessionStorage.setItem('graphus.constellation.evidence.v1',JSON.stringify(value));location.href='constellation.html?'+new URLSearchParams({import:'evidence',...(reference?{reference}:{})});}catch{$('capture-status').textContent='Browser handoff unavailable. Export the JSON packet and open it in Constellation.';}}
+  $('capture-graph').onclick=()=>{if(packet)graph(packet);};
+  async function useFiltered(target='export',reference=''){if(!packet)return;const source=packet;try{const subset=await filteredEvidence(source,options());if(packet!==source)return;if(target==='analytics')analyze(subset);else if(target==='graph')graph(subset,reference);else download(subset,filename(subset,'filtered'));}catch(error){$('filter-status').textContent=error.message;}}
+  $('capture-filtered-export').onclick=()=>useFiltered();$('capture-filtered-analytics').onclick=()=>useFiltered('analytics');$('capture-filtered-graph').onclick=()=>useFiltered('graph');
 
   function renderComparison(){
     comparison=null;$('comparison-result').hidden=true;$('comparison-ledger').replaceChildren();$('comparison-provenance').textContent='';

@@ -121,3 +121,52 @@ export function compareEvidence(baseline,current){
     counts:{only_current:onlyCurrent.length,only_baseline:onlyBaseline.length,changed:changed.length,shared:shared.length},event_ids:{only_current:onlyCurrent,only_baseline:onlyBaseline,changed,shared},conflicting_blocks:conflicts,
     interpretation:conflicts.length?'Source block hashes diverge at overlapping heights. Review anchors before combining observations.':'Differences describe these sampled datasets. A missing record is not proof of a deleted transaction or inactivity. These counts are not a time-based activity delta.'};
 }
+
+const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+function fields(value,allowed,label){check(value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).every(key=>allowed.includes(key)),`Unexpected ${label} fields.`);}
+export async function validateEvidenceCollection(packet){
+  check(new TextEncoder().encode(JSON.stringify(packet)).byteLength<=6_000_000,'Collection file exceeds 6 MB.');
+  fields(packet,['kind','schema_version','exported_at','dataset','dataset_sha256','digest_encoding','diagnostics','purpose','aml_score_included','identity_attribution_included','pagination','collection','selection'],'packet');
+  check(packet.kind==='graphus_network_collection'&&packet.schema_version===1&&/^[a-f0-9]{64}$/.test(packet.dataset_sha256||''),'Open a System Map evidence collection with a dataset digest.');
+  check(packet.aml_score_included===false&&packet.identity_attribution_included===false&&typeof packet.exported_at==='string'&&packet.exported_at.length<=100&&Number.isFinite(Date.parse(packet.exported_at)),'Invalid evidence packet metadata.');
+  const d=packet.dataset;
+  fields(d,['status','asset','network','source','retrieved_at','anchor','coverage','scope','independent_verification','nodes','edges','snapshots'],'dataset');
+  check(d.independent_verification===false&&typeof d.coverage==='string'&&d.coverage.length<=1000,'Invalid source coverage.');
+  check(Array.isArray(d.snapshots)&&d.snapshots.length>0&&d.snapshots.length<=COLLECTION_LIMITS.pages,'Expected one to eight source snapshots.');
+  const scopeKeys=['transactions_returned','transactions_in_block','transactions_in_page','endpoint_records_omitted','selection','candidates_checked','successful_transfers','failed_transactions_omitted','internal_calls_included','from_block','to_block','contract','source_logs','returned_logs','truncated','not_finalized_omitted','has_more','finality_available','source_pages','unique_records','complete_chain_history','filtered_records','source_records'];
+  function metadata(value){
+    fields(value.anchor,['height','hash','time','finality','finalized_height'],'anchor');
+    fields(value.scope,scopeKeys,'scope');
+    check(typeof value.retrieved_at==='string'&&value.retrieved_at.length<=100&&Number.isFinite(Date.parse(value.retrieved_at)),'Invalid source retrieval time.');
+    check(value.anchor.finality===undefined||typeof value.anchor.finality==='string'&&value.anchor.finality.length<=300,'Invalid source finality text.');
+    check(value.anchor.time===undefined||typeof value.anchor.time==='string'&&Number.isFinite(Date.parse(value.anchor.time)),'Invalid source block time.');
+    check(value.anchor.finalized_height===undefined||Number.isSafeInteger(value.anchor.finalized_height)&&value.anchor.finalized_height>=0,'Invalid source finalized height.');
+    check(Object.values(value.scope).every(v=>typeof v==='boolean'||Number.isSafeInteger(v)||typeof v==='string'&&v.length<=500),'Invalid scope values.');
+  }
+  metadata(d);const checked=await evidencePacket({...d,next_cursor:null},d.asset);
+  check(stable(d.nodes)===stable(checked.dataset.nodes)&&stable(d.edges)===stable(checked.dataset.edges)&&stable(d.anchor)===stable(checked.dataset.anchor),'Unexpected or invalid reference, event or anchor fields.');
+  for(const [i,s]of d.snapshots.entries()){
+    fields(s,['source','retrieved_at','anchor','scope','coverage','records','requested_cursor'],'snapshot');metadata(s);
+    check(s.source===d.source&&Number.isSafeInteger(s.records)&&s.records>=0&&s.records<=COLLECTION_LIMITS.records&&typeof s.coverage==='string'&&s.coverage.length<=1000,'Invalid source snapshot.');
+    check(i===0?s.requested_cursor===null:typeof s.requested_cursor==='string','Invalid snapshot cursor sequence.');
+    await evidencePacket({...s,status:'source-reported',asset:d.asset,network:d.network,nodes:[],edges:[],next_cursor:null},d.asset,{cursor:s.requested_cursor});
+  }
+  check(new Set(d.snapshots.map(s=>s.requested_cursor)).size===d.snapshots.length,'Repeated snapshot cursor.');
+  check(Math.max(...d.snapshots.map(s=>s.anchor.height))===d.anchor.height&&d.snapshots.some(s=>s.anchor.height===d.anchor.height&&s.anchor.hash.toLowerCase()===d.anchor.hash.toLowerCase()),'Collection anchor differs from source snapshots.');
+  check(d.snapshots.reduce((sum,s)=>sum+s.records,0)>=d.edges.length,'Snapshot record counts cannot cover this collection.');
+  blockMap(d);
+  const expected=await packageDataset(d);
+  check(expected.dataset_sha256===packet.dataset_sha256,'Dataset digest mismatch. The saved records have changed.');
+  check(packet.purpose===expected.purpose&&packet.digest_encoding===expected.digest_encoding&&stable(packet.diagnostics)===stable(expected.diagnostics),'Dataset diagnostics or digest encoding mismatch.');
+  if(packet.pagination){
+    fields(packet.pagination,['next_cursor','requested_cursors'],'pagination');
+    check(!packet.selection&&cursorValid(d.asset,packet.pagination.next_cursor)&&stable(packet.pagination.requested_cursors)===stable(d.snapshots.map(s=>s.requested_cursor)),'Invalid collection pagination.');
+  }
+  if(packet.collection){fields(packet.collection,['last_page_added','duplicate_records_omitted'],'collection');check(Object.values(packet.collection).every(v=>Number.isSafeInteger(v)&&v>=0&&v<=32000),'Invalid collection counts.');}
+  if(packet.selection){
+    fields(packet.selection,['parent_dataset_sha256','filters'],'selection');fields(packet.selection.filters,['query','kind','direction','minBlock','maxBlock','minimum','maximum'],'filters');
+    check(/^[a-f0-9]{64}$/.test(packet.selection.parent_dataset_sha256||''),'Missing parent dataset digest.');
+    const selected=selectRecords(packet,packet.selection.filters);check(selected.rows.length===d.edges.length&&stable(selected.filters)===stable(packet.selection.filters),'Records do not match the saved filters.');
+  }
+  return structuredClone(packet);
+}

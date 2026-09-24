@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  const params=new URLSearchParams(location.search),legacy=params.has('address')||params.has('wallet')||params.get('mode')==='demo';
+  const params=new URLSearchParams(location.search),importing=params.get('import')==='evidence',legacy=!importing&&(params.has('address')||params.has('wallet')||params.get('mode')==='demo');
   const host=document.createElement('section');host.className='net-explorer';host.id='network-explorer';
   document.querySelector('.constellation-intro').after(host);
   if(legacy){host.innerHTML='<a class="net-back" href="constellation.html">← Back to the real network feed</a>';return;}
@@ -15,22 +15,29 @@
     <div class="net-lower"><article class="net-panel"><p class="section-index">02 / ACTIVITY BY BLOCK</p><h3>Explore the observed window.</h3><div id="net-timeline" class="net-timeline"></div><p class="net-caption">Each bar counts returned records in one block. Missing blocks are unknown. Choose a bar to focus the graph.</p></article><article class="net-panel"><p class="section-index">03 / DIRECTED PATH</p><h3>Trace the connections.</h3><label>Start<select id="net-path-from"></select></label><label>Destination<select id="net-path-to"></select></label><button id="net-path" type="button">Find path · up to 6 steps</button><p id="net-path-result" role="status">Paths follow recorded direction within this sample. They do not establish chronology or continuity of value.</p></article></div>
     <article class="net-panel"><div class="net-evidence-head"><div><p class="section-index">04 / EXACT SOURCE RECORDS</p><h3>Inspect every connection.</h3></div><button id="net-export" type="button">Export collection JSON</button><button id="net-analytics" type="button">Analyze this collection ↗</button><a id="net-oculum" href="oculum.html">Discover balances in Oculum ↗</a></div><div class="net-table-wrap"><table><caption>Filtered records · amounts in exact integer base units</caption><thead><tr><th>Block / transaction</th><th>Origin → destination</th><th>Record type</th><th>Base units</th></tr></thead><tbody id="net-ledger"></tbody></table></div><div class="net-toolbar"><button id="net-prev" type="button">← Previous</button><span id="net-page"></span><button id="net-next" type="button">Next →</button></div></article>
     <details class="net-panel"><summary>Sources, collection limits and observations</summary><p>Collection runs while this tab is visible. Each page retains its source, retrieval time, block anchor and sampling limits. Overlapping events are counted once. Up to 1,200 references, 4,000 records and 32 distinct snapshots stay in this tab; export before clearing. This is a sampled collection with gaps, not an archive of the entire chain.</p><div id="net-sources"></div><a href="constellation.html?mode=demo">Open the synthetic demonstration explicitly ↗</a></details>`;
-  const $=id=>document.getElementById(id),A=window.GraphusAnalytics,S=window.GraphusNetworkSession,canvas=$('net-canvas'),ctx=canvas.getContext('2d');
+  const $=id=>document.getElementById(id),A=window.GraphusAnalytics,S=window.GraphusNetworkSession,I=window.GraphusNetworkInspector,canvas=$('net-canvas'),ctx=canvas.getContext('2d');
   const el=(tag,value,className)=>{const e=document.createElement(tag);if(value!==undefined)e.textContent=value;if(className)e.className=className;return e;};
   const short=v=>v.length>28?v.slice(0,12)+'…'+v.slice(-8):v;
-  let collection=null,data=null,filtered=null,stats=null,cursor=null,selected='',focus='',path=[],page=0,busy=false,requestId=0;
+  let collection=null,data=null,filtered=null,stats=null,cursor=null,selected='',focus='',path=[],page=0,busy=false,requestId=0,localMode=importing,importedPacket=null;
+  const importPanel=el('div',undefined,'net-import-panel'),mode=el('strong','LIVE SOURCE COLLECTION'),importLabel=el('label','Open System Map evidence JSON'),file=el('input');
+  mode.id='net-mode';file.id='net-import-file';file.type='file';file.accept='.json,application/json';importLabel.append(file);
+  const liveButton=el('button','Start a new live collection');liveButton.id='net-live';liveButton.type='button';
+  const importNote=el('p','Open a full or filtered evidence export locally. File contents stay in this browser.');importNote.id='net-import-note';
+  const importDetails=el('details'),importProvenance=el('pre');importDetails.id='net-import-details';importDetails.hidden=true;importProvenance.id='net-import-provenance';importDetails.append(el('summary','Dataset digest and filter lineage'),importProvenance);
+  importPanel.append(mode,importLabel,liveButton,importNote,importDetails);host.querySelector('.net-heading').after(importPanel);
   let points=[],links=[],zoom=1,pan={x:0,y:0},width=1,height=1,drag=null;
   const palette=['#c8ef9d','#8acbd1','#d2b6e8','#e4bf84','#95bba2','#d59389'];
   const asset=params.get('asset')?.toUpperCase();if(Object.hasOwn(A.DECIMALS,asset))$('net-asset').value=asset;
   function status(value,error=false){$('net-status').textContent=value;$('net-status').dataset.error=String(error);}
-  function busyButtons(){$('net-refresh').disabled=busy;$('net-older').disabled=busy||cursor===null;$('net-export').disabled=!collection;$('net-analytics').disabled=!collection;}
+  function busyButtons(){$('net-refresh').disabled=busy||localMode;$('net-older').disabled=busy||localMode||cursor===null;$('net-export').disabled=!collection;$('net-analytics').disabled=!collection;$('net-asset').disabled=localMode;$('net-auto').disabled=localMode;liveButton.hidden=!localMode;mode.textContent=localMode?'LOCAL EVIDENCE COLLECTION':'LIVE SOURCE COLLECTION';host.dataset.collectionMode=localMode?'imported':'live';}
   async function collect(older=false){
-    if(busy)return;const request=++requestId,asset=$('net-asset').value;busy=true;busyButtons();status(`Collecting ${older?'earlier':'latest'} real ${asset} records…`);
+    if(busy||localMode)return;const request=++requestId,asset=$('net-asset').value;busy=true;busyButtons();status(`Collecting ${older?'earlier':'latest'} real ${asset} records…`);
     try{
       const query=new URLSearchParams({asset});if(older&&cursor!==null)query.set('cursor',cursor);
       let response;
       for(let attempt=0;attempt<2;attempt++){
         response=await fetch(`/api/chain/network?${query}`,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
+        if(request!==requestId){await response.body?.cancel();return;}
         if(![502,503,504].includes(response.status)||attempt===1)break;
         status('The public source is temporarily unavailable. Retrying once…');await response.body?.cancel();await new Promise(resolve=>setTimeout(resolve,1200));if(request!==requestId)return;
       }
@@ -38,20 +45,36 @@
       const raw=await response.text();if(raw.length>4000000)throw new Error('Source page exceeds the collection limit.');const result=JSON.parse(raw);
       if(request!==requestId)return;if(result.asset!==asset)throw new Error('Source asset mismatch.');
       const next=S.merge(collection,result);if(!collection||older)cursor=result.next_cursor??null;collection=next;data=A.normalize(collection);
-      const blockValue=$('net-block').value,blocks=[...new Set(data.edges.map(e=>e.block))].sort((a,b)=>b-a);
-      $('net-block').replaceChildren(new Option('All collected blocks','all'),...blocks.map(n=>new Option(String(n),String(n))));if(blocks.includes(Number(blockValue)))$('net-block').value=blockValue;
+      blockOptions();
       render();status(`${next.added} new records · ${next.edges.length} unique records collected · latest retrieval ${result.retrieved_at}. ${result.coverage}.`);
       const url=new URL(location.href);url.search=new URLSearchParams({asset:asset.toLowerCase()}).toString();history.replaceState(null,'',url);
     }catch(error){if(request===requestId)status(error.message,true);}
     finally{if(request===requestId){busy=false;busyButtons();}}
   }
-  function reset(){requestId++;busy=false;collection=data=filtered=stats=null;cursor=null;selected=focus='';path=[];page=0;points=[];links=[];
+  function reset(load=true){requestId++;busy=false;collection=data=filtered=stats=null;cursor=null;selected=focus='';path=[];page=0;points=[];links=[];importedPacket=null;importDetails.hidden=true;importProvenance.textContent='';delete host.dataset.digest;
     $('net-kind').replaceChildren(new Option('All types','all'),...A.KINDS[$('net-asset').value].map(v=>new Option(v.replaceAll('_',' '),v)));
     $('net-block').replaceChildren(new Option('All collected blocks','all'));$('net-minimum').value='0';$('net-search').value='';
     for(const id of ['net-stats','net-ledger','net-references','net-timeline','net-sources','net-path-from','net-path-to'])$(id).replaceChildren();
     $('net-detail').textContent='Choose a public reference from the graph or list.';$('net-plot-count').textContent='No records collected.';$('net-page').textContent='';$('net-path-result').textContent='Choose a start and destination.';
-    $('net-oculum').href=`oculum.html?asset=${$('net-asset').value.toLowerCase()}`;busyButtons();draw();collect();
+    $('net-oculum').href=`oculum.html?asset=${$('net-asset').value.toLowerCase()}`;busyButtons();draw();if(load&&!localMode)collect();else status('No saved evidence is open. Choose a System Map JSON export.');
   }
+  function blockOptions(){const value=$('net-block').value,blocks=[...new Set(data.edges.map(e=>e.block))].sort((a,b)=>b-a);$('net-block').replaceChildren(new Option('All collected blocks','all'),...blocks.map(n=>new Option(String(n),String(n))));if(blocks.includes(Number(value)))$('net-block').value=value;}
+  async function openEvidence(read,reference=''){
+    localMode=true;$('net-auto').checked=false;reset(false);let request=requestId;busy=true;busyButtons();status('Checking saved collection structure and dataset digest…');
+    const url=new URL(location.href);url.search=new URLSearchParams({import:'evidence',...(reference?{reference}:{})});history.replaceState(null,'',url);
+    importNote.textContent='Local inspection. Live collection is paused.';
+    try{
+      const serialized=await read();if(request!==requestId)return;
+      if(typeof serialized!=='string'||new TextEncoder().encode(serialized).byteLength>6_000_000)throw new Error('No evidence packet is available, or the file exceeds 6 MB.');
+      const {validateEvidenceCollection}=await import('./system_evidence.js'),packet=await validateEvidenceCollection(JSON.parse(serialized));if(request!==requestId)return;
+      $('net-asset').value=packet.dataset.asset;reset(false);request=requestId;importedPacket=packet;collection=packet.dataset;data=A.fromCollection(packet);selected=data.nodes.some(n=>n.id===reference)?reference:'';blockOptions();render();
+      host.dataset.digest=packet.dataset_sha256;importDetails.hidden=false;importProvenance.textContent=JSON.stringify({dataset_sha256:packet.dataset_sha256,digest_encoding:packet.digest_encoding,selection:packet.selection,snapshots:packet.dataset.snapshots},null,2);
+      importNote.textContent=`${packet.selection?'Filtered subset':'Full collection'} · ${data.asset} · ${data.edges.length} exact records · SHA-256 ${packet.dataset_sha256}. Digest matches the dataset bytes; source claims remain unverified. Graph filters do not change the saved collection.`;
+      status(`Opened ${data.edges.length} saved records from ${collection.snapshots.length} source pages. No source query was made. Select a reference to inspect this sample.`);busyButtons();
+    }catch(error){if(request===requestId){busy=false;busyButtons();status(error.message,true);importNote.textContent='The saved packet was not opened. Choose another export or start a new live collection.';}}
+  }
+  file.addEventListener('change',()=>{const selectedFile=file.files?.[0];if(!selectedFile)return;openEvidence(async()=>{if(selectedFile.size>6_000_000)throw new Error('Collection file exceeds 6 MB.');return selectedFile.text();});file.value='';});
+  liveButton.addEventListener('click',()=>{localMode=false;importNote.textContent='Live source collection. Imported evidence was kept only in this tab.';const url=new URL(location.href);url.search=new URLSearchParams({asset:$('net-asset').value.toLowerCase()});history.replaceState(null,'',url);reset();});
   function render(){
     if(!data)return;const minimum=$('net-minimum').value;
     if(!/^(0|[1-9][0-9]{0,77})$/.test(minimum)){status('Use an unsigned integer number of base units.',true);return;}
@@ -63,18 +86,23 @@
     $('net-sources').replaceChildren(...collection.snapshots.map((s,i)=>{const p=el('p',`${i+1}. ${s.source} · ${s.retrieved_at} · anchor ${s.anchor.height} / ${s.anchor.hash} · ${s.anchor.finality} · ${s.coverage}`);return p;}));
   }
   function referenceList(){
-    if(!stats)return;const query=$('net-search').value.toLowerCase(),rows=stats.ranking.filter(n=>n.label.toLowerCase().includes(query));
-    $('net-references').replaceChildren(...rows.slice(0,100).map(n=>{const b=el('button',`${short(n.label)} · ${n.degree} neighbors`);b.type='button';b.title=n.label;b.addEventListener('click',()=>choose(n.id));return b;}),el('small',`${Math.min(rows.length,100)} of ${rows.length} matching references. Search to narrow the list.`));
+    if(!stats)return;const rows=stats.ranking.filter(n=>I.matches(n,$('net-search').value,data.asset));
+    $('net-references').replaceChildren(...rows.slice(0,100).map(n=>{const b=el('button',`${short(n.label)} · ${n.degree} neighbors`);b.type='button';b.title=n.label;b.setAttribute('aria-pressed',String(n.id===selected));b.addEventListener('click',()=>choose(n.id));return b;}),el('small',`${Math.min(rows.length,100)} of ${rows.length} matching references. Search to narrow the list.`));
   }
-  function choose(id){selected=id;detail();if(!points.some(p=>p.id===id))layout();else draw();}
+  function choose(id){selected=id;referenceList();detail();$('net-detail').parentElement.scrollTop=0;$('net-detail').querySelector('h3')?.focus({preventScroll:true});if(!points.some(p=>p.id===id))layout();else draw();}
   function detail(){
     const target=$('net-detail');target.replaceChildren();if(!stats)return;const n=stats.ranking.find(n=>n.id===selected);
     if(!n){target.textContent='Select a point to inspect its real connections.';return;}
-    target.append(el('h3',n.label),el('p',`${n.kind.replaceAll('_',' ')} · ${n.incoming} incoming records · ${n.outgoing} outgoing · ${n.degree} distinct neighbors`));
+    const heading=el('h3',n.label);heading.tabIndex=-1;target.append(heading,el('p',`${n.kind.replaceAll('_',' ')} · ${n.incoming} incoming records · ${n.outgoing} outgoing · ${n.degree} distinct neighbors`));
     const links=el('div',undefined,'net-detail-links');
     if(n.kind!=='transaction')for(const [view,label] of [['constellation','Query address evidence ↗'],['oculum','Query real balance ↗'],['analytics','Analyze this address ↗']]){const a=el('a',label);a.href=`${view}.html?${new URLSearchParams({asset:data.asset.toLowerCase(),address:n.label})}`;links.append(a);}
     const focusButton=el('button','Focus direct neighborhood');focusButton.type='button';focusButton.addEventListener('click',()=>{focus=n.id;path=[];page=0;render();});links.append(focusButton);
     const start=el('button','Use as path start');start.type='button';start.addEventListener('click',()=>{$('net-path-from').value=n.id;});links.append(start);target.append(links);
+    const observed=I.inspect(filtered,n.id),facts=el('p',`${observed.records} incident records · ${observed.transactions} transactions · ${observed.blocks} returned blocks · ${observed.records_without_timestamp} records without timestamps. ${observed.self_records} self-reference records.`);facts.id='net-reference-facts';target.append(facts,el('h4','Exact amounts in this filtered sample'));
+    const totals=el('div',undefined,'net-reference-totals');totals.id='net-reference-totals';
+    for(const group of observed.groups){const row=el('div');row.append(el('span',`${group.direction} / ${group.kind.replaceAll('_',' ')} / ${group.records} records`),el('strong',group.base_units),el('small','integer base units'));totals.append(row);}target.append(totals,el('p','Record amounts describe the sampled events. They are not a current balance. Self-reference records are listed separately; UTXO inputs and outputs retain separate types.','net-caption'));
+    const peers=el('div',undefined,'net-references');peers.id='net-neighbors';for(const peer of observed.peers.slice(0,20)){const ref=filtered.nodes.find(node=>node.id===peer.id),b=el('button',`${short(ref.label)} · ${peer.incoming} in / ${peer.outgoing} out`);b.type='button';b.title=ref.label;b.dataset.reference=ref.id;b.addEventListener('click',()=>choose(ref.id));peers.append(b);}
+    target.append(el('h4','Connected references'),peers,el('p',`${Math.min(20,observed.peers.length)} / ${observed.peers.length} direct neighbors listed. Search below to find any reference in the filtered sample.`,'net-caption'));
   }
   function ledger(){
     if(!filtered)return;const rows=[...filtered.edges].sort((a,b)=>b.block-a.block||a.id.localeCompare(b.id)),pages=Math.max(1,Math.ceil(rows.length/20));page=Math.min(page,pages-1);
@@ -101,11 +129,12 @@
   canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,px:pan.x,py:pan.y,moved:false};canvas.setPointerCapture(e.pointerId);});canvas.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>4)drag.moved=true;pan={x:drag.px+dx,y:drag.py+dy};draw();});
   canvas.addEventListener('pointerup',e=>{if(drag&&!drag.moved){const rect=canvas.getBoundingClientRect(),x=(e.clientX-rect.left-width/2-pan.x)/zoom,y=(e.clientY-rect.top-height/2-pan.y)/zoom;let hit=null,distance=18/zoom;for(const p of points){const d=Math.hypot(p.x-x,p.y-y);if(d<distance){hit=p;distance=d;}}if(hit)choose(hit.id);}drag=null;});canvas.addEventListener('pointercancel',()=>drag=null);canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.12,Math.min(12,zoom*Math.exp(-e.deltaY*.001)));draw();},{passive:false});
   $('net-fit').addEventListener('click',fit);$('net-in').addEventListener('click',()=>{zoom=Math.min(12,zoom*1.3);draw();});$('net-out').addEventListener('click',()=>{zoom=Math.max(.12,zoom/1.3);draw();});new ResizeObserver(fit).observe(canvas.parentElement);
-  $('net-refresh').addEventListener('click',()=>collect());$('net-older').addEventListener('click',()=>collect(true));$('net-reset').addEventListener('click',reset);$('net-asset').addEventListener('change',reset);$('net-search').addEventListener('input',referenceList);
+  $('net-refresh').addEventListener('click',()=>collect());$('net-older').addEventListener('click',()=>collect(true));$('net-reset').addEventListener('click',()=>{reset();if(localMode)importNote.textContent='Saved collection cleared from this tab. Choose another evidence file or start a new live collection.';});$('net-asset').addEventListener('change',()=>reset());$('net-search').addEventListener('input',referenceList);
   for(const id of ['net-kind','net-block','net-minimum'])$(id).addEventListener('change',()=>{page=0;path=[];render();});$('net-clear-focus').addEventListener('click',()=>{focus='';path=[];$('net-kind').value='all';$('net-block').value='all';$('net-minimum').value='0';page=0;render();});$('net-prev').addEventListener('click',()=>{page--;ledger();});$('net-next').addEventListener('click',()=>{page++;ledger();});
   $('net-path').addEventListener('click',()=>{if(!filtered)return;const found=A.findPath(filtered,$('net-path-from').value,$('net-path-to').value,6);path=found||[];$('net-path-result').textContent=found?`${found.length} directed steps in returned records. ${found.map(e=>`${short(e.txid)} at block ${e.block}`).join(' → ')}. No chronological or value-continuity claim.`:'No directed path within six steps in this sample.';layout();});
-  function exported(){return {kind:'graphus_network_collection',schema_version:1,exported_at:new Date().toISOString(),independent_verification:false,dataset:{...collection,snapshots:collection.snapshots.map(({signature,...s})=>s)}};}
+  function exported(){return importedPacket||{kind:'graphus_network_collection',schema_version:1,exported_at:new Date().toISOString(),independent_verification:false,dataset:{...collection,snapshots:collection.snapshots.map(({signature,...s})=>s)}};}
   $('net-export').addEventListener('click',()=>{if(!collection)return;const url=URL.createObjectURL(new Blob([JSON.stringify(exported(),null,2)],{type:'application/json'})),a=el('a');a.href=url;a.download=`graphus-${data.asset.toLowerCase()}-real-collection.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   $('net-analytics').addEventListener('click',()=>{try{sessionStorage.setItem('graphus.analytics.network.v1',JSON.stringify(exported()));location.assign('analytics.html?import=network');}catch{status('Browser storage is full. Export the collection JSON first.',true);}});
-  setInterval(()=>{if($('net-auto').checked&&!document.hidden&&!busy)collect();},60000);reset();
+  setInterval(()=>{if(!localMode&&$('net-auto').checked&&!document.hidden&&!busy)collect();},60000);
+  if(importing)openEvidence(()=>{const serialized=sessionStorage.getItem('graphus.constellation.evidence.v1');sessionStorage.removeItem('graphus.constellation.evidence.v1');return serialized;},params.get('reference')||'');else reset();
 })();

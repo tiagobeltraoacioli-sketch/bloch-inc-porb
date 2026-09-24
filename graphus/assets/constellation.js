@@ -1,5 +1,6 @@
 (function(){
 const viewParams=new URLSearchParams(location.search);
+if(viewParams.get('import')==='evidence')return;
 const demoMode=viewParams.get('mode')==='demo'||viewParams.has('wallet');
 if(!demoMode&&!viewParams.has('address'))return;
 const canvas = document.getElementById('evidence-constellation');

@@ -1,9 +1,9 @@
 name: System Map contracts
 on:
   push:
-    paths: ['graphus/assets/map.*', 'graphus/assets/system_*.js', 'graphus/map.html', 'tests/*system_map*', '.github/workflows/system-map.yml']
+    paths: ['graphus/assets/map.*', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_map*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
   pull_request:
-    paths: ['graphus/assets/map.*', 'graphus/assets/system_*.js', 'graphus/map.html', 'tests/*system_map*', '.github/workflows/system-map.yml']
+    paths: ['graphus/assets/map.*', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_map*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
 permissions:
   contents: read
 jobs:
@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/test_system_map.mjs
+      - run: node --test tests/test_system_map.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
       - run: node --check graphus/assets/map.js
       - run: node --check graphus/assets/system_workbench.js
+      - run: node --check graphus/assets/network_explorer.js
