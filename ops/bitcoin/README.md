@@ -43,6 +43,11 @@ The job checks the snapshot's base block again after conversion and snapshot
 hashing, immediately before writing its private result. If a reorganization
 replaces that block during processing, it writes no ranking and retries on the
 next timer run.
+After the private file appears, run `python3 -m service.private_artifact_review
+--asset BTC --artifact /var/lib/graphus-bitcoin/rankings/bitcoin-top64-scripts.json`
+on the data host as `graphusbtc`. This independent file check validates the
+snapshot anchor, script hashes, rank order, totals, and private permissions. It
+emits a small review summary; it does not publish the file.
 Rank exact `scriptPubKey` balances from the converted SQLite database and use
 Bitcoin Core `decodescript` to obtain an address where one is defined. A
 `scriptPubKey` or address is not a wallet owner. The snapshot covers confirmed

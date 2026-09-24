@@ -53,6 +53,11 @@ on later timer runs and marked `private_pending_review`; no public endpoint or
 automatic publication is attached to it. A changed block anchor or incomplete
 index leaves the artifact absent and the timer retries after the source is
 repaired or resynced.
+After a private file appears, run `python3 -m service.private_artifact_review
+--asset USDT --artifact /var/lib/graphus-token-index/USDT-top64.json` (or
+`USDC`) on the host as `graphusidx`. This second check verifies private file
+mode, pinned anchor, row order, and the deliberately limited event-discovered
+coverage. It emits no addresses and cannot approve public release.
 
 References: [Erigon hardware requirements](https://docs.erigon.tech/get-started/hardware-requirements),
 [Caplin](https://docs.erigon.tech/fundamentals/caplin),

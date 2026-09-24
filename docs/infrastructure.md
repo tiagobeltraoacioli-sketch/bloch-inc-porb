@@ -58,6 +58,13 @@ The Ethereum balance timers now materialize one mode-0600, immutable private
 top-64 JSON per token after all event-discovered candidates have same-block
 balances. They recheck the pinned block just before the atomic write. These
 files are staged for review only; they are not connected to the public map.
+`service.private_artifact_review` provides a separate file-level check on each
+completed private artifact. Its JSON output contains only the asset, anchor,
+row count, file digest, and review state. It never marks public release ready.
+The standalone reviewer was installed on both data hosts and its command-line
+entry point was verified under each unprivileged service account. It will
+return a review summary only after an artifact exists; no private ranking or
+public release was created during installation.
 The updated service units and collector module were installed on `bloch-bridge`.
 A controlled USDT/USDC service run at 10:49 UTC returned
 `waiting_for_archive_sync` for both assets and created no index files. At the
