@@ -1,0 +1,16 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, sector TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, recovery_hash TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE memberships (tenant_id TEXT NOT NULL REFERENCES tenants(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL CHECK(role IN ('owner','admin','analyst','viewer')), PRIMARY KEY(tenant_id,user_id));
+CREATE TABLE invitations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), email TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('owner','admin','analyst','viewer')), token_hash TEXT UNIQUE NOT NULL, created_by TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, claim_nonce TEXT, revoked_at INTEGER);
+CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), tenant_id TEXT NOT NULL REFERENCES tenants(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX sessions_user ON sessions(user_id);
+CREATE TABLE api_keys (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), created_by TEXT NOT NULL REFERENCES users(id), label TEXT NOT NULL, prefix TEXT NOT NULL, key_hash TEXT UNIQUE NOT NULL, scopes_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER, last_used_at INTEGER);
+CREATE INDEX api_keys_tenant ON api_keys(tenant_id);
+CREATE TABLE budget (bucket TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+CREATE INDEX budget_expiry ON budget(expires_at);
+CREATE TABLE analyses (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), created_by TEXT NOT NULL, asset TEXT NOT NULL, model_version TEXT NOT NULL, digest TEXT NOT NULL, summary_json TEXT NOT NULL, result_json TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX analyses_tenant_time ON analyses(tenant_id,created_at DESC);
+CREATE TABLE analysis_parts (analysis_id TEXT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE, part INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(analysis_id,part));
+CREATE TABLE audit (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id), actor_id TEXT NOT NULL, action TEXT NOT NULL, resource_id TEXT, created_at INTEGER NOT NULL);
+CREATE INDEX audit_tenant_time ON audit(tenant_id,created_at DESC);

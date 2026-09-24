@@ -10,6 +10,8 @@ The [Graphus preview](https://bloch-graphus.xyz/) presents the initial [three-ne
 
 ## Current status
 
+The [private BI-PoRB portal](https://rednblue-space.pages.dev/portal/) unifies real Graphus and Bloch Space observations for Bitcoin, Ethereum and Bloch. It includes invitation-only email/password access, organization roles, scoped API keys, saved datasets, Isolation Forest Red scores, observed-record completeness Blue scores, clustering and historical time-series evaluation. The requested custom domain is `rednblue.space`. See the [portal methods, API and deployment guide](docs/porb-private-portal.md). These are descriptive observation scores without judgments or identity labels.
+
 The [Analytics Lab](https://bloch-graphus.xyz/analytics.html) loads **real public-chain records by default**, with BTC, ETH, USDT, USDC and BLCH recent-network samples and direct address queries. Six graph charts, directed paths, PageRank, filters and CSV/JSON exports preserve exact values and source anchors. Two additional charts analyze indexed BLCH balance concentration. Demonstrations are explicit opt-in; source failures never become synthetic data. See [methods, scope and verification](docs/graphus-analytics-lab.md) and the [real network collection and balance feed](docs/graphus-real-network-feed.md).
 
 This repository contains an English-language product site and **synthetic risk demonstration**, a local authenticated preview API, official OFAC source synchronization, bounded private Bitcoin, Ethereum, and Bloch transaction pilots, a private Bloch query index, deterministic graph features, offline ML research tools, a privacy-first data contract, architecture, and an implementation roadmap. It does not ingest full chain histories, make legal AML determinations, or operate a production screening service. The supplied `bloch-pobrs.zip` is a separate research prototype; its synthetic metrics are not production performance claims and its consensus design is not adopted here.
@@ -22,7 +24,7 @@ Private research now includes [second-operator Bitcoin sample reconciliation](do
 cd site && python3 -m http.server 8080
 ```
 
-Open `http://127.0.0.1:8080`. All dashboard data are fixed synthetic examples. To run the optional local example API:
+Open `http://127.0.0.1:8080` for the legacy synthetic preview. The private portal requires Pages Functions and its isolated D1 binding; see the deployment guide above. To run the optional local example API:
 
 ```sh
 PORB_DEMO_TOKEN='replace-with-local-test-token' python3 -m service.app
@@ -40,7 +42,7 @@ Run `python3 -m service.chain_health` for bounded Ethereum and Bitcoin public-so
 - The protocol adapter reads finalized public-chain data and reports finality/reorg status. It never changes validation, block headers, transaction acceptance, or balances.
 - Vendor connectors require a recorded contractual right to use each field, regional processing policy, retention window, and source freshness. A potential match is evidence for human review, never an accusation.
 - The current public site uses synthetic wallets and transactions. Future lawful chain facts, graphs, regressions, and reviewed non-score ML detail may be public after source-rights and privacy review. Only a future score requires explicit delegation to a named, identity-verified person. Private identity, IP context, and customer cases remain restricted.
-- Transaction signals (Red) and wallet context (Blue) are separate outputs. Blue is a contextual reputation estimate, not proof of identity or innocence.
+- The private observation portal reports Red structural deviation and Blue record completeness separately. Its model contract supersedes the legacy preview's reputation terminology for this descriptive product.
 - Customer policy decisions remain outside this service; a score does not automatically block a transaction.
 
 See [architecture](docs/architecture.md), [initial asset registry](docs/initial-assets.md), [adapter design](docs/chain-adapters.md), [temporal graph design](docs/graph-intelligence.md), [API contract](docs/api-v1.md), [privacy design](docs/privacy.md), [delegated score access](docs/access-policy.md), [DaaS contract](docs/graphus-daas.md), [AML/FT reference standard](docs/aml-reference-standard.md), [public/open source catalog](docs/source-catalog.md), [learning and validation design](docs/ml-validation.md), and [roadmap](docs/roadmap.md).

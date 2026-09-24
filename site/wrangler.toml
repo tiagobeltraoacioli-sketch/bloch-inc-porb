@@ -1,0 +1,10 @@
+name = "rednblue-space"
+compatibility_date = "2026-09-24"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "PORB_DB"
+database_name = "bi-porb-portal"
+database_id = "ef628d5b-dab4-4b34-bfa2-fbb610f878cb"
+migrations_dir = "../portal/migrations"

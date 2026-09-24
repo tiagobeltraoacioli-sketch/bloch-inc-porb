@@ -43,6 +43,24 @@ def main():
         if error.code != 403:
             raise
         print("DNS records cannot be read with this Pages-scoped credential (HTTP 403).")
+    if '--ensure-dns' in sys.argv:
+        expected = PROJECT + '.pages.dev'
+        records = (locals().get('dns') or {}).get('result') or []
+        matching = [item for item in records if item.get('name') == DOMAIN and item.get('type') in ['A', 'AAAA', 'CNAME']]
+        if any(item.get('type') == 'CNAME' and item.get('content') == expected for item in matching):
+            print('Requested Pages DNS alias is already configured.')
+        elif matching:
+            print('Existing DNS targets another origin; no record was changed.')
+            return 3
+        else:
+            try:
+                created = api(token, 'POST', f"/zones/{zone['id']}/dns_records", {'type':'CNAME','name':DOMAIN,'content':expected,'ttl':1,'proxied':True})
+                print('Pages DNS alias created:', bool(created.get('success')))
+            except HTTPError as error:
+                if error.code not in [400, 403]:
+                    raise
+                print(f'DNS creation unavailable (HTTP {error.code}). Configure CNAME {DOMAIN} -> {expected} in the zone dashboard.')
+                return 3
     path = f"/accounts/{account}/pages/projects/{PROJECT}/domains"
     current = api(token, "GET", path)
     attached = next((item for item in current.get("result") or [] if item.get("name") == DOMAIN), None)
