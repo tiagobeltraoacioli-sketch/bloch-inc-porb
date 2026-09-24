@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050706">
+  <meta name="description" content="Graphus research workspace for source-aware wallet graphs, balance maps, and inspectable on-chain observations.">
+  <title>Graphus App — Bloch Inc</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="stylesheet" href="assets/silver.css">
+  <link rel="stylesheet" href="assets/bloch-brand.css?v=20260923">
+  <link rel="stylesheet" href="assets/workbench.css?v=20260924a">
+  <script src="assets/workbench.js?v=20260924a" defer></script>
+  <script src="assets/brand.js?v=20260923" defer></script>
+</head>
+<body data-graphus-view="app">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead"><a class="brand" href="/" aria-label="Graphus home"><img src="assets/bloch-inc-logo-dark.png" alt="Bloch Inc"><span class="brand-divider"></span><span>GRAPHUS</span></a><nav aria-label="Main navigation"><a href="app.html" aria-current="page">App</a><a href="constellation.html">Constellation</a><a href="oculum.html">Oculum</a><a href="map.html">System map</a><a class="nav-contact" href="https://blochinc.xyz/">Bloch Inc <span aria-hidden="true">↗</span></a></nav></header>
+  <main id="main">
+    <section class="workbench-hero" aria-labelledby="app-title">
+      <div class="workbench-hero-copy"><p class="section-index">GRAPHUS OF BLOCH INC / RESEARCH WORKSPACE</p><h1 id="app-title">Read the chain.<br><em>See the pattern.</em></h1><p>Explore network references through a wallet graph and a balance map. Every real result carries a source and coverage boundary. Save research views locally and move between Constellation and Oculum without losing the asset and identifier.</p><div class="workbench-hero-links"><a href="constellation.html">Open Constellation <span aria-hidden="true">↗</span></a><a href="oculum.html">Open Oculum <span aria-hidden="true">↗</span></a></div></div>
+      <div class="workbench-sky" aria-hidden="true"><svg viewBox="0 0 600 480" preserveAspectRatio="xMidYMid meet"><defs><radialGradient id="workbench-glow"><stop stop-color="#dfff9b"/><stop offset="1" stop-color="#baff28" stop-opacity=".08"/></radialGradient></defs><g stroke="#7d9c73" stroke-opacity=".35" fill="none"><path d="M75 120 180 95 290 160 430 75 520 158 470 300 342 360 208 285 95 350 75 120M290 160 342 360M180 95 208 285M520 158 342 360M95 350 208 285"/></g><g fill="url(#workbench-glow)"><circle cx="75" cy="120" r="9"/><circle cx="180" cy="95" r="18"/><circle cx="290" cy="160" r="37"/><circle cx="430" cy="75" r="11"/><circle cx="520" cy="158" r="24"/><circle cx="470" cy="300" r="12"/><circle cx="342" cy="360" r="31"/><circle cx="208" cy="285" r="21"/><circle cx="95" cy="350" r="8"/></g><g fill="#efffd7"><circle cx="75" cy="120" r="2"/><circle cx="180" cy="95" r="3"/><circle cx="290" cy="160" r="5"/><circle cx="430" cy="75" r="2"/><circle cx="520" cy="158" r="4"/><circle cx="470" cy="300" r="2"/><circle cx="342" cy="360" r="5"/><circle cx="208" cy="285" r="3"/><circle cx="95" cy="350" r="2"/></g></svg><span>ONE POINT / ONE NETWORK REFERENCE</span></div>
+    </section>
+    <section class="workbench-app-grid" aria-label="Analysis tools">
+      <a class="workbench-tool-card" href="constellation.html"><span>01 / RELATIONSHIPS</span><strong>Constellation</strong><p>Inspect a wallet or script reference, its observed transactions, source lineage, event chronology and bounded graph links.</p><small>Open graph explorer ↗</small></a>
+      <a class="workbench-tool-card" href="oculum.html"><span>02 / BALANCES</span><strong>Oculum</strong><p>Compare source-reported held amounts within one asset. Bloch has an indexed script view; other assets show queried samples.</p><small>Open balance map ↗</small></a>
+      <section class="workbench-live-card" aria-labelledby="workbench-live-title"><span>03 / SOURCE PULSE</span><h2 id="workbench-live-title">Live source status</h2><div id="workbench-live-status" role="status" aria-live="polite">Checking the public Bloch indexed source…</div><p>Source reported observations require independent verification. Private BTC and Ethereum node indexes are not published here.</p></section>
+    </section>
+    <section class="workbench-guidance"><div><p class="section-index">RESEARCH SEQUENCE</p><h2>Start with evidence.<br>Keep the boundary visible.</h2></div><ol><li><b>01</b><strong>Choose a network reference</strong><span>Search a public address or Bloch script hash in the workspace bar.</span></li><li><b>02</b><strong>Inspect the graph</strong><span>Review transaction direction, event windows and source lineage in Constellation.</span></li><li><b>03</b><strong>Compare the balance</strong><span>Open the same identifier in Oculum, then add up to 64 queried points for one asset.</span></li><li><b>04</b><strong>Pin a view</strong><span>Keep a browser-local link to revisit the exact asset and identifier. Remove it at any time.</span></li></ol></section>
+    <section class="workbench-boundary"><p>PUBLIC DATA BOUNDARY</p><strong>Network identifiers are not people. A transfer link is not proof of ownership or value continuity. The public app does not show AML scores or claim a complete holder ranking for BTC, ETH, USDT or USDC.</strong></section>
+  </main>
+  <footer><span>© 2026 Bloch Inc · Graphus App</span><span>Source-aware research workspace</span><a href="https://blochinc.xyz/">blochinc.xyz ↗</a></footer>
+</body>
+</html>

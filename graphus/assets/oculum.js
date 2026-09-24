@@ -280,6 +280,14 @@ function renderList(items){
 function select(key){
   selectedKey=key;
   render();
+  const record=records.get(selectedKey);
+  if(record)updateSelectedUrl(record);
+}
+function updateSelectedUrl(record){
+  const url=new URL(location.href);
+  url.searchParams.set('asset',record.asset.toLowerCase());
+  url.searchParams.set('address',record.address);
+  history.replaceState(null,'',url);
 }
 function resize(){
   const rect=canvas.getBoundingClientRect();
@@ -420,6 +428,7 @@ async function lookupAndAdd(asset,address,{includeNeighbors=true}={}){
   }
   selectedKey=recordKey(asset,data.address);
   render();
+  updateSelectedUrl(records.get(selectedKey));
   return {source:data.observation?.source_id||'public source',enriched};
 }
 async function loadBlochIndex(){
@@ -481,7 +490,12 @@ async function addBatch(){
 form.addEventListener('submit',addAddress);
 batchButton.addEventListener('click',addBatch);
 blochButton.addEventListener('click',loadBlochIndex);
-assetSelect.addEventListener('change',()=>{updateIdentifierInput();render();});
+assetSelect.addEventListener('change',()=>{
+  updateIdentifierInput();render();
+  const record=records.get(selectedKey);
+  if(record&&record.asset===assetSelect.value.toUpperCase())updateSelectedUrl(record);
+  else{const url=new URL(location.href);url.searchParams.delete('address');url.searchParams.set('asset',assetSelect.value);history.replaceState(null,'',url);}
+});
 function updateIdentifierInput(){
   const blch=assetSelect.value.toUpperCase()==='BLCH';
   identifierLabel.textContent=blch?'Script hash (64 hex)':'Address';
