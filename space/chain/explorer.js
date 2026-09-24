@@ -191,6 +191,33 @@ async function blochOverview(fetcher, now) {
   };
 }
 
+async function blochValidators(fetcher, offset, now) {
+  const page=await json(fetcher,`${BLOCH}/g4/validators?offset=${offset}&limit=32`);
+  const total=page?.counts?.total,active=page?.counts?.active,rows=page?.validators;
+  if(page?.offset!==offset||page?.limit!==32||!Number.isSafeInteger(total)||total<0||total>4096||
+    !Number.isSafeInteger(active)||active<0||active>total||!Array.isArray(rows)||rows.length>32||page.returned!==rows.length||
+    (offset+rows.length<total&&rows.length!==32)||
+    !Number.isSafeInteger(page.generated_at)||page.generated_at<0||!isHex64(page.head?.block_id)||
+    !Number.isSafeInteger(page.head?.height)||page.head.height<0||!Number.isSafeInteger(page.head?.slot)||page.head.slot<page.head.height)throw new Error('invalid_source_response');
+  const validators=rows.map((row,index)=>{
+    if(row?.index!==offset+index)throw new Error('invalid_source_response');
+    if(typeof row.unavailable==='string')return {index:row.index,unavailable:row.unavailable.slice(0,120)};
+    if(!isHex64(row.pubkey_hash)||typeof row.state!=='string'||row.state.length>32||
+      !/^[0-9]{1,40}$/.test(row.own_stake_sat||'')||!/^[0-9]{1,40}$/.test(row.effective_stake_sat||'')||
+      !/^[0-9]{1,6}$/.test(row.commission_bps||'')||typeof row.slashed!=='boolean')throw new Error('invalid_source_response');
+    return {index:row.index,pubkey_hash:row.pubkey_hash,state:row.state,
+      own_stake_sat:row.own_stake_sat,effective_stake_sat:row.effective_stake_sat,
+      commission_bps:row.commission_bps,slashed:row.slashed,
+      withdrawal_credentials:isHex64(row.withdrawal_credentials)?row.withdrawal_credentials:null};
+  });
+  return {...source('bloch','Bloch Explorer validator aggregator',now(),'A 32-index source page, generated separately from the network overview; missing rows remain explicit.'),
+    head:{height:page.head.height,slot:page.head.slot,block_id:page.head.block_id},
+    counts:{total,active,total_active_stake_sat:/^[0-9]{1,40}$/.test(page.counts.total_active_stake_sat||'')?page.counts.total_active_stake_sat:null},
+    validators,offset,returned:validators.length,next_offset:offset+validators.length<total&&validators.length?offset+32:null,
+    generated_at:page.generated_at,corroboration:{state:typeof page.corroboration?.state==='string'?page.corroboration.state:'unavailable',
+      differing:Array.isArray(page.corroboration?.differing)?page.corroboration.differing.filter(value=>typeof value==='string').slice(0,16):[]}};
+}
+
 async function bitcoinBlock(fetcher, query, now, offset = 0) {
   let hash = query.replace(/^0x/, '').toLowerCase();
   if (DECIMAL.test(query)) {
@@ -444,10 +471,15 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   const asset = (url.searchParams.get('asset') || {bitcoin:'BTC', ethereum:'ETH', bloch:'BLCH'}[network]).toUpperCase();
   if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset', 'cursor'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
   if (cursor != null && (route !== 'history' || !/^[a-zA-Z0-9_-]{1,160}$/.test(cursor))) return bad('invalid_cursor');
-  if (offsetRaw != null && (route !== 'block' || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset))) return bad('invalid_offset');
+  if (offsetRaw != null && (!['block','validators'].includes(route) || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset)||route==='validators'&&(offset%32!==0||offset>4096))) return bad('invalid_offset');
   if (route !== 'address' && url.searchParams.has('asset')) return bad('invalid_parameters');
-  if (route === 'overview' && query) return bad('invalid_parameters');
-  if (route !== 'overview' && (!query || query.length > 100)) return bad('invalid_query');
+  if (['overview','validators'].includes(route) && query) return bad('invalid_parameters');
+  if (!['overview','validators'].includes(route) && (!query || query.length > 100)) return bad('invalid_query');
+  if (route === 'validators') {
+    if(network!=='bloch')return bad('invalid_network');
+    try{return reply(200,await blochValidators(fetcher,offset,now));}
+    catch{return bad('source_unavailable',503);}
+  }
   if (route === 'history') {
     if (network !== 'bloch' || !/^[0-9a-fA-F]{64}$/.test(query)) return bad('invalid_history_address');
     const result = await queryBlochHistoryPage({address:query,cursor,fetcher,now:()=>new Date(now())});

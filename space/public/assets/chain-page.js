@@ -30,6 +30,34 @@ function sourceDetails(data,extra=[]){const host=$('#chain-provenance');clear(ho
   for(const [label,value] of [['Source',data.source],['Retrieved',when(data.retrieved_at)],['Source boundary',data.note],...extra]){const box=make('div','source-detail');box.append(make('span','',label),make('strong','',value??'Unavailable'));host.append(box);}
   $('#chain-json').textContent=JSON.stringify(data,null,2);
 }
+function initValidatorSection(){
+  const section=make('section','chain-section');section.id='validator-section';
+  const head=make('div','chain-section-head'),heading=make('div');heading.append(make('p','eyebrow','VALIDATOR REGISTRY'),make('h2','','Validator records'));
+  head.append(heading,make('p','','32 indices per aggregator page. Missing records remain visible; the list is not an operator count.'));
+  const status=make('p','chain-scope','Loading validator records…'),chartHost=make('div','chain-charts'),list=make('div','chain-records');
+  const controls=make('div','validator-controls'),previous=make('button','','← Previous 32'),next=make('button','','Next 32 →');
+  previous.type=next.type='button';controls.append(previous,next);section.append(head,status,chartHost,list,controls);
+  $('#chain-nodes').closest('.chain-section').before(section);
+  let offset=0,busy=false;
+  async function load(nextOffset){
+    if(busy)return;busy=true;previous.disabled=next.disabled=true;status.textContent='Loading validator source page…';
+    try{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);let response;
+      try{response=await fetch(`/api/validators?network=bloch&offset=${nextOffset}`,{signal:controller.signal,cache:'no-store'});}finally{clearTimeout(timer);}
+      const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
+      offset=nextOffset;clear(chartHost);clear(list);
+      const rows=data.validators||[],stakeRows=rows.filter(row=>row.effective_stake_sat).slice().sort((a,b)=>BigInt(b.effective_stake_sat)>BigInt(a.effective_stake_sat)?1:-1).slice(0,16);
+      chartHost.append(chart('Effective stake / current page','Largest 16 readable records in this page only. Effective stake is a consensus weight, not operator ownership.',stakeRows.map(row=>({label:`#${count(row.index)} ${short(row.pubkey_hash)}`,value:row.effective_stake_sat,display:`${money(row.effective_stake_sat)} BLCH`}))));
+      for(const row of rows){const card=make('div','chain-record'),main=make('span');main.append(make('strong','',`#${count(row.index)} · ${row.pubkey_hash?short(row.pubkey_hash):'Record unavailable'}`),make('small','',row.unavailable||`Own ${money(row.own_stake_sat)} BLCH · effective ${money(row.effective_stake_sat)} BLCH · commission ${row.commission_bps} bps`));card.append(main,make('em','',row.unavailable?'Unavailable':row.slashed?'Slashed':row.state));list.append(card);}
+      status.textContent=`Indices ${count(offset)}–${count(offset+rows.length-1)} of ${count(data.counts?.total)} · generated ${when(data.generated_at)} · ${data.corroboration?.state||'unavailable'} aggregator comparison. Separate from the head above.`;
+      previous.hidden=offset===0;next.hidden=data.next_offset==null;
+      next.dataset.offset=String(data.next_offset??'');
+    }catch(error){status.textContent=`Validator page unavailable: ${error.message}. Retry with a page button.`;}
+    finally{busy=false;previous.disabled=next.disabled=false;}
+  }
+  previous.addEventListener('click',()=>load(Math.max(0,offset-32)));
+  next.addEventListener('click',()=>load(Number(next.dataset.offset||offset)));
+  load(0);
+}
 function renderBitcoin(data){
   const h=data.head||{},m=data.mempool||{},fees=data.fee_estimates_sat_vbyte||{},blocks=(data.recent_blocks||[]).filter(row=>Number.isSafeInteger(row.height));
   $('#chain-metrics').append(metric('Best chain height',count(h.height),'Source reported'),metric('Mempool entries',count(m.count),'Node view'),metric('Mempool size',m.vsize==null?'—':`${count(m.vsize)} vB`,'Reported virtual bytes'),metric('Latest block transactions',count(h.tx_count),'Best chain block'),metric('Fee target / 3 blocks',fees['3']==null?'—':`${Number(fees['3']).toFixed(1)} sat/vB`,'Source estimate'),metric('Recent block sample',count(blocks.length),'Up to ten blocks'));
@@ -92,3 +120,4 @@ async function refresh(){if(pending)return;pending=true;$('#chain-refresh').disa
   finally{pending=false;$('#chain-refresh').disabled=false;}
 }
 $('#chain-refresh').addEventListener('click',refresh);refresh();setInterval(()=>{if(!document.hidden)refresh();},60000);
+if(network==='bloch')initValidatorSection();

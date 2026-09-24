@@ -17,6 +17,24 @@ test('Bloch Space refuses unknown networks, writes, and unbounded parameters', a
   assert.equal((await handleExplore(url('history',`network=bloch&query=${hash}&cursor=%2F`))).status,400);
   assert.equal((await handleExplore(url('history',`network=bloch&query=${hash}&asset=BLCH`))).status,400);
   assert.equal((await handleExplore(url('address',`network=bloch&query=${hash}&cursor=abc`))).status,400);
+  assert.equal((await handleExplore(url('validators','network=bitcoin'))).status,400);
+  assert.equal((await handleExplore(url('validators','network=bloch&offset=1'))).status,400);
+});
+
+test('Bloch validator pages keep source gaps and omit aggregator host details', async () => {
+  const fetcher=async input=>{
+    assert.equal(new URL(input).pathname,'/g4/validators');
+    return answer({head:{height:100,slot:120,block_id:block},counts:{total:2,active:1,total_active_stake_sat:'100000000'},
+      offset:0,limit:32,returned:2,generated_at:1790245863,source:'internal-host',corroboration:{state:'corroborated',differing:[]},
+      validators:[{index:0,pubkey_hash:hash,state:'active',own_stake_sat:'100000000',effective_stake_sat:'90000000',commission_bps:'0',slashed:false,withdrawal_credentials:block},
+        {index:1,unavailable:'observer timeout'}]});
+  };
+  const response=await handleExplore(url('validators','network=bloch'),{fetcher});
+  assert.equal(response.status,200);
+  assert.equal(response.body.validators[0].effective_stake_sat,'90000000');
+  assert.equal(response.body.validators[1].unavailable,'observer timeout');
+  assert.equal(response.body.next_offset,null);
+  assert.equal(JSON.stringify(response.body).includes('internal-host'),false);
 });
 
 test('Bloch history cursor route returns a bounded source page without a balance claim', async () => {

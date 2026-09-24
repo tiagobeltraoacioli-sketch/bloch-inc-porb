@@ -17,13 +17,18 @@ charts bounded gas use and base fee history while keeping latest and finalized
 RPC reads distinct. The Bloch page shows the network head, verified indexer,
 validator and stake claims, recent transactions, funded script references,
 mempool, observer diagnostics and recorded chain-change signals, monitored
-connection distribution, and a six-hour connection series. Peer figures count reported sockets across
-monitored nodes, not unique peers. Each additional Bloch source is optional;
+connection distribution, and a six-hour connection series. Peer figures count
+reported sockets across monitored nodes, not unique peers. Each additional Bloch source is optional;
 its absence does not erase the validated head or indexer response. The Bloch
 `getsupply` RPC is not served by the current public implementation, so the
 page does not invent a live supply figure. These pages do not mirror every
 feature of blochl1.com; additional datasets require their own validated
 source boundaries.
+The Bloch page also reads the existing public validator aggregator in 32-index
+pages, keeping missing indices visible. It shows own and effective stake per
+record and a chart limited to the current page. The API omits the aggregator's
+upstream host details and never fans out validator reads from a viewer's
+browser to consensus nodes.
 
 ## Live read surfaces
 
@@ -48,6 +53,8 @@ best-effort across isolates; durable quotas require a shared governor.
 `GET /api/address?network=...&asset=BTC|ETH|USDT|USDC|BLCH&query=<address or Bloch script hash>`
 
 `GET /api/history?network=bloch&query=<64-hex script hash>&cursor=<optional opaque cursor>`
+
+`GET /api/validators?network=bloch&offset=<optional multiple of 32>`
 
 Bloch history pages contain at most 64 validated indexed events and their
 source anchor when available. The cursor is opaque and limited to 160 URL-safe
