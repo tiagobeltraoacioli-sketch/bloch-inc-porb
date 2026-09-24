@@ -53,6 +53,14 @@ html[data-theme="light"] .flow-chart-fill{background:#78b512}
 html[data-theme="light"] .flow-chart-fee{background:#42669b}
 html[data-theme="light"] .flow-swatch-output{background:#78b512}
 html[data-theme="light"] .flow-swatch-fee{background:#42669b}
+html[data-theme="light"] .activity-charts{border-color:#aac39a;background:#f7fbf3}
+html[data-theme="light"] .history-heading{color:#315900}
+html[data-theme="light"] .history-column{color:#13220f}
+html[data-theme="light"] .history-column:hover,html[data-theme="light"] .history-column:focus-visible{border-color:#6b991f;background:#eaf5db}
+html[data-theme="light"] .history-value{color:#22341c}
+html[data-theme="light"] .history-axis,html[data-theme="light"] .history-note{color:#4b6044}
+html[data-theme="light"] .history-track{background:#e3eddb}
+html[data-theme="light"] .history-bar{background:#83bd20}
 html[data-theme="light"] .flow-legend,html[data-theme="light"] .flow-note{color:#41533d}
 html[data-theme="light"] .flow-legend strong{color:#315900}
 html[data-theme="light"] .field dd,html[data-theme="light"] .result-copy strong{color:#142012}

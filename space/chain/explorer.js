@@ -99,16 +99,27 @@ async function ethereumOverview(fetcher, env, now) {
   const endpoint = ethereumEndpoint(env);
   const chainId = await rpc(fetcher, endpoint, 'eth_chainId', []);
   if (quantity(chainId) !== 1n) throw new Error('ethereum_network_mismatch');
-  const [head, finalized, gasPrice] = await Promise.all([
+  const [head, finalized, gasPrice, feeHistory] = await Promise.all([
     rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['latest', false]),
     rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false]),
     rpc(fetcher, endpoint, 'eth_gasPrice', []),
+    rpc(fetcher, endpoint, 'eth_feeHistory', ['0xc', 'latest', []]).then(ethereumFeeHistoryFacts).catch(() => null),
   ]);
   if (!isHex64(head?.hash) || !isHex64(finalized?.hash)) throw new Error('invalid_source_response');
   return {
     ...source('ethereum', 'configured Ethereum JSON-RPC', now(), 'Latest and finalized are distinct source-reported checkpoints.'),
-    head, finalized, gas_price_wei: quantity(gasPrice).toString(),
+    head, finalized, gas_price_wei: quantity(gasPrice).toString(), fee_history:feeHistory,
   };
+}
+
+export function ethereumFeeHistoryFacts(history) {
+  const ratios=history?.gasUsedRatio, fees=history?.baseFeePerGas;
+  if(!Array.isArray(ratios)||!ratios.length||ratios.length>12||!Array.isArray(fees)||fees.length!==ratios.length+1)throw new Error('invalid_source_response');
+  if(!ratios.every(value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1))throw new Error('invalid_source_response');
+  const oldest=quantity(history.oldestBlock);
+  if(oldest+BigInt(ratios.length)>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('invalid_source_response');
+  return {oldest_height:oldest.toString(),gas_used_ratio:ratios,base_fee_wei:fees.slice(0,-1).map(value=>quantity(value).toString()),
+    next_base_fee_wei:quantity(fees.at(-1)).toString()};
 }
 
 async function blochOverview(fetcher, now) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {handleExplore, bitcoinTransactionFacts, ethereumReceiptFacts, blochTransactionPosition} from '../space/chain/explorer.js';
+import {handleExplore, bitcoinTransactionFacts, ethereumFeeHistoryFacts, ethereumReceiptFacts, blochTransactionPosition} from '../space/chain/explorer.js';
 
 const hash = 'a'.repeat(64);
 const block = 'b'.repeat(64);
@@ -50,6 +50,30 @@ test('Bitcoin overview exposes source histogram and bounded recent mempool entri
   assert.equal(response.status,200);
   assert.deepEqual(response.body.mempool.fee_histogram,[[8,50000],[2,100000]]);
   assert.deepEqual(response.body.recent_mempool.map(tx=>tx.txid),[block]);
+});
+
+test('Ethereum overview bounds fee history and keeps the optional chart separate from head', async () => {
+  const history={oldestBlock:'0x10',gasUsedRatio:[0.25,0.75],baseFeePerGas:['0x3b9aca00','0x77359400','0xb2d05e00']};
+  const env={GRAPHUS_ETHEREUM_RPC_URL:'https://ethereum-rpc.publicnode.com'};
+  const fetcher=async (_input,init) => {
+    const request=JSON.parse(init.body);
+    const result=request.method==='eth_chainId'?'0x1':request.method==='eth_gasPrice'?'0x3b9aca00':
+      request.method==='eth_feeHistory'?history:{hash:`0x${block}`,number:request.params[0]==='latest'?'0x13':'0x11',transactions:[],gasUsed:'0x1',gasLimit:'0x2'};
+    return answer({jsonrpc:'2.0',id:1,result});
+  };
+  const response=await handleExplore(url('overview','network=ethereum'),{fetcher,env});
+  assert.equal(response.status,200);
+  assert.deepEqual(response.body.fee_history,{oldest_height:'16',gas_used_ratio:[0.25,0.75],base_fee_wei:['1000000000','2000000000'],next_base_fee_wei:'3000000000'});
+  assert.equal(response.body.head.number,'0x13');
+  assert.throws(()=>ethereumFeeHistoryFacts({...history,gasUsedRatio:[-1,0.75]}),/invalid_source_response/);
+  assert.throws(()=>ethereumFeeHistoryFacts({...history,baseFeePerGas:['0x1']}),/invalid_source_response/);
+  const withoutHistory=await handleExplore(url('overview','network=ethereum'),{env,fetcher:async (input,init) => {
+    const request=JSON.parse(init.body);
+    if(request.method==='eth_feeHistory')throw new Error('history unavailable');
+    return fetcher(input,init);
+  }});
+  assert.equal(withoutHistory.status,200);
+  assert.equal(withoutHistory.body.fee_history,null);
 });
 
 test('Ethereum transaction preserves receipt status and a separate finalized checkpoint', async () => {

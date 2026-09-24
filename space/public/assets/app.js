@@ -158,11 +158,42 @@ function renderBitcoinMempool(mempool,recent) {
   if(recent?.length){panel.append(element('h4','subhead','Recent mempool entries / source observed'));const list=element('div','record-list mempool-recent');for(const tx of recent)list.append(row(compact(tx.txid),`${count(tx.vsize)} vB · ${count(tx.fee)} sat fee`,`${(tx.fee/tx.vsize).toFixed(2)} sat/vB`,()=>openRecord('tx',tx.txid)));panel.append(list);}
 }
 
+function historyBars(panel,title,items){
+  const section=element('section','history-series');section.append(element('h4','',title));
+  const grid=element('div','history-bars');grid.style.gridTemplateColumns=`repeat(${items.length},minmax(46px,1fr))`;grid.style.minWidth=`${items.length*46}px`;
+  for(const item of items){const button=element('button','history-column');button.type='button';button.title=item.detail;button.setAttribute('aria-label',`Open block ${item.height}: ${item.detail}`);
+    const value=element('span','history-value',item.value);const track=element('span','history-track');const bar=element('span','history-bar');bar.style.height=`${Math.max(0,Math.min(100,item.percent))}%`;track.append(bar);
+    button.append(value,track,element('span','history-axis',`#${String(item.height).slice(-4)}`));button.addEventListener('click',()=>openRecord('block',String(item.height)));grid.append(button);}
+  section.append(grid);panel.append(section);
+}
+function renderActivityCharts(network,data){
+  const panel=$('#activity-charts');clear(panel);panel.hidden=true;
+  if(network==='bitcoin'){
+    const blocks=(data.recent_blocks||[]).slice(0,10).filter(block=>Number.isSafeInteger(block?.height)&&block.height>=0&&Number.isSafeInteger(block.tx_count)&&block.tx_count>=0&&Number.isSafeInteger(block.size)&&block.size>=0).reverse();
+    if(blocks.length<2)return;
+    panel.hidden=false;panel.append(element('strong','history-heading',`BITCOIN / ${blocks.length} RECENT BEST-CHAIN BLOCKS`));
+    const maxTx=Math.max(1,...blocks.map(block=>block.tx_count)),maxSize=Math.max(1,...blocks.map(block=>block.size));
+    historyBars(panel,'Transactions per block',blocks.map(block=>({height:block.height,value:count(block.tx_count),detail:`${count(block.tx_count)} transactions at source block #${block.height}`,percent:block.tx_count/maxTx*100})));
+    historyBars(panel,'Block size',blocks.map(block=>({height:block.height,value:`${(block.size/1e6).toFixed(2)} MB`,detail:`${count(block.size)} bytes at source block #${block.height}`,percent:block.size/maxSize*100})));
+    panel.append(element('p','history-note','Source-reported block sample, oldest to newest. Bars scale to the largest value in this sample. Axis labels show the last four height digits; select a bar for its full block.'));
+  }else if(network==='ethereum'&&data.fee_history){
+    const history=data.fee_history,ratios=history.gas_used_ratio,fees=history.base_fee_wei;
+    if(!Array.isArray(ratios)||!Array.isArray(fees)||ratios.length!==fees.length||ratios.length<2||ratios.length>12)return;
+    let oldest,maxFee;try{oldest=BigInt(history.oldest_height);maxFee=fees.reduce((max,fee)=>{const value=BigInt(fee);return value>max?value:max;},0n);}catch{return;}
+    if(maxFee<=0n)return;
+    panel.hidden=false;panel.append(element('strong','history-heading',`ETHEREUM / ${ratios.length} SOURCE-REPORTED BLOCKS`));
+    historyBars(panel,'Gas used / block limit',ratios.map((ratio,index)=>({height:(oldest+BigInt(index)).toString(),value:`${(ratio*100).toFixed(0)}%`,detail:`${(ratio*100).toFixed(2)}% gas used at block #${oldest+BigInt(index)}`,percent:ratio*100})));
+    historyBars(panel,'Base fee per gas',fees.map((fee,index)=>({height:(oldest+BigInt(index)).toString(),value:`${Number(BigInt(fee)*10n**2n/10n**9n)/100} gwei`,detail:`${exactInteger(fee)} wei base fee at block #${oldest+BigInt(index)}`,percent:Number(BigInt(fee)*10000n/maxFee)/100})));
+    panel.append(element('p','history-note','RPC fee-history sample, oldest to newest, retrieved separately from the displayed head. Base-fee bars scale to this sample; they are observations, not fee recommendations. Axis labels show the last four height digits; select a bar for its full block.'));
+  }
+}
+
 function renderOverview(data) {
   state.overview=data;
   const network=state.network;
   $('#network-title').textContent=titles[network];
   const metrics=$('#metrics'),signals=$('#signal'),latest=$('#latest-list');clear(metrics);clear(signals);clear(latest);
+  renderActivityCharts(network,data);
   renderHolders(network==='bloch'?data.holders:null);
   if(network==='bitcoin')renderBitcoinMempool(data.mempool,data.recent_mempool);else{clear($('#btc-mempool'));$('#btc-mempool').hidden=true;}
   $('#network-status').textContent='Source live';$('#network-status').dataset.state='ok';
@@ -327,6 +358,7 @@ async function switchNetwork(network,historyMode='push') {
   clear($('#metrics'));clear($('#signal'));clear($('#latest-list'));$('#source-line').textContent='Querying the selected public source…';
   clear($('#holder-map'));$('#holder-map').hidden=true;
   clear($('#btc-mempool'));$('#btc-mempool').hidden=true;
+  clear($('#activity-charts'));$('#activity-charts').hidden=true;
   $('#result-section').hidden=true;message('');
   setHistory(new URLSearchParams({network}),historyMode);
   try{const data=await api('overview',network);if(sequence!==state.request)return;renderOverview(data);}catch(error){if(sequence!==state.request)return;$('#network-status').textContent='Source unavailable';$('#network-status').dataset.state='error';$('#source-line').textContent=`${error.message}. Retry by selecting the network again.`;message(`Network overview unavailable: ${error.message}`,true);}

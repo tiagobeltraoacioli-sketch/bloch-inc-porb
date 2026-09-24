@@ -13,8 +13,8 @@ choice in the browser.
 
 | Network | Overview | Block and transaction | Public reference |
 | --- | --- | --- | --- |
-| Bitcoin | Blockstream Esplora best-chain blocks, mempool fee-depth histogram, bounded recent mempool entries and fee estimates | Esplora block, transaction, outspend facts, source-head confirmation depth, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
-| Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price | JSON-RPC block and identity-checked receipt; confirmation depth, execution and blob gas fees, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
+| Bitcoin | Blockstream Esplora best-chain blocks, recent block transaction and size charts, mempool fee-depth histogram, bounded recent mempool entries and fee estimates | Esplora block, transaction, outspend facts, source-head confirmation depth, virtual size, fee rate and sequence replacement signal | Graphus Esplora address aggregate and bounded confirmed transaction graph |
+| Ethereum | Configured mainnet JSON-RPC latest/finalized blocks, gas price, and optional 12-block gas-use and base-fee history | JSON-RPC block and identity-checked receipt; confirmation depth, execution and blob gas fees, allowlisted USDT/USDC Transfer events and separate finalized checkpoint | Graphus ETH/USDT/USDC finalized-block balance; bounded ERC-20 Transfer logs |
 | Bloch | Bloch Explorer network head and verified historical indexer | Bloch Explorer slot/block and indexer transaction receipts with indexed depth and finalized-height comparison | Graphus 64-hex script-hash lookup, bounded history and evidence edges |
 
 The API is read-only and validates network, record type, identifier, asset, and
@@ -80,6 +80,13 @@ floor at cumulative 1M, 3M and 6M virtual bytes when the source backlog is
 large enough. These are backlog observations, not confirmation predictions or
 fee recommendations. The recent list is the source's last ten observed
 mempool entries, not a complete network-wide transaction stream.
+Overview block charts use the ten recent Bitcoin blocks already returned by
+Esplora. Ethereum's optional `eth_feeHistory` response is limited to 12 blocks,
+validated before rendering, and kept separate from the overview head snapshot.
+The two Ethereum charts show gas-used ratio and exact-base-fee observations;
+bars open their source block. Bar heights for transaction count, Bitcoin block
+size and Ethereum base fee scale to the maximum in each displayed sample.
+No series extrapolates past its returned range.
 Ethereum receipt state distinguishes pending, missing, unavailable and a block
 identity mismatch. Execution fields, token events, confirmation depth and the
 relation to the finalized height are shown only after the receipt transaction
@@ -116,4 +123,5 @@ replaceable; do not put credentials in the tracked configuration.
 
 Sources: [Blockstream Esplora API](https://github.com/blockstream/esplora/blob/master/API.md),
 [Ethereum JSON-RPC](https://ethereum.org/developers/docs/apis/json-rpc/),
+[Ethereum `eth_feeHistory` specification](https://ethereum.github.io/execution-apis/api/methods/eth_feeHistory/),
 and the Bloch Explorer public `/api/v1` and `/indexer` APIs.
