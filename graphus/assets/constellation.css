@@ -10,6 +10,10 @@
 .live-transaction-detail dd{margin:.2rem 0 0;font:.69rem var(--mono);color:#f2f6ee}
 .live-transaction-detail ol{padding-left:1.1rem;max-height:250px;overflow:auto}
 .live-transaction-detail li{margin:.35rem 0}
+.receipt-load-button{border:1px solid #80aa64;background:#20361b;color:#eaf4e4;padding:.55rem .7rem;cursor:pointer;font:.68rem var(--mono)}
+.receipt-load-button:hover,.receipt-load-button:focus-visible{border-color:#baff28;color:#baff28}
+.receipt-load-button:disabled{opacity:.6;cursor:wait}
+.receipt-status{margin:.6rem 0}
 .live-source-record[aria-pressed="true"]{color:#baff28;border-left:2px solid #baff28;padding-left:.55rem}
 .source-metrics-panel{margin:1rem 0;padding:1rem;border:1px solid #48633c;background:#142113;color:#eaf4e4;overflow-wrap:anywhere}
 .source-metrics-panel[hidden]{display:none}

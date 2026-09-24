@@ -1,5 +1,5 @@
 import {queryChainWallet} from '../../chain/real-chain.js';
-import {queryEthereumActivity} from '../../chain/ethereum-activity.js';
+import {queryEthereumActivity,queryEthereumReceipt} from '../../chain/ethereum-activity.js';
 import {queryBlochHolders} from '../../chain/bloch-holders.js';
 
 const COOKIE = 'graphus_session';
@@ -97,6 +97,13 @@ export async function onRequest({request,env}) {
     });
     return json(result.body,result.status);
   }
+  if(path==='chain/transaction-receipt'&&method==='GET') {
+    const result=await queryEthereumReceipt({
+      hash:url.searchParams.get('hash'),expectedBlock:url.searchParams.get('expected_block'),
+      expectedHash:url.searchParams.get('expected_hash'),expectedIndex:url.searchParams.get('expected_index'),env,
+    });
+    return json(result.body,result.status);
+  }
   if(path==='chain/holders'&&method==='GET') {
     if(url.searchParams.get('asset')!=='BLCH')return error('holder_index_unavailable_for_asset',400);
     const result=await queryBlochHolders();
@@ -117,6 +124,8 @@ export async function onRequest({request,env}) {
         unit:'script_hash',coverage:'positive balances in source indexed canonical state',independently_verified:false},
       bounded_public_erc20_activity:{endpoint:'/api/chain/activity',assets:['USDT','USDC'],window_blocks:64,
         historical_window_parameter:'to_block',optional_anchor_guard:'expected_hash',native_eth:'unavailable-without-transaction-index'},
+      selected_ethereum_receipt:{endpoint:'/api/chain/transaction-receipt',
+        scope:'one finalized transaction matched to a selected Transfer log'},
     },
     research:{bloch_sample:'private-bounded',structural_groups:'unsupervised-research-only',aml_model:'not-validated'},
     proposed_public_fields:['network','asset','transaction_id','event_index','observed_at','finality','source','source_version','flow_edges','feature_definitions','validated_non_score_features'],

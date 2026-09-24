@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {queryEthereumActivity} from '../graphus/chain/ethereum-activity.js';
+import {queryEthereumActivity,queryEthereumReceipt} from '../graphus/chain/ethereum-activity.js';
 import {onRequest} from '../graphus/functions/api/[[path]].js';
 
 const address = '0x0000000000000000000000000000000000000001';
@@ -169,4 +169,44 @@ test('native ETH activity is explicitly unavailable without an index', async () 
   });
   assert.equal(response.status, 501);
   assert.deepEqual(await response.json(), {error: 'native_eth_activity_requires_transaction_index'});
+});
+
+test('selected finalized receipt reports exact gas facts and checks its log anchor',async()=>{
+  const transactionHash=`0x${'b'.repeat(64)}`;
+  const transaction={hash:transactionHash,blockHash:hash,blockNumber:'0x64',transactionIndex:'0x2',
+    from:other,to:contract,value:'0x0',gas:'0x5208'};
+  const receipt={transactionHash,blockHash:hash,blockNumber:'0x64',transactionIndex:'0x2',
+    from:other,to:contract,status:'0x1',gasUsed:'0x5208',effectiveGasPrice:'0x3b9aca00'};
+  const calls=[];
+  const fetcher=async(_url,init)=>{
+    const request=JSON.parse(init.body);calls.push(request);
+    const result={eth_chainId:'0x1',eth_getTransactionByHash:transaction,
+      eth_getTransactionReceipt:receipt}[request.method]
+      ??{number:'0x64',hash,timestamp:'0x5'};
+    return reply(request.id,result);
+  };
+  const params={hash:transactionHash,expectedBlock:'100',expectedHash:hash,expectedIndex:'2',env,fetcher,now};
+  const result=await queryEthereumReceipt(params);
+  assert.equal(result.status,200);
+  assert.equal(result.body.execution_status,'success');
+  assert.equal(result.body.gas_used,'21000');
+  assert.equal(result.body.effective_gas_price_wei,'1000000000');
+  assert.equal(result.body.execution_gas_fee_wei,'21000000000000');
+  assert.equal(result.body.block.height,100);
+  assert.equal(calls.length,5);
+  calls.length=0;
+  assert.deepEqual(await queryEthereumReceipt({...params,expectedHash:`0x${'c'.repeat(64)}`}),
+    {status:409,body:{error:'transaction_anchor_mismatch'}});
+  assert.equal(calls.length,4);
+  receipt.transactionIndex='0x3';
+  assert.deepEqual(await queryEthereumReceipt(params),
+    {status:502,body:{error:'chain_source_unavailable'}});
+});
+
+test('selected receipt requires a complete bounded log reference',async()=>{
+  assert.deepEqual(await queryEthereumReceipt({hash:`0x${'b'.repeat(64)}`,expectedBlock:'100',
+    expectedHash:hash,env}),{status:400,body:{error:'invalid_transaction_reference'}});
+  const response=await onRequest({request:new Request(
+    `https://bloch-graphus.pages.dev/api/chain/transaction-receipt?hash=${'0x'+'b'.repeat(64)}&expected_block=100&expected_hash=${hash}`),env:{}});
+  assert.equal(response.status,400);
 });

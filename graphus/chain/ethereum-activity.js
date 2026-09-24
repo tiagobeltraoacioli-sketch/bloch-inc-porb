@@ -212,3 +212,82 @@ export async function queryEthereumActivity({address, asset, toBlock = null, exp
     return fail('chain_source_unavailable');
   }
 }
+
+export async function queryEthereumReceipt({hash, expectedBlock, expectedHash, expectedIndex,
+  env = {}, fetcher = fetch, now = () => new Date()}) {
+  if (typeof hash !== 'string' || !HEX32.test(hash)
+      || typeof expectedBlock !== 'string' || !/^(0|[1-9][0-9]*)$/.test(expectedBlock)
+      || !Number.isSafeInteger(Number(expectedBlock))
+      || typeof expectedHash !== 'string' || !HEX32.test(expectedHash)
+      || typeof expectedIndex !== 'string' || !/^(0|[1-9][0-9]*)$/.test(expectedIndex)
+      || !Number.isSafeInteger(Number(expectedIndex))) return fail('invalid_transaction_reference', 400);
+  try {
+    const endpoint = rpcEndpoint(env);
+    if (quantity(await rpc(fetcher, endpoint, 'eth_chainId', [], 1)) !== 1n)
+      return fail('ethereum_network_mismatch');
+    const finalized = await rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false], 2);
+    if (!finalized || typeof finalized.hash !== 'string' || !HEX32.test(finalized.hash))
+      throw new Error('invalid_rpc_response');
+    const finalizedHeight = boundedNumber(finalized.number);
+    const normalizedHash = hash.toLowerCase();
+    const transaction = await rpc(fetcher, endpoint, 'eth_getTransactionByHash', [normalizedHash], 3);
+    const receipt = await rpc(fetcher, endpoint, 'eth_getTransactionReceipt', [normalizedHash], 4);
+    const sameHash = value => typeof value === 'string' && HEX32.test(value)
+      && value.toLowerCase() === normalizedHash;
+    const sameAddress = (left, right) => left === null && right === null
+      || typeof left === 'string' && typeof right === 'string'
+        && ADDRESS.test(left) && ADDRESS.test(right) && left.toLowerCase() === right.toLowerCase();
+    if (!sameHash(transaction?.hash) || !sameHash(receipt?.transactionHash)
+        || typeof transaction.blockHash !== 'string' || !HEX32.test(transaction.blockHash)
+        || typeof receipt.blockHash !== 'string' || !HEX32.test(receipt.blockHash)
+        || transaction.blockHash.toLowerCase() !== receipt.blockHash.toLowerCase()
+        || !sameAddress(transaction.from, receipt.from)
+        || !sameAddress(transaction.to, receipt.to)
+        || typeof transaction.from !== 'string' || !ADDRESS.test(transaction.from))
+      throw new Error('inconsistent_rpc_receipt');
+    const height = boundedNumber(transaction.blockNumber);
+    const index = boundedNumber(transaction.transactionIndex);
+    if (height !== boundedNumber(receipt.blockNumber)
+        || index !== boundedNumber(receipt.transactionIndex)
+        || height > finalizedHeight) throw new Error('inconsistent_rpc_receipt');
+    if (height !== Number(expectedBlock) || index !== Number(expectedIndex)
+        || transaction.blockHash.toLowerCase() !== expectedHash.toLowerCase())
+      return fail('transaction_anchor_mismatch', 409);
+    const block = await rpc(fetcher, endpoint, 'eth_getBlockByNumber', [`0x${height.toString(16)}`, false], 5);
+    if (!block || boundedNumber(block.number) !== height
+        || typeof block.hash !== 'string' || !HEX32.test(block.hash)
+        || block.hash.toLowerCase() !== transaction.blockHash.toLowerCase())
+      throw new Error('inconsistent_rpc_receipt');
+    const status = boundedNumber(receipt.status);
+    if (status !== 0 && status !== 1) throw new Error('invalid_rpc_receipt');
+    const gasUsed = quantity(receipt.gasUsed);
+    const gasPrice = quantity(receipt.effectiveGasPrice);
+    const gasLimit = quantity(transaction.gas);
+    const value = quantity(transaction.value);
+    if (gasUsed > gasLimit) throw new Error('invalid_rpc_receipt');
+    const blockTime = new Date(boundedNumber(block.timestamp) * 1000);
+    if (!Number.isFinite(blockTime.getTime())) throw new Error('invalid_rpc_receipt');
+    return {status: 200, body: {
+      status: 'source-reported', network: 'ethereum-mainnet', transaction_hash: normalizedHash,
+      block: {height, hash: block.hash.toLowerCase(), time: blockTime.toISOString()},
+      transaction_index: index, execution_status: status === 1 ? 'success' : 'reverted',
+      transaction_from: transaction.from.toLowerCase(),
+      transaction_to: transaction.to === null ? null : transaction.to.toLowerCase(),
+      value_wei: value.toString(), gas_limit: gasLimit.toString(),
+      gas_used: gasUsed.toString(), effective_gas_price_wei: gasPrice.toString(),
+      execution_gas_fee_wei: (gasUsed * gasPrice).toString(),
+      observation: {source_id: 'configured-ethereum-json-rpc', retrieved_at: now().toISOString(),
+        source_finalized_head: {height: finalizedHeight, hash: finalized.hash.toLowerCase()},
+        coverage: 'one source-reported finalized transaction and receipt',
+        limitations: [
+          'The source receipt is checked against the selected log reference and source-reported canonical block; Graphus does not independently verify chain history.',
+          'The transaction sender is not necessarily the owner of the queried token address or any log participant.',
+          'Execution gas fee is gas used multiplied by effective gas price; blob fees and other transaction costs are excluded.',
+        ]},
+    }};
+  } catch (error) {
+    if (error.message === 'ethereum_rpc_not_configured') return fail(error.message, 503);
+    console.error('ethereum_receipt_source_failure', error.name, error.message);
+    return fail('chain_source_unavailable');
+  }
+}

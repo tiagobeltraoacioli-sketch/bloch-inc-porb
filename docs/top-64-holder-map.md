@@ -100,6 +100,16 @@ transactions, and log positions checked, plus duplicate hits across the two
 direction filters. These checks establish internal consistency of one source
 response only; they do not independently verify chain history or log omission.
 
+Selecting a returned token log offers an optional transaction-receipt lookup.
+The request supplies that log's transaction hash, block height and hash, and
+transaction index. The source adapter checks the finalized head, transaction,
+receipt, and source-reported canonical block against those references before
+showing execution status, native ETH value, gas limit and use, effective gas
+price, and the exact execution-gas product. It omits calldata and raw receipt
+logs. The separately retrieved receipt facts can be downloaded as JSON. A transaction sender is not necessarily the owner of the queried token
+address, and the gas product excludes blob fees and other costs. This is a
+separate source request, not independently verified history.
+
 The source-aware canvas plots at most 36 other points from a bounded response
 and states the visible and returned counts. For USDT and USDC, it chooses points
 by the number of returned logs; selecting a log brings its address into view

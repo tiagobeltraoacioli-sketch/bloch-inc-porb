@@ -427,6 +427,63 @@ function selectRealTokenEvent(id){
     item.append(name,detail);facts.append(item);
   }
   liveTransactionDetail.append(facts);
+  const receiptButton=document.createElement('button');receiptButton.type='button';
+  receiptButton.className='receipt-load-button';receiptButton.textContent='Load source transaction receipt';
+  const receiptStatus=document.createElement('p');receiptStatus.className='receipt-status';
+  const receiptFacts=document.createElement('dl');receiptFacts.className='receipt-facts';
+  const receiptDownload=document.createElement('button');receiptDownload.type='button';
+  receiptDownload.className='receipt-load-button';receiptDownload.textContent='Download this receipt JSON';
+  receiptDownload.hidden=true;
+  let loadedReceipt=null;
+  receiptDownload.addEventListener('click',()=>{
+    if(!loadedReceipt)return;
+    const blob=new Blob([JSON.stringify(loadedReceipt,null,2)+'\n'],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement('a');link.href=url;
+    link.download=`graphus_ethereum_receipt_${event.transaction_hash.slice(2)}.json`;
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  });
+  receiptButton.addEventListener('click',async()=>{
+    receiptButton.disabled=true;
+    receiptStatus.textContent='Loading one source-reported finalized transaction and receipt…';
+    receiptFacts.replaceChildren();
+    receiptDownload.hidden=true;loadedReceipt=null;
+    try{
+      const query=new URLSearchParams({hash:event.transaction_hash,
+        expected_block:String(event.block_number),expected_hash:event.block_hash,
+        expected_index:String(event.transaction_index)});
+      const response=await fetch(`/api/chain/transaction-receipt?${query}`,{headers:{Accept:'application/json'}});
+      let result;
+      try{result=await response.json();}catch{throw new Error(`HTTP ${response.status}`);}
+      if(!response.ok||result.status!=='source-reported')throw new Error(result.error||`HTTP ${response.status}`);
+      if(result.transaction_hash!==event.transaction_hash||result.block?.height!==event.block_number
+        ||result.block.hash!==event.block_hash||result.transaction_index!==event.transaction_index
+        ||result.execution_status!=='success')throw new Error('receipt_does_not_match_selected_log');
+      if(realObservation!==data||selectedRealEventId!==id)return;
+      loadedReceipt=result;
+      for(const [label,value] of [
+        ['Execution status','Success (source reported)'],
+        ['Transaction from',result.transaction_from],['Transaction to',result.transaction_to||'Contract creation'],
+        ['Native ETH value',formatObservedBalance(result.value_wei,'ETH',18)],
+        ['Gas limit',result.gas_limit],['Gas used',result.gas_used],
+        ['Effective gas price',`${result.effective_gas_price_wei} wei`],
+        ['Execution gas fee',formatObservedBalance(result.execution_gas_fee_wei,'ETH',18)],
+        ['Block time',result.block.time],['Source finalized head',result.observation?.source_finalized_head?.height],
+        ['Receipt retrieved',result.observation?.retrieved_at],
+      ]){
+        const row=document.createElement('div');
+        const name=document.createElement('dt');name.textContent=label;
+        const detail=document.createElement('dd');detail.textContent=String(value??'Unavailable');
+        row.append(name,detail);receiptFacts.append(row);
+      }
+      receiptStatus.textContent='The transaction sender is not necessarily the owner of the queried token address. The execution gas fee excludes blob fees and other costs. Graphus has not independently verified the source.';
+      receiptDownload.hidden=false;
+    }catch(error){
+      if(realObservation===data&&selectedRealEventId===id)receiptStatus.textContent=`Receipt unavailable: ${error.message}. The selected Transfer log remains visible.`;
+    }finally{if(realObservation===data&&selectedRealEventId===id)receiptButton.disabled=false;}
+  });
+  liveTransactionDetail.append(receiptButton,receiptStatus,receiptFacts,receiptDownload);
   liveTransactionDetail.hidden=false;
   for(const button of document.querySelectorAll('#transaction-list [data-event-id]'))
     button.setAttribute('aria-pressed',String(button.dataset.eventId===id));
