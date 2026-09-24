@@ -1,6 +1,8 @@
 """Bounded manual smoke checks against a local Bloch Space Pages preview."""
 import json
 import sys
+import time
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -10,8 +12,14 @@ base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8790"
 
 def get(route, **params):
     request = Request(f"{base}/api/{route}?{urlencode(params)}", headers={"User-Agent": "BlochSpaceSmoke/1.0"})
-    with urlopen(request, timeout=30) as response:
-        return json.load(response)
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=30) as response:
+                return json.load(response)
+        except HTTPError as error:
+            if error.code != 503 or attempt == 2:
+                raise
+            time.sleep(1)
 
 
 for network in ("bitcoin", "ethereum", "bloch"):
