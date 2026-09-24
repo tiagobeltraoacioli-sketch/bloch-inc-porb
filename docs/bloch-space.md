@@ -31,6 +31,15 @@ best-effort across isolates; durable quotas require a shared governor.
 
 `GET /api/address?network=...&asset=BTC|ETH|USDT|USDC|BLCH&query=<address or Bloch script hash>`
 
+`GET /api/history?network=bloch&query=<64-hex script hash>&cursor=<optional opaque cursor>`
+
+Bloch history pages contain at most 64 validated indexed events and their
+source anchor when available. The cursor is opaque and limited to 160 URL-safe
+characters. The page response is a separate source observation without a
+balance claim. The address view can load further pages when the first page
+returns a cursor. It keeps each page's retrieval time and anchor visible and
+refuses to combine pages with a changed reported anchor or overlapping events.
+
 The browser pages block transaction IDs in groups of 32, bounds graph edges,
 and shows up to 32 UTXOs for Bitcoin and Bloch identifiers when those separate
 source queries respond. It retains

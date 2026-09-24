@@ -2,6 +2,7 @@
 // Read-only, bounded public-chain facts for Bloch Space.
 import {queryChainWallet} from '../../graphus/chain/real-chain.js';
 import {queryEthereumActivity} from '../../graphus/chain/ethereum-activity.js';
+import {queryBlochHistoryPage} from '../../graphus/chain/bloch-chain.js';
 
 const BTC = 'https://blockstream.info/api';
 const BLOCH = 'https://blochl1.com';
@@ -397,12 +398,20 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   const query = url.searchParams.get('query')?.trim() ?? '';
   const offsetRaw = url.searchParams.get('offset');
   const offset = offsetRaw == null ? 0 : Number(offsetRaw);
+  const cursor = url.searchParams.get('cursor');
   const asset = (url.searchParams.get('asset') || {bitcoin:'BTC', ethereum:'ETH', bloch:'BLCH'}[network]).toUpperCase();
-  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if ([...url.searchParams.keys()].some(key => !['network', 'query', 'asset', 'offset', 'cursor'].includes(key)) || [...url.searchParams.keys()].some(key => url.searchParams.getAll(key).length > 1)) return bad('invalid_parameters');
+  if (cursor != null && (route !== 'history' || !/^[a-zA-Z0-9_-]{1,160}$/.test(cursor))) return bad('invalid_cursor');
   if (offsetRaw != null && (route !== 'block' || !/^(0|[1-9][0-9]{0,5})$/.test(offsetRaw) || !Number.isSafeInteger(offset))) return bad('invalid_offset');
   if (route !== 'address' && url.searchParams.has('asset')) return bad('invalid_parameters');
   if (route === 'overview' && query) return bad('invalid_parameters');
   if (route !== 'overview' && (!query || query.length > 100)) return bad('invalid_query');
+  if (route === 'history') {
+    if (network !== 'bloch' || !/^[0-9a-fA-F]{64}$/.test(query)) return bad('invalid_history_address');
+    const result = await queryBlochHistoryPage({address:query,cursor,fetcher,now:()=>new Date(now())});
+    if (result.status !== 200) return reply(result.status,result.body);
+    return reply(200,{...source('bloch','Bloch verified historical indexer',now(),'Cursor page is a separate indexed history observation; it is not the balance snapshot.'),page:result.body});
+  }
   if (route === 'address' && !(
     network === 'bitcoin' && asset === 'BTC' && BTC_ADDRESS.test(query) ||
     network === 'ethereum' && ['ETH', 'USDT', 'USDC'].includes(asset) && ETH_ADDRESS.test(query) ||

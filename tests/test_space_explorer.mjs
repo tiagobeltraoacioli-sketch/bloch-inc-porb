@@ -13,6 +13,29 @@ test('Bloch Space refuses unknown networks, writes, and unbounded parameters', a
   assert.equal((await handleExplore(url('tx',`network=bitcoin&query=${hash}&query=${block}`))).status,400);
   assert.equal((await handleExplore(url('address',`network=ethereum&query=${hash}&asset=USDT`))).status,400);
   assert.equal((await handleExplore(url('block','network=bitcoin&query=12&offset=-1'))).status,400);
+  assert.equal((await handleExplore(url('history',`network=bitcoin&query=${hash}`))).status,400);
+  assert.equal((await handleExplore(url('history',`network=bloch&query=${hash}&cursor=%2F`))).status,400);
+  assert.equal((await handleExplore(url('history',`network=bloch&query=${hash}&asset=BLCH`))).status,400);
+  assert.equal((await handleExplore(url('address',`network=bloch&query=${hash}&cursor=abc`))).status,400);
+});
+
+test('Bloch history cursor route returns a bounded source page without a balance claim', async () => {
+  const cursor='cursor_2';
+  const fetcher=async input => {
+    const request=new URL(input);
+    assert.equal(request.pathname,`/indexer/history/${hash}`);
+    assert.equal(request.searchParams.get('limit'),'64');
+    assert.equal(request.searchParams.get('cursor'),cursor);
+    return answer({script_hash:hash,as_of_slot:15,as_of_height:10,chain_tip:block,total:3,next_cursor:null,
+      events:[{kind:'created',transaction_id:hash,txid:hash,vout:0,value_sat:'123',slot:15,height:10,block_id:block}]});
+  };
+  const response=await handleExplore(url('history',`network=bloch&query=${hash}&cursor=${cursor}`),{fetcher,now:()=> '2026-09-24T00:00:00.000Z'});
+  assert.equal(response.status,200);
+  assert.equal(response.body.page.observation.history.requested_cursor,cursor);
+  assert.equal(response.body.page.observation.history.source_anchor.hash,block);
+  assert.equal(response.body.page.edges[0].amount_base_units,'123');
+  assert.equal(response.body.page.balance,undefined);
+  assert.match(response.body.note,/separate indexed history observation/);
 });
 
 test('Bitcoin block response bounds transaction IDs and preserves source status', async () => {

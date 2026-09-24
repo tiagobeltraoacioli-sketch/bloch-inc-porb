@@ -26,15 +26,16 @@ const time = value => {const date=new Date(typeof value==='number'?value*1000:va
 const message = (text, error=false) => {const node=$('#message');node.hidden=!text;node.textContent=text;node.dataset.state=error?'error':'info';};
 const note = text => element('p','result-copy',text);
 
-function apiParams(route,network,query,asset,offset=0){
+function apiParams(route,network,query,asset,offset=0,cursor=null){
   const params=new URLSearchParams({network});
   if(query)params.set('query',query);
   if(asset && route==='address')params.set('asset',asset);
   if(route==='block'&&offset>0)params.set('offset',String(offset));
+  if(route==='history'&&cursor)params.set('cursor',cursor);
   return params;
 }
-async function api(route, network, query, asset, offset=0) {
-  const params=apiParams(route,network,query,asset,offset);
+async function api(route, network, query, asset, offset=0, cursor=null) {
+  const params=apiParams(route,network,query,asset,offset,cursor);
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
   try{
     const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
@@ -59,10 +60,10 @@ async function copyRecordText(value,button){
   }catch{button.textContent='Copy unavailable';}
   setTimeout(()=>{button.textContent=original;},2300);
 }
-function rawResponse(data,route,network,query,asset,offset=0){
+function rawResponse(data,route,network,query,asset,offset=0,cursor=null){
   const details=element('details','raw-response');details.append(element('summary','',`Raw API response / ${route.toUpperCase()}`));
   const body=element('div','raw-body');
-  const endpoint=new URL(`/api/${route}?${apiParams(route,network,query,asset,offset)}`,'https://bloch.space').href;
+  const endpoint=new URL(`/api/${route}?${apiParams(route,network,query,asset,offset,cursor)}`,'https://bloch.space').href;
   const link=element('a','raw-endpoint',endpoint);link.href=endpoint;link.target='_blank';link.rel='noopener noreferrer';body.append(link);
   const actions=element('div','raw-actions');
   const copyUrl=element('button','','Copy API URL');copyUrl.type='button';copyUrl.setAttribute('aria-live','polite');copyUrl.addEventListener('click',()=>copyRecordText(endpoint,copyUrl));
@@ -303,6 +304,52 @@ function renderAddress(data,query,asset) {
   return [left,aside];
 }
 
+function blochTimelineEntries(edges){
+  return (edges||[]).filter(edge=>typeof edge.txid==='string'&&/^[0-9a-f]{64}$/i.test(edge.txid)&&['observed_created_output','observed_spent_outpoint_reference'].includes(edge.kind)).map(edge=>({
+    txid:edge.txid,order:edge.block?.slot??-1,
+    label:edge.kind==='observed_created_output'?'Created output':'Spent outpoint reference',
+    detail:`${compact(edge.txid)} · height ${count(edge.block?.height)} · slot ${count(edge.block?.slot)} · outpoint ${compact(edge.outpoint?.txid)}:${count(edge.outpoint?.vout)}`,
+    side:`${decimal(edge.amount_base_units,8)} BLCH`,
+    key:`${edge.kind}:${edge.txid}:${edge.outpoint?.txid}:${edge.outpoint?.vout}`,
+  })).sort((a,b)=>b.order-a.order);
+}
+
+function appendBlochHistoryPages(section,address,firstHistory,firstEntries){
+  if(!firstHistory?.has_more||!firstHistory.next_cursor)return;
+  const pages=element('div','history-pages');section.append(pages);
+  const status=element('p','activity-scope');pages.append(status);
+  const button=element('button','history-next','Load next indexed page');button.type='button';pages.append(button);
+  const seen=new Set(firstEntries.map(entry=>entry.key));
+  const usedCursors=new Set();
+  const anchor=firstHistory.source_anchor;
+  let cursor=firstHistory.next_cursor,number=1;
+  button.addEventListener('click',async()=>{
+    if(!cursor||usedCursors.has(cursor))return;
+    const requested=cursor;button.disabled=true;button.textContent='Loading source page…';status.textContent='';
+    try{
+      const data=await api('history','bloch',address,null,0,requested);
+      if(!section.isConnected)return;
+      const page=data.page,history=page?.observation?.history;
+      if(page?.address!==address.toLowerCase()||history?.requested_cursor!==requested||!Array.isArray(page.edges))throw new Error('source_page_mismatch');
+      const nextAnchor=history.source_anchor;
+      if(anchor&&(!nextAnchor||anchor.height!==nextAnchor.height||anchor.hash!==nextAnchor.hash))throw new Error('source_anchor_changed');
+      const entries=blochTimelineEntries(page.edges);
+      if(entries.some(entry=>seen.has(entry.key)))throw new Error('overlapping_source_page');
+      if(history.has_more&&(history.next_cursor===requested||usedCursors.has(history.next_cursor)))throw new Error('repeated_source_cursor');
+      usedCursors.add(requested);entries.forEach(entry=>seen.add(entry.key));number++;
+      const group=element('section','history-page');
+      group.append(element('h5','',`Indexed page ${number} · ${count(entries.length)} events`));
+      group.append(element('p','activity-scope',`Retrieved ${time(data.retrieved_at)} · as of slot ${count(history.as_of_slot)}${nextAnchor?` · source anchor height ${count(nextAnchor.height)} / ${compact(nextAnchor.hash)}`:''}. Separate source observation; no balance snapshot.`));
+      if(entries.length)batchedRows(group,entries,entry=>row(entry.label,entry.detail,entry.side,()=>openRecord('tx',entry.txid)),30);
+      group.append(rawResponse(data,'history','bloch',address,null,0,requested));pages.insertBefore(group,status);
+      cursor=history.has_more?history.next_cursor:null;
+      button.hidden=!cursor;
+      status.textContent=cursor?'More indexed source pages are available.':'No further cursor was returned by the source.';
+    }catch(error){status.textContent=`Next page unavailable: ${error.message}. Retry to query the source again.`;}
+    finally{button.disabled=false;button.textContent='Load next indexed page';}
+  });
+}
+
 function addressTimeline(data,network,asset){
   const wallet=data.wallet||{},observed=wallet.observation||{};
   const section=element('section','address-timeline');
@@ -320,12 +367,7 @@ function addressTimeline(data,network,asset){
     scope=observed.coverage==='unavailable'?'The optional confirmed transaction page is unavailable; a balance does not establish activity history.':
       `First source page of confirmed transactions · ${count(entries.length)} shown of ${count(wallet.activity?.confirmed_tx_count)} source-reported total. Inputs and outputs do not establish ownership.`;
   }else if(network==='bloch'){
-    entries=(wallet.edges||[]).filter(edge=>validTxid(edge.txid)&&['observed_created_output','observed_spent_outpoint_reference'].includes(edge.kind)).map(edge=>({
-      txid:edge.txid,order:edge.block?.slot??-1,
-      label:edge.kind==='observed_created_output'?'Created output':'Spent outpoint reference',
-      detail:`${compact(edge.txid)} · height ${count(edge.block?.height)} · slot ${count(edge.block?.slot)} · outpoint ${compact(edge.outpoint?.txid)}:${count(edge.outpoint?.vout)}`,
-      side:`${decimal(edge.amount_base_units,8)} BLCH`,
-    })).sort((a,b)=>b.order-a.order);
+    entries=blochTimelineEntries(wallet.edges);
     const history=observed.history;
     scope=history?`First indexed script-hash page · ${count(entries.length)} events${history.total==null?'':` of ${count(history.total)} source-reported`}${history.has_more?' · further source pages exist':''}. Spent outpoint references do not identify a sender.`:
       'Indexed history is unavailable for this balance lookup; no absence of activity is implied.';
@@ -344,6 +386,7 @@ function addressTimeline(data,network,asset){
   section.append(element('p','activity-scope',scope));
   if(entries.length)batchedRows(section,entries,entry=>row(entry.label,entry.detail,entry.side,()=>openRecord('tx',entry.txid)),30);
   else section.append(element('p','activity-empty',network==='ethereum'&&asset!=='ETH'&&data.token_activity?'No matching Transfer logs in this bounded window.':'No transaction entries are available in this source view.'));
+  if(network==='bloch')appendBlochHistoryPages(section,wallet.address,observed.history,entries);
   return section;
 }
 
