@@ -139,3 +139,11 @@ manual link generation, ordinary login before account creation, invitation-link
 validation, refresh recovery, acceptance and subsequent login with the invited
 user's chosen password. Existing graph, API-key, data-science and mobile checks
 also pass using isolated test accounts and synthetic source fixtures.
+
+Release `7384262` was deployed from an isolated Git archive to
+`151ed34b.rednblue-space.pages.dev`. The custom domain served byte-identical
+portal HTML, JavaScript and the new access helper, with no-store and CSP headers
+preserved. A focused live check verified authentication configuration, denial
+of unauthenticated invitation access, existing-owner login, organization access
+and logout. It did not create invitations or accounts, change passwords or issue
+API keys. Email delivery remains manual.
