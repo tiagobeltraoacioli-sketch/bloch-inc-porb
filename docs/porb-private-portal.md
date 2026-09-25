@@ -106,3 +106,36 @@ The graph update passed 21 model, graph search, source, authorization and time-s
 Production WebKit verified the master login on the custom domain, address/script and transaction search across saved BTC, ETH, BLCH, USDT and USDC datasets, exact record inspection, mobile layout for each asset, touch selection and logout. The public AML site's primary access action reached the custom-domain login successfully; its mobile layout also passed. Published releases: portal `8780b082.rednblue-space.pages.dev`, public landing `8dbd3e26.aml-blochinc.pages.dev`.
 
 Deploy the public AML landing independently: `python3 scripts/build_aml_landing.py` creates a temporary directory containing only the public landing assets and its own `wrangler.toml`. In that directory, run `wrangler pages deploy public --project-name aml-blochinc --branch main`. Its `/portal` paths redirect to the custom BI-PoRB domain. The private portal continues to deploy from `site/`; its Functions and D1 bindings are not included in the public landing bundle.
+
+## Invitation delivery and password confirmation
+
+Invitations currently use manual delivery. Creating an invitation returns a
+single-use link; this application has no email transport and does not send an
+invitation email. The administrator must copy the displayed link and share it
+privately with the invited email holder. If a link is lost, create a replacement
+for the same email; the prior unused invitation is revoked. An invitation alone
+does not create the recipient's account or set a password.
+
+The invitation form requires the acting administrator's current password as
+reauthentication. A new recipient opens the invitation and chooses their own
+14–128 character password. An existing portal user must use their current portal
+password. Passwords from Bloch Space or Graphus do not authenticate this portal.
+The login page provides a local invitation-link input. It validates the link
+without navigating to it or storing it; only the token is sent to the portal's
+acceptance endpoint when the user submits the acceptance form. Opening an
+invitation removes the URL fragment, so a
+page refresh before acceptance requires reopening or pasting the original link.
+
+An incorrect administrator confirmation now leaves the still-valid session on
+screen and explains which password is needed. A genuinely unauthenticated
+response still returns to the login gate. Public login failures remain generic
+and do not disclose whether an email is registered. Pending, accepted, revoked
+and expired invitation states are displayed separately. These UI corrections do
+not reset credentials, change authorization rules or activate email delivery.
+
+Validation: 28 unit and integration tests passed. The WebKit browser flow covers
+incorrect administrator confirmation without logout or invitation creation,
+manual link generation, ordinary login before account creation, invitation-link
+validation, refresh recovery, acceptance and subsequent login with the invited
+user's chosen password. Existing graph, API-key, data-science and mobile checks
+also pass using isolated test accounts and synthetic source fixtures.

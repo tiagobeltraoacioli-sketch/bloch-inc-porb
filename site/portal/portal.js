@@ -1,4 +1,5 @@
 import {GraphExplorer} from './explorer.js';
+import {invitationToken,accessFailure} from './access-help.js';
 const $=id=>document.getElementById(id),state={session:null,analysis:null,science:null,runs:[],view:'overview'};
 const requestedView=new URLSearchParams(location.search).get('view');
 if(['overview','analyses','science','access'].includes(requestedView))state.view=requestedView;
@@ -13,22 +14,25 @@ function element(tag,text,cls){const e=document.createElement(tag);if(text!==und
 function message(text,gate=false){$(gate?'gate-status':'status').textContent=text;}
 async function api(path,method='GET',body){
   const response=await fetch(`/api/porb${path}`,{method,credentials:'same-origin',cache:'no-store',headers:method==='GET'?{}:{'content-type':'application/json','x-porb-action':'1'},body:body===undefined?undefined:JSON.stringify(body)});
-  const content=await response.json();if(!response.ok){if(response.status===401&&!path.startsWith('/auth')){state.session=null;showGate();}throw new Error((content.error||`Request failed (${response.status})`).replaceAll('_',' '));}return content;
+  const content=await response.json();if(!response.ok){const failure=accessFailure(path,content.error,response.status,Boolean(state.session));if(failure.showLogin){state.session=null;showGate();}throw new Error(failure.message);}return content;
 }
-async function perform(button,work,gate=false){button.disabled=true;message('Loading…',gate);try{await work();message('',gate);}catch(e){message(e.message,gate);}finally{button.disabled=false;}}
+async function perform(button,work,gate=false){button.disabled=true;message('Loading…',gate);try{await work();message('',gate);}catch(e){message(e.message,gate||!$('gate').hidden);}finally{button.disabled=false;}}
 function showGate(){ $('gate').hidden=false;$('workspace').hidden=true;state.session=null;state.analysis=null;state.science=null;state.runs=[];state.selected=null;explorer.clear();$('analysis-result').hidden=true;$('analysis-empty').hidden=false;$('wallet-rows').replaceChildren();$('wallet-detail').replaceChildren();$('secret-dialog').close();$('secret-value').textContent='';renderAuth();}
 addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('invite');if(token){invitation=token;authMode='accept-invite';history.replaceState(null,'',location.pathname);showGate();}});
 function renderAuth(){
   $('gate-title').textContent=authMode==='accept-invite'?'Accept your invitation':authMode==='recover'?'Recover access':'Sign in';
-  $('gate-note').textContent=authMode==='accept-invite'?'Use your invited email. Create a password, or enter your existing portal password.':authMode==='recover'?'Enter your email, saved recovery code and a new password.':'Access is by invitation. Use the email associated with your organization.';
+  $('gate-note').textContent=authMode==='accept-invite'?'Use the exact invited email. On first access, choose your own password. If you already have a portal account, enter its existing password.':authMode==='recover'?'Enter your email, saved recovery code and a new password.':'Already accepted an invitation? Sign in with your own portal password. For first access, open the private invitation link supplied by your administrator.';
   $('recovery-field').hidden=authMode!=='recover';$('auth-form').elements.recovery.required=authMode==='recover';$('auth-form').elements.password.autocomplete=authMode==='login'?'current-password':'new-password';
   $('auth-submit').textContent=authMode==='accept-invite'?'Accept & enter ↗':authMode==='recover'?'Set new password':'Enter workspace ↗';$('recover-toggle').textContent=authMode==='recover'?'Return to sign in':'Use a recovery code';
+  $('invite-link-panel').hidden=authMode==='accept-invite';$('invite-cancel').hidden=!invitation;
 }
 function secret(title,note,value){$('secret-title').textContent=title;$('secret-note').textContent=note;$('secret-value').textContent=value;$('secret-dialog').showModal();}
 $('secret-close').onclick=()=>{$('secret-dialog').close();$('secret-value').textContent='';};
 $('secret-dialog').addEventListener('close',()=>{$('secret-value').textContent='';});
 $('secret-copy').onclick=()=>perform($('secret-copy'),async()=>{await navigator.clipboard.writeText($('secret-value').textContent);});
 $('recover-toggle').onclick=()=>{authMode=authMode==='recover'?(invitation?'accept-invite':'login'):'recover';renderAuth();};
+$('invite-link-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;try{const token=invitationToken(form.elements.link.value,location.origin);form.reset();invitation=token;authMode='accept-invite';$('auth-form').reset();showGate();message('Invitation link opened locally. Enter the invited email and your password to accept it.',true);}catch(error){form.reset();message(error.message,true);}};
+$('invite-cancel').onclick=()=>{invitation=null;authMode='login';$('auth-form').reset();renderAuth();message('Use your own password for an account that has already accepted an invitation.',true);};
 $('auth-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget,body=Object.fromEntries(new FormData(form));if(authMode==='accept-invite')body.invitation=invitation;perform($('auth-submit'),async()=>{const response=await api(`/auth/${authMode}`,'POST',body);form.reset();invitation=null;authMode='login';await session();if(response.recovery_code)secret('Save your recovery code','Displayed once. This code can reset your password and revokes existing sessions and API keys.',response.recovery_code);},true);};
 async function session(){
   if(invitation){showGate();return;}
@@ -91,7 +95,7 @@ let resizeTimer;addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeT
 async function loadAccess(){
   if(!['owner','admin'].includes(state.session?.organization.role))return;
   const [keys,invites,members,audit]=await Promise.all([api('/keys'),api('/invitations'),api('/members'),api('/audit')]);
-  function list(id,items,describe,path,canRevoke){$(id).replaceChildren();if(!items.length)$(id).append(element('p','No records.'));for(const item of items){const row=element('div',undefined,'list-row'),info=element('div',describe(item));if(item.expires_at)info.append(element('small',`Expires ${date(item.expires_at)}${item.revoked_at?' · Revoked':item.used_at?' · Accepted':''}`));row.append(info);if(canRevoke(item)){const b=element('button','Revoke','secondary');b.onclick=()=>{revokePath=`/${path}/${item.id}`;$('reauth-note').textContent=describe(item);$('reauth-dialog').showModal();};row.append(b);}$(id).append(row);}}
+  function list(id,items,describe,path,canRevoke){$(id).replaceChildren();if(!items.length)$(id).append(element('p','No records.'));for(const item of items){const row=element('div',undefined,'list-row'),info=element('div',describe(item));if(item.expires_at)info.append(element('small',`Expires ${date(item.expires_at)}${item.revoked_at?' · Revoked':item.used_at?' · Accepted':item.expires_at<=Date.now()?' · Expired':path==='invitations'?' · Pending acceptance · manual link delivery':''}`));row.append(info);if(canRevoke(item)){const b=element('button','Revoke','secondary');b.onclick=()=>{revokePath=`/${path}/${item.id}`;$('reauth-note').textContent=describe(item);$('reauth-dialog').showModal();};row.append(b);}$(id).append(row);}}
   list('key-list',keys.keys,k=>`${k.label} · ${k.prefix}… · ${k.scopes.join(', ')}`,'keys',k=>!k.revoked_at);
   list('invitation-list',invites.invitations,i=>`${i.email} · ${i.role}`,'invitations',i=>!i.revoked_at&&!i.used_at);
   list('member-list',members.members,m=>`${m.email} · ${m.role}`,'members',m=>state.session.organization.role==='owner'&&m.role!=='owner');
@@ -99,10 +103,10 @@ async function loadAccess(){
 }
 for(const [id,path,transform,after] of [
   ['password-form','/auth/password',f=>Object.fromEntries(new FormData(f)),r=>secret('New recovery code','Password updated. Other sessions and API keys have been revoked. Save this replacement code.',r.recovery_code)],
-  ['invite-form','/invitations',f=>Object.fromEntries(new FormData(f)),r=>secret('Private invitation',`Share with ${r.email}. Expires ${date(r.expires_at)}.`,r.invitation_url)],
+  ['invite-form','/invitations',f=>Object.fromEntries(new FormData(f)),r=>secret('Private invitation — no email sent',`Copy this link and share it directly with ${r.email}. The recipient chooses their own password on first acceptance; existing users enter their current portal password. Expires ${date(r.expires_at)}.`,r.invitation_url)],
   ['key-form','/keys',f=>({label:f.elements.label.value,days:Number(f.elements.days.value),password:f.elements.password.value,scopes:new FormData(f).getAll('scope')}),r=>secret('Your API key',`Displayed once. Expires ${date(r.expires_at)}.`,r.key)],
   ['org-form','/organizations',f=>Object.fromEntries(new FormData(f)),async()=>{await session();}]
-])$(id).onsubmit=e=>{e.preventDefault();const form=e.currentTarget;perform(form.querySelector('button'),async()=>{const r=await api(path,'POST',transform(form));form.reset();await after(r);await loadAccess();});};
+])$(id).onsubmit=e=>{e.preventDefault();const form=e.currentTarget;perform(form.querySelector('button'),async()=>{const body=transform(form);if(form.elements.password)form.elements.password.value='';const r=await api(path,'POST',body);form.reset();await after(r);await loadAccess();});};
 $('reauth-cancel').onclick=()=>{$('reauth-dialog').close();$('reauth-form').reset();};
 $('reauth-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget;perform(form.querySelector('button'),async()=>{await api(revokePath,'DELETE',{password:form.elements.password.value});form.reset();$('reauth-dialog').close();revokePath=null;await loadAccess();});};
 renderAuth();session().catch(e=>{showGate();message(e.message,true);});
