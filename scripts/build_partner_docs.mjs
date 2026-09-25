@@ -1,0 +1,58 @@
+import {writeFile,mkdir} from 'node:fs/promises';
+import {MODULE_ROUTES} from '../portal/modules.js';
+import {SCOPES} from '../portal/security.js';
+
+const string={type:'string'},uuid={type:'string',format:'uuid'},asset={type:'string',enum:['BTC','ETH','BLCH','USDT','USDC']};
+const object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
+const query=(name,schema=string,required=false)=>({name,in:'query',required,schema});
+const pages=[query('limit',{type:'integer',minimum:1,maximum:50,default:25}),query('cursor',{type:'string',description:'Opaque next_cursor from the preceding page. Keep the same filters.'})];
+const paths={};
+function endpoint(path,method,summary,scopes,{body,parameters=[],description='',schema={type:'object',additionalProperties:true},created=false,tag='Analysis'}={}){
+  const parametersWithPath=[...Array.from(path.matchAll(/\{([^}]+)\}/g),m=>({name:m[1],in:'path',required:true,schema:uuid})),...parameters];
+  const operation={operationId:method+path.replace(/[/{}/-]/g,'_'),tags:[tag],summary,description,'x-required-scopes':scopes,security:[{PartnerKey:[]}],parameters:parametersWithPath,
+    responses:{[created?'201':'200']:{description:created?'Created':'Success',headers:{'X-Request-Id':{description:'Server-generated support correlation ID',schema:string},'X-Porb-Api-Version':{schema:{const:'1.1'}}},content:{'application/json':{schema}}}}};
+  if(created&&(path==='/v1/watchlists'||path.endsWith('/evidence')))operation.responses['200']={description:'Existing identical item returned; duplicate=true.',content:{'application/json':{schema}}};
+  for(const code of [400,401,403,404,409,413,422,429,502,503])operation.responses[code]={$ref:'#/components/responses/'+code};
+  if(body)operation.requestBody={required:true,content:{'application/json':{schema:body}}};
+  paths[path]??={};paths[path][method]=operation;
+}
+const reading=['analyses:read','scores:read'];
+endpoint('/v1/overview','get','Connected network observations',['data:read']);
+endpoint('/v1/science','get','Time series and historical model evaluation',['data:read'],{parameters:[query('network',{type:'string',enum:['bitcoin','ethereum','bloch']},true)],tag:'Models'});
+endpoint('/v1/model','get','Descriptive Red/Blue model card',['scores:read'],{tag:'Models'});
+endpoint('/v1/analyses','post','Collect real source pages and save a scored analysis',['data:read','analyses:write','scores:read'],{body:object({asset,pages:{type:'integer',minimum:1,maximum:4,default:2}},['asset']),created:true,description:'Also indexes references and evaluates existing organization watchlists. 6 collections/minute and 100/day per organization. This POST has no idempotency key: after a timeout inspect recent analyses before submitting again.'});
+endpoint('/v1/analyses','get','List the latest 50 retained analyses',reading,{description:'Returns {analyses, retention}. No pagination parameters are accepted on this endpoint.'});
+endpoint('/v1/analyses/{id}','get','Read a saved source graph, scores and provenance',reading);
+endpoint('/v1/analyses/{id}/scores','get','Read reference scores and model version',reading);
+endpoint('/v1/analyses/{id}/export','get','Download a saved analysis with exact source records',reading);
+endpoint('/v1/references','get','Find an exact reference across indexed analyses',reading,{parameters:[query('asset',asset,true),query('reference',{type:'string',maxLength:100},true),...pages],tag:'Research',description:'Returns {items,next_cursor,asset,reference,index:{retained,indexed},coverage}. Ethereum and Bloch references are case-normalized; Bitcoin Base58 is case-sensitive. Read pre-release analyses once to index them. Checks format only, not an address checksum. A missing match does not establish inactivity.'});
+endpoint('/v1/cases','get','List private investigations',['cases:read'],{parameters:pages,tag:'Investigations'});
+endpoint('/v1/cases','post','Create an investigation',['cases:write'],{body:object({title:{type:'string',minLength:3,maxLength:120}}),created:true,tag:'Investigations',description:'Maximum 100 investigations per organization. Titles are private; do not use them to assert wallet ownership.'});
+endpoint('/v1/cases/{id}','get','Read an investigation and retained evidence',['cases:read',...reading],{tag:'Investigations'});
+endpoint('/v1/cases/{id}','delete','Delete an investigation and its evidence',['cases:write'],{body:object({}),tag:'Investigations',description:'Deletes the case and snapshots. This action is audited and permanent.'});
+endpoint('/v1/cases/{id}/status','post','Close or reopen an investigation',['cases:write'],{body:object({status:{type:'string',enum:['open','closed']}}),tag:'Investigations'});
+endpoint('/v1/cases/{id}/evidence','post','Attach a reference evidence snapshot',['cases:write',...reading],{body:object({analysis_id:uuid,node_id:{type:'string',maxLength:200}}),created:true,tag:'Investigations',description:'Choose node_id from a saved graph or score row. Retains the first 100 incident records in dataset order, endpoint nodes, score/model, anchors and source. records_total, records_returned and truncated disclose bounds. digest is SHA-256 of UTF-8 JSON.stringify(snapshot), in returned property order. Maximum 50 snapshots per case. Repeating case/analysis/node returns the existing snapshot. Evidence survives the 50-analysis retention window.'});
+endpoint('/v1/cases/{id}/export','get','Export an investigation and evidence digests',['cases:read',...reading],{tag:'Investigations'});
+endpoint('/v1/watchlists','get','List watched public references',['watchlists:read'],{parameters:pages,tag:'Watchlists'});
+endpoint('/v1/watchlists','post','Watch a public reference',['watchlists:write'],{body:object({asset,reference:{type:'string',maxLength:100}}),created:true,tag:'Watchlists',description:'Maximum 100 references per organization. Same asset/reference returns the existing entry. No continuous scanning or email notifications.'});
+endpoint('/v1/watchlists/{id}','delete','Remove a watched reference and its observations',['watchlists:write'],{body:object({}),tag:'Watchlists'});
+endpoint('/v1/watchlists/evaluate','post','Evaluate watchlists against one retained analysis',['watchlists:write',...reading],{body:object({analysis_id:uuid}),tag:'Watchlists',description:'Idempotent per watched reference and analysis ID; returns observations_created. Different runs can contain overlapping chain records; observations are not a count of unique transactions.'});
+endpoint('/v1/observations','get','Read the observation inbox',['watchlists:read',...reading],{parameters:pages,tag:'Watchlists',description:'Latest 500 matches per organization, including reviewed matches. Returns {items,next_cursor,retention,coverage}. Snapshot fields survive source-analysis retention; the source graph may no longer be available.'});
+endpoint('/v1/observations/{id}/review','post','Mark an observation as reviewed',['watchlists:write'],{body:object({}),tag:'Watchlists'});
+const routeNotes={
+  'system/map':'Module registry, implementation/access states, workflow and data contracts.',
+  'daas/manifest':'Public Graphus capability manifest. Any prototype/planned status remains unchanged by portal aggregation.',
+  'chain/network':'Bounded network page. asset required. Feed next_cursor into cursor for the next page. No score or ownership label.',
+  'chain/wallet':'asset, network and address required. Networks: bitcoin-mainnet, ethereum-mainnet, bloch-mainnet. Bounded source-reported address/script observations.',
+  'chain/activity':'asset and address required. Ethereum USDT/USDC Transfer logs over a bounded finalized block window. Native ETH history requires an index and is unavailable here.',
+  'chain/transaction-receipt':'hash, expected_block, expected_hash and expected_index required. Finalized Ethereum receipt checked against the selected log.',
+  'chain/bloch-history':'address required. Bloch script-hash history; pass the returned source cursor unchanged.',
+  'chain/holders':'asset=BLCH required. Up to 64 indexed positive script balances, without identities.',
+  'chain/balances':'asset and comma-separated addresses required; 1–16 BTC/ETH/USDT/USDC addresses. Anchoring and source limitations are returned.',
+};
+const required={ 'chain/network':['asset'],'chain/wallet':['asset','network','address'],'chain/activity':['asset','address'],'chain/transaction-receipt':['hash','expected_block','expected_hash','expected_index'],'chain/bloch-history':['address'],'chain/holders':['asset'],'chain/balances':['asset','addresses']};
+for(const [route,names] of Object.entries(MODULE_ROUTES))endpoint('/v1/graphus/'+route,'get','Graphus · '+route,['data:read'],{tag:'Graphus',parameters:names.map(name=>query(name,name==='asset'?asset:string,required[route]?.includes(name)||false)),description:routeNotes[route]+' Fixed source gateway; keys/cookies are never forwarded. Shared 60 upstream reads/minute per organization. Upstream errors remain errors.'});
+const errors={400:'Invalid JSON, reference, parameters or fields',401:'Missing/expired/revoked authentication',403:'Required scope, role or same-origin action missing',404:'Resource unavailable in this organization',409:'Capacity, state or conflict',413:'Request body exceeds 8 KiB',422:'Collection exceeds supported bounds',429:'Rate limit; honor Retry-After in seconds',502:'Public source failed or returned inconsistent data',503:'Service unavailable'};
+const doc={openapi:'3.1.0',info:{title:'Bloch Inc Unified Intelligence — Partner API',version:'1.1.0',description:'Private BI-PoRB, investigations, observation watchlists and Graphus source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal.'},servers:[{url:'/api/porb',description:'Same host as this documentation. Production currently rednblue.space.'}],tags:['Analysis','Models','Research','Investigations','Watchlists','Graphus'].map(name=>({name})),paths,components:{securitySchemes:{PartnerKey:{type:'http',scheme:'bearer',bearerFormat:'porb_<64 hex characters>',description:'Generated by an organization owner/admin in Access & API. All scopes in x-required-scopes are required. Send only through Authorization, never URLs.'}},schemas:{Error:object({error:string})},responses:Object.fromEntries(Object.entries(errors).map(([code,description])=>[code,{description,headers:code==='429'?{'Retry-After':{schema:{type:'integer'}}}:{},content:{'application/json':{schema:{$ref:'#/components/schemas/Error'}}}}]))},'x-available-scopes':SCOPES};
+const target=new URL('../site/developers/',import.meta.url);await mkdir(target,{recursive:true});await writeFile(new URL('openapi.json',target),JSON.stringify(doc,null,2)+'\n');
+console.log(`Documented ${Object.values(paths).reduce((n,p)=>n+Object.keys(p).length,0)} partner operations.`);

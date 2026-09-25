@@ -28,10 +28,10 @@ export async function budget(env,key,limit,seconds=3600){
   const now=Date.now(),slot=Math.floor(now/(seconds*1000));
   const bucket=await digest(`${env.PORB_AUTH_PEPPER}:${key}:${slot}`);
   const row=await statement(env.PORB_DB,'INSERT INTO budget(bucket,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1 RETURNING attempts',bucket,(slot+2)*seconds*1000).first();
-  requireValue(row.attempts<=limit,'rate_limit',429);
+  if(row.attempts>limit){const error=new PortalError('rate_limit',429);error.retryAfter=Math.max(1,Math.ceil(((slot+1)*seconds*1000-now)/1000));throw error;}
 }
 export function audit(db,principal,action,resource){return statement(db,'INSERT INTO audit(id,tenant_id,actor_id,action,resource_id,created_at) VALUES(?,?,?,?,?,?)',crypto.randomUUID(),principal.tenant_id,principal.key_id||principal.id,action,resource||null,Date.now());}
-export const SCOPES=['data:read','analyses:read','analyses:write','scores:read'];
+export const SCOPES=['data:read','analyses:read','analyses:write','scores:read','cases:read','cases:write','watchlists:read','watchlists:write'];
 export async function principalOf(request,env){
   const db=env.PORB_DB,authorization=request.headers.get('authorization');
   if(authorization!==null){
@@ -46,7 +46,7 @@ export async function principalOf(request,env){
 export function authorize(principal,scope){
   requireValue(principal,'authentication_required',401);
   if(principal.type==='key')requireValue(principal.scopes.includes(scope),'scope_required',403);
-  else if(scope==='analyses:write')requireValue(principal.role!=='viewer','role_required',403);
+  else if(scope.endsWith(':write'))requireValue(principal.role!=='viewer','role_required',403);
 }
 export function admin(principal,owner=false){requireValue(principal?.type==='session'&&(owner?principal.role==='owner':['owner','admin'].includes(principal.role)),'administrator_session_required',403);}
 export async function reauthenticate(env,principal,password){

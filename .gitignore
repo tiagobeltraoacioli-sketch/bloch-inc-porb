@@ -5,6 +5,7 @@ __pycache__/
 .wrangler/
 *.sqlite3
 .data/
+site/graphus/
 
 # Local desktop build products and test artifacts
 desktop/dist/

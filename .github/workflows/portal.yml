@@ -1,9 +1,9 @@
 name: Private portal checks
 on:
   push:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
   pull_request:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
 permissions:
   contents: read
 jobs:
@@ -14,6 +14,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_space_science.mjs
+      - run: node scripts/build_partner_docs.mjs && git diff --exit-code -- site/developers/openapi.json
+      - run: python3 scripts/build_portal_modules.py
+      - run: node --test tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_porb_access_help.mjs tests/test_porb_intelligence.mjs tests/test_space_science.mjs tests/test_system_map.mjs tests/test_system_map_api.mjs
       - run: node --check site/portal/portal.js
       - run: node --check site/portal/explorer.js
+      - run: node --check site/portal/intelligence.js
+      - run: node --check site/developers/docs.js
+      - run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps webkit
+      - run: node scripts/test_porb_browser.mjs
