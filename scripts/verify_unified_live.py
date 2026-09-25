@@ -16,6 +16,7 @@ def main():
     origin = "https://rednblue.space"
     owner = json.loads(args.credentials.read_text())
     opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener.addheaders = [("User-Agent", "BI-PoRB-Unified-Release-Check/1.1")]
     report = {"origin": origin, "collections": [], "checks": []}
 
     def call(path, method="GET", body=None, key=None, expected=(200,)):
@@ -44,7 +45,7 @@ def main():
         assert session["organization"]["role"] == "owner"
         print("Existing owner login verified; account credentials unchanged.", flush=True)
         for module in ("map", "constellation", "oculum", "analytics", "app", "catalog"):
-            response = opener.open(origin + "/graphus/" + module + ".html", timeout=30)
+            response = opener.open(origin + "/graphus/" + module, timeout=30)
             assert "/graphus/" in response.url and response.headers.get("X-Frame-Options") == "SAMEORIGIN"
             assert "module-shell.js" in response.read().decode()
         print("All six unified Graphus pages verified behind the owner session.", flush=True)

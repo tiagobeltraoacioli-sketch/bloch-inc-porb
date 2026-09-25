@@ -65,6 +65,7 @@ test('new scopes cannot leak scores; viewer cannot mutate any investigation or w
 });
 
 test('module gateway uses fixed sources, requires permission, preserves failures and never forwards secrets',async t=>{
+  const routes=JSON.parse(readFileSync(new URL('../site/_routes.json',import.meta.url)));assert.ok(routes.include.includes('/graphus/*'));assert.ok(routes.include.includes('/api/*'));assert.deepEqual(routes.exclude,[]);
   const s=await setup();t.after(()=>s.sqlite.close());const cookie=await s.login(),restricted=await key(s,cookie,['scores:read']),dataKey=await key(s,cookie,['data:read']);let requests=0;
   const fetcher=async(url,options)=>{requests++;assert.equal(new URL(url).origin,'https://bloch-graphus.xyz');assert.equal(options.redirect,'manual');assert.ok(!options.headers.authorization&&!options.headers.cookie);return Response.json(sourceGraph());};
   const path='/v1/graphus/chain/network?asset=ETH';assert.equal((await s.call(path,'GET',undefined,'',{fetcher})).status,401);assert.equal((await s.call(path,'GET',undefined,restricted,{fetcher})).status,403);assert.equal(requests,0);
@@ -74,7 +75,7 @@ test('module gateway uses fixed sources, requires permission, preserves failures
   const failure=await s.call(path,'GET',undefined,dataKey,{fetcher:async()=>Response.json({error:'unsupported_source'}, {status:422})});assert.equal(failure.status,422);assert.equal((await failure.json()).error,'unsupported_source');
   assert.equal((await s.call(path,'GET',undefined,dataKey,{fetcher:async()=>new Response(null,{status:302,headers:{location:'https://attacker.test'}})})).status,502);
   const anonymous=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html'),env:s.env,next:async()=>new Response('private module')});assert.equal(anonymous.status,302);
-  const page=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html',{headers:{cookie}}),env:s.env,next:async()=>new Response('module')});assert.equal(page.status,200);assert.equal(page.headers.get('x-frame-options'),'SAMEORIGIN');
+  const page=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html',{headers:{cookie}}),env:s.env,next:async()=>new Response('<h1>Module</h1>',{headers:{'content-type':'text/html'}})});assert.equal(page.status,200);assert.equal(page.headers.get('x-frame-options'),'SAMEORIGIN');assert.equal(page.headers.get('content-type'),'text/html');assert.equal(await page.text(),'<h1>Module</h1>');
 });
 
 test('OpenAPI exposes each mounted Graphus route and requires authentication on every documented operation',async t=>{
