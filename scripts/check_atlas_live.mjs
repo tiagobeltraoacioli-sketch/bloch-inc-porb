@@ -33,6 +33,7 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
+  await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
   note('Anonymous access to private Atlas APIs is denied.');
   if (!portalOnly) {
@@ -74,8 +75,10 @@ async function publicChecks() {
     [publicOrigin, '/catalog.html', 'graphus/catalog.html'],
     [publicOrigin, '/assets/atlas_engine.js', 'graphus/assets/atlas_engine.js'],
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
+    [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
+    [privateOrigin, '/portal/atlas-comparison.js', 'site/portal/atlas-comparison.js'],
     [privateOrigin, '/portal/atlas.css', 'site/portal/atlas.css'],
     [privateOrigin, '/portal/', 'site/portal/index.html'],
     [privateOrigin, '/portal/portal.js', 'site/portal/portal.js'],
@@ -93,6 +96,7 @@ async function publicChecks() {
 async function privateChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
+  await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
   await api(member, '/auth/login', {method: 'POST', body: {email: owner.email, password: owner.password}});
   authenticated = true;

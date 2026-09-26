@@ -1,4 +1,5 @@
 import {atlasSelection, atlasSubject, atlasReviews, atlasRecords, atlasRecordSummary, atlasLink} from './atlas-context.js';
+import {comparisonWorkspace} from './atlas-comparison.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node;};
 const date = value => new Date(value).toLocaleString();
@@ -16,6 +17,7 @@ const note = (id, text) => {$(id).textContent = text;};
 function dismissToken() {$('private-grant-token').textContent = ''; $('private-grant-token').hidden = true; $('grant-dismiss').hidden = true;}
 function lock(message, login = false) {
   contextVersion++; selectionVersion++; sourceVersion++; sourceExpiry = null; data = null; analysis = null; selectedNode = ''; runs = []; editing = null;
+  comparison.reset();
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
   for (const id of ['atlas-reference-search', 'record-search']) $(id).value = '';
@@ -40,6 +42,7 @@ async function request(path, method = 'GET', body) {
   return result;
 }
 const api = (path, method, body) => request('/v1/atlas/' + path, method, body);
+const comparison = comparisonWorkspace(request);
 function download(name, value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'})), link = el('a');
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -104,7 +107,7 @@ function renderSelection() {
     box.append(grid, el('p', `${analysis.asset} · ${row.kind} · ${analysis.graph.source} · ${date(analysis.created_at)}`), el('p', `Dataset SHA-256: ${analysis.digest}`, 'atlas-record-meta'), el('p', analysis.graph.coverage), el('p', 'Scores describe the retained sample. They do not establish ownership or a validated AML assessment.', 'atlas-note'));
     const query = new URLSearchParams({view: 'analyses', analysis: analysis.id, node: row.id}); $('atlas-open-graph').href = '/portal/?' + query;
   }
-  renderReviews(); renderRecords();
+  renderReviews(); renderRecords(); comparison.sync(runs, analysis, selectedNode);
 }
 function referenceOptions() {
   const query = $('atlas-reference-search').value.trim().toLowerCase(), rows = (analysis?.scores.rows || []).filter(row => !query || row.address.toLowerCase().includes(query));
@@ -133,6 +136,7 @@ async function loadAnalyses() {
   else if (analysis) await selectAnalysis('');
   if (pendingSelection.analysis) {const initial = pendingSelection; pendingSelection = {}; if (runs.some(run => run.id === initial.analysis)) {$('atlas-saved-analysis').value = initial.analysis; await selectAnalysis(initial.analysis, initial.node);} else note('atlas-saved-status', 'The linked analysis is no longer retained or belongs to another organization.');}
   else referenceOptions();
+  comparison.sync(runs, analysis, selectedNode);
 }
 async function load() {
   try {

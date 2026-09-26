@@ -3,15 +3,19 @@ import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import assert from 'node:assert/strict';
 import {sample} from '../tests/system_map_fixture.mjs';
-import {setup} from '../tests/porb_helpers.mjs';
+import {setup,sourceGraph} from '../tests/porb_helpers.mjs';
 import {handlePortal} from '../portal/router.js';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||process.argv[2]||'playwright');
-const h=await setup(),root=resolve(new URL('../',import.meta.url).pathname),errors=[];let calls=0,fail=false,delay=0,analysisDelay=0,privateReadFailures=0;
+const h=await setup(),root=resolve(new URL('../',import.meta.url).pathname),errors=[];let calls=0,fail=false,delay=0,analysisDelay=0,privateReadFailures=0,comparisonDelay=0,comparisonFailure=false;
 const xml='<CONSOLIDATED_LIST><INDIVIDUALS>'+Array.from({length:110},(_,i)=>`<INDIVIDUAL><REFERENCE_NUMBER>QDi.${i+1}</REFERENCE_NUMBER></INDIVIDUAL>`).join('')+'</INDIVIDUALS></CONSOLIDATED_LIST>';
 const server=createServer(async(req,res)=>{
   try{
     const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname.startsWith('/api/porb/')){
+      if(pathname==='/api/porb/v1/atlas/compare'){
+        if(comparisonDelay)await new Promise(resolve=>setTimeout(resolve,comparisonDelay));
+        if(comparisonFailure){res.writeHead(503,{'content-type':'application/json'});res.end('{"error":"comparison_fixture_unavailable"}');return;}
+      }
       if(pathname==='/api/porb/v1/atlas/private'&&req.method==='GET'&&privateReadFailures>0){privateReadFailures--;res.writeHead(503,{'content-type':'application/json'});res.end('{"error":"test_read_unavailable"}');return;}
       if(analysisDelay&&/^\/api\/porb\/v1\/analyses\/[0-9a-f-]{36}$/.test(pathname))await new Promise(resolve=>setTimeout(resolve,analysisDelay));
       const chunks=[];for await(const b of req)chunks.push(b);const bytes=Buffer.concat(chunks);
@@ -92,6 +96,24 @@ try{
   const filtered=JSON.parse(await download('record-export'));assert.equal(filtered.records.length,14);assert.ok(filtered.records.every(r=>r.kind==='processing'));
   await page.fill('#record-search','batch 11');assert.equal(await page.locator('#private-records > article').count(),1);await page.fill('#record-search','no matching term');assert.match(await page.textContent('#private-records'),/No records match/);
   await page.fill('#record-search','');await page.selectOption('#record-kind','all');
+  const changedSource=sourceGraph(),removed=changedSource.edges.shift();changedSource.edges[0].amount_base_units='900719925474099312345';changedSource.edges.push({...removed,event_id:'=synthetic-new-event'});
+  const current=await(await h.call('/v1/analyses','POST',{asset:'ETH',pages:1},cookie,{fetcher:async()=>Response.json(changedSource)})).json();
+  await page.click('#private-refresh');await page.waitForFunction(()=>document.querySelector('#atlas-saved-analysis').options.length===3);
+  await page.selectOption('#atlas-saved-analysis',current.id);await page.waitForFunction(()=>!document.querySelector('#atlas-saved-reference').disabled);
+  await page.selectOption('#compare-baseline',analysis.id);const requestsBeforeCompare=calls;await page.click('#compare-run');await page.locator('#compare-result:visible').waitFor();
+  const comparison=JSON.parse(await download('compare-json'));assert.deepEqual(comparison.counts,{shared:37,changed:1,only_baseline:1,only_current:1});assert.equal(calls,requestsBeforeCompare);
+  assert.equal(await page.locator('#compare-ledger > details').count(),20);await page.click('#compare-next');assert.equal(await page.locator('#compare-ledger > details').count(),20);
+  await page.selectOption('#compare-category','changed');assert.equal(await page.locator('#compare-ledger > details').count(),1);await page.locator('#compare-ledger summary').click();assert.match(await page.textContent('#compare-ledger'),/900719925474099312345/);
+  const matchingCSV=await download('compare-csv');assert.equal(matchingCSV.split('\r\n').length,2);assert.ok(matchingCSV.includes(comparison.report_sha256));
+  await page.selectOption('#compare-category','only_current');assert.match(await download('compare-csv'),/"'=synthetic-new-event"/);
+  await page.selectOption('#atlas-saved-reference',selected.id);await page.click('#compare-use-reference');assert.equal(await page.inputValue('#compare-reference'),selected.id);await page.click('#compare-run');await page.locator('#compare-result:visible').waitFor();assert.equal(JSON.parse(await download('compare-json')).reference,selected.id);
+  comparisonDelay=350;await page.click('#compare-run');await page.fill('#compare-reference','ETH:address:missing-reference');await page.waitForTimeout(500);assert.ok(await page.locator('#compare-result').isHidden());assert.ok(await page.locator('#compare-json').isDisabled());comparisonDelay=0;
+  await page.click('#compare-clear-reference');await page.click('#compare-run');await page.locator('#compare-result:visible').waitFor();
+  comparisonFailure=true;await page.click('#compare-run');await page.waitForFunction(()=>document.querySelector('#compare-status').textContent.includes('Comparison unavailable'));assert.ok(await page.locator('#compare-result').isHidden());comparisonFailure=false;
+  await page.click('#compare-run');await page.locator('#compare-result:visible').waitFor();await page.selectOption('#compare-category','changed');await page.locator('#compare-ledger summary').click();
+  await page.locator('#comparison-workspace').screenshot({path:resolve(root,'.data/atlas-private-comparison-desktop.png')});
+  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.locator('#comparison-workspace').screenshot({path:resolve(root,'.data/atlas-private-comparison-mobile.png')});await page.setViewportSize({width:1440,height:1000});
+  await page.selectOption('#atlas-saved-analysis',analysis.id);await page.waitForFunction(()=>!document.querySelector('#atlas-saved-reference').disabled);await page.selectOption('#atlas-saved-reference',selected.id);
   await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:resolve(root,'.data/atlas-private-workspace-desktop.png')});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:resolve(root,'.data/atlas-private-workspace-mobile.png')});const privateOverflow=await page.evaluate(()=>({width:innerWidth,actual:document.documentElement.scrollWidth,items:[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>innerWidth+1).map(e=>({id:e.id,tag:e.tagName,cls:e.className,width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right})).slice(0,15),scroll:[...document.querySelectorAll('body *')].filter(e=>e.scrollWidth>e.clientWidth+1&&getComputedStyle(e).overflowX==='visible').map(e=>({id:e.id,tag:e.tagName,cls:e.className,width:e.clientWidth,scroll:e.scrollWidth})),pseudo:getComputedStyle(document.body,'::before').cssText}));assert.ok(privateOverflow.actual<=privateOverflow.width+1,JSON.stringify(privateOverflow));await page.setViewportSize({width:1440,height:1000});
   analysisDelay=350;await page.selectOption('#atlas-saved-analysis','');await page.selectOption('#atlas-saved-analysis',analysis.id);await page.click('#atlas-clear-reference');await page.waitForTimeout(500);assert.ok(await page.locator('#atlas-selected-evidence').isHidden());assert.equal(await page.inputValue('#atlas-saved-analysis'),'');analysisDelay=0;
@@ -105,5 +127,5 @@ try{
   const other=crypto.randomUUID();h.sqlite.prepare('INSERT INTO tenants VALUES(?,?,?,?)').run(other,'Other test organization','research',Date.now());h.sqlite.prepare('INSERT INTO memberships VALUES(?,?,?)').run(other,h.owner,'owner');h.sqlite.prepare('UPDATE sessions SET tenant_id=? WHERE user_id=?').run(other,h.owner);
   await page.click('#private-refresh');await page.locator('#private-workspace[hidden]').waitFor({state:'attached'});assert.match(await page.textContent('#private-status'),/organization changed/);assert.equal(await page.locator('#private-records > article').count(),0);assert.equal(await page.textContent('#private-grant-token'),'');
   await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({status:'passed',assets:5,public_requests:calls,checks:['field inspector','exact amounts','baseline','filters','pagination','JSON/CSV exports','holdout evaluation','tampered imports','late source failure','local module handoffs','mobile','private CRUD','official references','saved-reference review picker','scoped grant issuance and revocation','token preserved after failed refresh','reopened review access denial','record search, pagination and export','late selection response','private deep links','portal Atlas icon','viewer controls','organization switch clears evidence','no browser errors']}));
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({status:'passed',assets:5,public_requests:calls,checks:['field inspector','exact amounts','baseline','filters','pagination','JSON/CSV exports','holdout evaluation','tampered imports','late source failure','local module handoffs','mobile','private CRUD','official references','saved-reference review picker','scoped grant issuance and revocation','token preserved after failed refresh','reopened review access denial','record search, pagination and export','retained comparison and exact deltas','comparison event pages and JSON/CSV exports','comparison stale-response and failure clearing','comparison desktop and mobile layout','late selection response','private deep links','portal Atlas icon','viewer controls','organization switch clears evidence','no browser errors']}));
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));h.sqlite.close();}

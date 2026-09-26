@@ -43,6 +43,20 @@ Temporal paths require strictly increasing block timestamps. Equal-time events c
 
 Daily buckets with no returned records have null counts and null totals. Observed buckets are not represented as complete days. Regression excludes missing days, requires three observed days and uses elapsed UTC days as the predictor. Constant responses have undefined R². The confidence interval assumes independent, homoscedastic residuals and does not account for source sampling. Correlated activity, uneven coverage and post-selection exploration prevent causal or predictive claims.
 
+## Compare retained analyses
+
+The private Atlas compares two saved analyses from the same organization without collecting new data or recalculating scores. Select the current analysis in **Saved references**, choose a baseline in **Compare samples**, and run the comparison. An optional exact node ID scopes the report to one reference present in either sample; **Use selected reference** fills the current reference. The reference table can focus a reference observed on either side, including one absent from the current sample.
+
+`GET /api/porb/v1/atlas/compare?baseline=<analysis UUID>&current=<analysis UUID>&reference=<optional exact node ID>` requires `analyses:read` and `scores:read`. It rejects mismatched assets, networks, sources and conflicting retained token contracts. Missing legacy contract metadata remains disclosed. Both payload digests must match the recomputed graph SHA-256 and their database manifests; corruption returns `409 analysis_integrity_failed`. Unknown or unretained organization analyses return 404. No cross-organization IDs or delegated score tokens grant access. Successful reads add an `atlas.compare.read` audit event with both analysis IDs and the report hash.
+
+Events are joined by exact source event ID and classified as unchanged, changed, only in baseline or only in current. Changed fields retain both values: endpoints, kind, exact amount, transaction, position, height, block hash and timestamp. Reference filtering occurs after event identity matching: an event whose endpoint changed away from the chosen reference remains a changed event, while directional amounts and incident counts reflect each side's actual endpoints. Self events count once; distinct neighbor counts exclude self. Amount totals and signed deltas use `BigInt` and are serialized as decimal strings, separately for each record kind and direction. Whole-sample direction is `recorded`; reference scope uses `incoming`, `outgoing` and `self`. UTXO input and output records are never combined into transferred volume.
+
+Overlapping block heights are matched from both retained anchors and event records. Different hashes describe source disagreement, not proof of a chain reorganization or a canonical block. A one-sided record describes observation coverage, not inactivity or deletion. Current-minus-baseline deltas do not imply chronological order; selecting an older current sample produces a note. Source snapshots, collection times, page bounds, termination/cursor metadata, coverage and both dataset hashes are retained. Legacy missing fields stay null; requested cursors and per-page event counts are not reconstructed. Red/Blue scores depend on their own samples and cohorts, so this endpoint does not calculate score trends.
+
+The complete report is bounded to 1,200 nodes, 4,000 records and eight source pages per side, up to 8,000 union event rows and a 16 MB response. Capacity failures return 422; no rows are silently truncated. Comparisons are limited to 20/minute/organization and remain private/no-store. No comparison table or additional database migration is needed. The report version is `porb-atlas-comparison-1.0.0`; `report_sha256` covers `JSON.stringify(report without report_sha256)`, preserving property and array order. Identical inputs and scope produce the same report hash. Hashes establish consistency of retained bytes, not independent authenticity of the source.
+
+The UI offers twenty-event pages, category/text filters, expandable before/after fields, twenty-reference pages and a reference search. Complete JSON export retains every compared event and its provenance; matching-event CSV includes all matching pages, input analysis IDs and the report hash. CSV escapes spreadsheet formula prefixes; consumers requiring exact large integers should import amount columns as text or use JSON. Changing a comparison input, clearing the analysis, switching organization or receiving an error invalidates the previous result and downloads. Delayed responses cannot restore superseded evidence.
+
 ## Model evaluation
 
 The browser-local evaluator accepts at most 2 MB / 10,000 rows. The downloadable example is explicitly synthetic. Inputs require `schema_version`, `label_origin`, `model_version`, ISO UTC `training_cutoff`, declared `training_entities`, binary labeled `rows`, and `review_capacity`. Optional `threshold` defaults to 0.5; optional `baseline_probabilities` supports distribution comparison.
@@ -59,6 +73,7 @@ Pinning a source capture compares record identities, changed values and overlapp
 | `GET /api/atlas/analyze?asset=ETH` | Public one-page calculation. Optional `cursor`, `reference`, UTC `start`/`end`, `kind`, `minimum`, `max_hops` (1–6). Fixed source adapters and shared 30-second cache. |
 | `/api/porb/v1/graphus/atlas/schema` and `/atlas/analyze` | Existing private gateway; `data:read`; no credentials forwarded upstream. |
 | `GET /api/porb/v1/atlas/private` | `cases:read`; retained notes/corrections/reviews, case summaries and current access context. Audit and grant lists are administrator-session only. Model card also requires `scores:read`. |
+| `GET /api/porb/v1/atlas/compare` | `analyses:read` and `scores:read`; two retained analyses, optional exact reference, verified digests, event differences and exact amount deltas. 20/minute/organization. |
 | `POST /api/porb/v1/atlas/records` | `cases:write`; create annotation, processing, correction or review record. |
 | `POST /api/porb/v1/atlas/records/{id}` | `cases:write`; replace with current `revision`. Conflicting revisions and expired records are rejected. |
 | `DELETE /api/porb/v1/atlas/records/{id}` | `cases:write`; current revision required. Deletes the content and retains the audit event. |
@@ -128,3 +143,11 @@ The custom domain served byte-identical portal HTML, portal JavaScript/CSS, Atla
 ```sh
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_live.mjs --portal-only
 ```
+
+### Retained-comparison release — 2026-09-26 UTC
+
+Deployment `16f2442f` publishes retained-sample comparisons to `rednblue.space`, succeeding `5149d209`. It includes the private comparison API, sample/reference selection, exact deltas, source block disagreements, event/reference inspectors, JSON/CSV exports and the updated 47-operation partner contract. No database migration or public Graphus deployment is required.
+
+The full Node suite passes 226 tests. Ten comparison tests cover event identity, changed endpoints, self events, one-sided references, integer precision, typed UTXO totals, block conflicts, deterministic report hashes, corrupted payloads/manifests, incompatible sources/contracts, maximum-size unions, tenant/scoped-key isolation and the comparison budget. Both local WebKit suites pass; comparison checks include pagination, before/after inspection, exports and formula-prefix protection, selected-reference scope, delayed response invalidation, failure clearing and desktop/mobile layout. These authenticated checks use isolated accounts and synthetic source fixtures.
+
+The production portal check confirms byte-identical Atlas UI modules, portal assets and OpenAPI contract on the custom domain; HTTP 401 on the comparison request and other private endpoints; sign-in routing, mobile login layout and no browser errors. Authenticated production comparison remains unverified because no existing owner session or credential file is available. Verification does not create a production account or retained analysis. The scoped report is stored in ignored `.data/porb-portal/atlas-portal-release.json`.

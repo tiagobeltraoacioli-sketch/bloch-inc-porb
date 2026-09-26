@@ -113,6 +113,111 @@
         }
       }
     },
+    "/v1/atlas/compare": {
+      "get": {
+        "operationId": "get_v1_atlas_compare",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Compare two retained source samples with exact amounts",
+        "description": "Both analyses must belong to this organization and share asset, network and source; conflicting recorded token contracts are rejected. Stored dataset hashes are verified against both payloads and database manifests. No collection or rescoring. Optional reference is an exact node ID present in either sample. Event identity is the exact source event ID; changes, one-sided observations, block hash disagreements, reference/neighbor counts and per-kind/direction base-unit integer deltas are retained. Self events count once; UTXO input/output totals stay separate. Up to 4,000 events, 1,200 nodes and 8 pages per side; complete union at most 8,000 event rows and 16 MB response, with no silent truncation. 20 comparisons/minute/organization. Report SHA-256 covers JSON.stringify of the response with report_sha256 omitted, preserving property and array order. Absence is not inactivity and source conflicts do not prove a reorganization. Red/Blue trends are not calculated. Audited, private and no-store; no new comparison is persisted.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "baseline",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "current",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/atlas/records": {
       "post": {
         "operationId": "post_v1_atlas_records",
