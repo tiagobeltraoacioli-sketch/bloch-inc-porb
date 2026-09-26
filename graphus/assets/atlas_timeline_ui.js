@@ -4,7 +4,7 @@ const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undef
 const sha=async value=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const messages={timeline_bucket_capacity:'Choose a coarser interval or narrower UTC window; at most 366 bins can be inspected.',timeline_reference_unobserved:'Choose an exact reference from this sample.',timeline_direction_requires_reference:'Select a reference before filtering incoming, outgoing or self events.',invalid_timeline_utc_range:'Use valid UTC dates, with start no later than end.',invalid_timeline_minimum:'Use an unsigned base-unit integer for the minimum.',analysis_integrity_failed:'The retained sample failed its integrity check.',timeline_integrity_failed:'The timeline response failed its integrity check.',duplicate_timeline_event:'The source repeats a movement identity. Correct the source before aggregating it.',inconsistent_timeline_transaction:'One transaction is reported at conflicting heights.',inconsistent_timeline_block:'The source contains conflicting block identities or timestamps.',timeline_report_capacity:'The complete report exceeds 8 MB. Narrow the query.',rate_limit:'Too many timeline requests. Wait a minute before retrying.'};
 
-export function mountAtlasTimeline(root,query){
+export function mountAtlasTimeline(root,query,onReport=()=>{},options={}){
   root.classList.add('atlas-path-workspace','atlas-timeline-workspace');
   root.innerHTML=`<p class="section-index">TEMPORAL EVIDENCE / ACTIVITY EXPLORER</p><h2>Move through the observations.</h2><p>Inspect a minute, an hour or a day, then select the exact events underneath. Empty intervals have unknown source coverage; observed counts are not complete network activity.</p><p data-time="context" class="atlas-note"></p>
     <form data-time="form" class="atlas-path-controls">
@@ -26,10 +26,10 @@ export function mountAtlasTimeline(root,query){
     </div><div class="atlas-actions"><button data-time="json" disabled>Download complete timeline JSON</button><button data-time="csv" disabled>Export selected events CSV</button></div>`;
   const $=name=>root.querySelector(`[data-time="${name}"]`),optionId='atlas-timeline-options-'+crypto.randomUUID();$('options').id=optionId;$('reference').setAttribute('list',optionId);
   let source=null,report=null,version=0,busy=false,loading=false,first=0,last=-1,page=0;
-  const selection=()=>({first,last,query:$('search').value}),available=()=>source&&!loading;
+  const selection=()=>({first,last,query:$('search').value}),available=()=>!options.readOnly&&source&&!loading;
   function controls(){for(const control of $('form').elements)control.disabled=!available();$('run').disabled=!available()||busy;for(const name of ['json','csv'])$(name).disabled=!report||busy||loading;root.setAttribute('aria-busy',String(busy||loading));}
   function clear(message='Filters changed. Build a new activity timeline.'){
-    version++;report=null;busy=false;first=0;last=-1;page=0;$('result').hidden=true;$('search').value='';
+    version++;report=null;onReport(null);busy=false;first=0;last=-1;page=0;$('result').hidden=true;$('search').value='';
     for(const name of ['chart','coverage','selection','totals','ledger','page','notes','provenance'])$(name).replaceChildren();$('status').textContent=message;controls();
   }
   function setSource(next){const changed=source?.key!==next?.key;source=next;
@@ -73,7 +73,7 @@ export function mountAtlasTimeline(root,query){
     event.preventDefault();if(!available()||busy)return;clear('Building the timeline from retained observations…');const run=version,current=source;busy=true;controls();
     const value=$('reference').value.trim(),node=current.nodes.find(node=>node.id===value||node.address===value||node.txid===value),parameters={...(value?{reference:node?.id||value}:{}),direction:$('direction').value,kind:$('kind').value,minimum:$('minimum').value,interval:$('interval').value,...($('start').value?{start:$('start').value+'Z'}:{}),...($('end').value?{end:$('end').value+'Z'}:{})};
     try{const value=await query(parameters,current);if(run!==version)return;const {report_sha256,...body}=value;if(await sha(JSON.stringify(body))!==report_sha256||current.datasetHash&&value.provenance.dataset_sha256!==current.datasetHash||current.analysisId&&value.provenance.analysis_id!==current.analysisId)throw new Error('timeline_integrity_failed');if(run!==version)return;
-      report=value;render();$('status').textContent=`Timeline ready: ${report.buckets.length} UTC bins. Select a range to inspect its exact events; no new collection was started.`;
+      report=value;render();onReport(report);$('status').textContent=`Timeline ready: ${report.buckets.length} UTC bins. Select a range to inspect its exact events; no new collection was started.`;
     }catch(error){if(run===version){clear();$('status').textContent=`Timeline unavailable: ${messages[error.message]||error.message.replaceAll('_',' ')} No previous result is displayed.`;}}
     finally{if(run===version){busy=false;controls();}}
   };
@@ -84,5 +84,6 @@ export function mountAtlasTimeline(root,query){
   $('search').oninput=()=>{page=0;view();};$('previous').onclick=()=>{page--;view();};$('next').onclick=()=>{page++;view();};
   function download(type){if(!report||busy||loading)return;const text=type==='json'?JSON.stringify(report,null,2):timelineCsv(report,selection()),url=URL.createObjectURL(new Blob([text],{type:type==='json'?'application/json':'text/csv;charset=utf-8'})),link=el('a');link.href=url;link.download=`atlas-timeline-${report.report_sha256.slice(0,12)}.${type}`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   $('json').onclick=()=>download('json');$('csv').onclick=()=>download('csv');
-  setSource(null);return {setSource,reset(){setSource(null);},setLoading(value){if(loading===value)return;loading=value;if(value)clear('Waiting for the source capture…');else if(!report)$('status').textContent=source?'Build a timeline from the retained capture. Its coverage and source remain attached.':'Open a capture to explore its timeline.';controls();}};
+  setSource(null);$('form').hidden=Boolean(options.readOnly);
+  return {setSource,reset(){setSource(null);},showReport(value){clear('Inspecting the original saved timeline. Range and search changes affect only this view and its CSV; JSON preserves the complete calculation.');loading=false;report=value;$('context').textContent=`Retained ${value.asset} observations · source analysis ${value.provenance.analysis_id||'not recorded'}. No source refresh is required.`;render();controls();},setLoading(value){if(loading===value)return;loading=value;if(value)clear('Waiting for the source capture…');else if(!report)$('status').textContent=source?'Build a timeline from the retained capture. Its coverage and source remain attached.':'Open a capture to explore its timeline.';controls();}};
 }

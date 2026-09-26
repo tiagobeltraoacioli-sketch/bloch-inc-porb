@@ -3,11 +3,12 @@ import {readVerifiedAnalysis} from './atlas-evidence.js';
 import {compareAnalyses,COMPARISON_VERSION} from './atlas-comparison.js';
 import {traceAtlasPaths,pathParameters,PathError,PATH_VERSION} from '../graphus/assets/atlas_paths.js';
 import {scanAtlasMotifs,motifParameters,MOTIF_VERSION} from '../graphus/assets/atlas_motifs.js';
+import {exploreAtlasTimeline,timelineParameters,TIMELINE_VERSION} from '../graphus/assets/atlas_timeline.js';
 
 export const REPORT_LIMITS = Object.freeze({capacity:20,bytes:6000000,maximum_days:365});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HASH=/^[a-f0-9]{64}$/;
-const VERSIONS={paths:PATH_VERSION,comparison:COMPARISON_VERSION,motifs:MOTIF_VERSION};
+const VERSIONS={paths:PATH_VERSION,comparison:COMPARISON_VERSION,motifs:MOTIF_VERSION,timeline:TIMELINE_VERSION};
 // Keep UTF-16 surrogate pairs together so each SQL text part is valid UTF-8.
 function chunks(payload){
   const parts=[];for(let start=0;start<payload.length;){let end=Math.min(start+200000,payload.length);const code=payload.charCodeAt(end-1);if(code>=0xd800&&code<=0xdbff)end--;parts.push(payload.slice(start,end));start=end;}return parts;
@@ -32,6 +33,10 @@ function normalize(body){
     keys(body.parameters,['analysis','reference','type','max_hops','max_results','window_seconds','min_counterparties','min_events','minimum','start','end']);
     const {analysis,...input}=body.parameters;requireValue(UUID.test(analysis||''),'invalid_report_analysis');
     parameters={analysis,...motifParameters(input)};
+  }else if(body.kind==='timeline'){
+    keys(body.parameters,['analysis','reference','direction','kind','minimum','interval','start','end']);
+    const {analysis,...input}=body.parameters;requireValue(UUID.test(analysis||''),'invalid_report_analysis');
+    parameters={analysis,...timelineParameters(input)};
   }else{
     keys(body.parameters,['baseline','current','reference']);const {baseline,current,reference=null}=body.parameters;
     requireValue(UUID.test(baseline||'')&&UUID.test(current||''),'invalid_report_analysis');
@@ -42,14 +47,15 @@ function normalize(body){
     retention_days:body.retention_days,parameters,expected_report_sha256:body.expected_report_sha256};
 }
 async function computed(db,tenant,input){
-  if(input.kind==='paths'||input.kind==='motifs'){
+  if(input.kind!=='comparison'){
     const {analysis,...parameters}=input.parameters,run=await readVerifiedAnalysis(db,tenant,analysis);
-    return (input.kind==='paths'?traceAtlasPaths:scanAtlasMotifs)(run.graph,parameters,{dataset_sha256:run.digest,analysis_id:run.id});
+    return ({paths:traceAtlasPaths,motifs:scanAtlasMotifs,timeline:exploreAtlasTimeline}[input.kind])(run.graph,parameters,{dataset_sha256:run.digest,analysis_id:run.id});
   }
   const {baseline,current,reference}=input.parameters,a=await readVerifiedAnalysis(db,tenant,baseline),b=current===baseline?a:await readVerifiedAnalysis(db,tenant,current);
   return compareAnalyses(a,b,reference);
 }
 function summarize(kind,report){
+  if(kind==='timeline')return {events:report.events.length,buckets:report.buckets.length,interval:report.window.interval,reference:report.parameters.reference,records:report.coverage.records,timed_candidates:report.coverage.timed_candidates,start:report.window.start,end_inclusive:report.window.end_inclusive,state:report.state};
   if(kind==='motifs')return {motifs:report.motifs.length,type:report.parameters.type,reference:report.parameters.reference,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,complete_within_query:report.search.complete_within_query,state:report.state};
   return kind==='paths'?{paths:report.paths.length,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,state:report.state}
     :{events:report.events.length,counts:report.counts,block_conflicts:report.blocks.conflicts.length,truncated:report.limits.truncated};
