@@ -2,6 +2,7 @@ import {atlasSelection, atlasSubject, atlasReviews, atlasRecords, atlasRecordSum
 import {comparisonWorkspace} from './atlas-comparison.js';
 import {reportWorkspace} from './atlas-reports.js';
 import {caseWorkspace} from './atlas-cases.js';
+import {reviewWorkspace} from './atlas-reviews.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node;};
@@ -23,7 +24,7 @@ function lock(message, login = false) {
   contextVersion++; selectionVersion++; sourceVersion++; sourceExpiry = null; data = null; analysis = null; selectedNode = ''; runs = []; editing = null;
   comparison.reset();
   pathWorkspace.reset();
-  reports.reset(); dossiers.reset(); selectedCase = null;
+  reports.reset(); dossiers.reset(); reviews.reset(); selectedCase = null;
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
   for (const id of ['atlas-reference-search', 'record-search']) $(id).value = '';
@@ -57,7 +58,8 @@ function reviewReport(row) {
   $('private-editor-title').scrollIntoView({block:'start'}); $('private-body').focus();
 }
 const dossiers = caseWorkspace(request, {initialCase:selectedCase, review:reviewReport, inspect:id=>reports.open(id), refreshContext:load, onSelect:id=>{selectedCase=id||null;history.replaceState(null,'',atlasLink(analysis?.id,selectedNode,selectedCase));}});
-const reports = reportWorkspace(request, reviewReport, (rows,complete)=>dossiers.setReports(rows,complete));
+const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossiers.setReports(rows,complete);reviews.setReports(rows,complete);});
+const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 function download(name, value) {
@@ -73,7 +75,7 @@ function edit(record) {
   for (const [id, key] of [['private-kind', 'kind'], ['private-subject', 'subject'], ['private-body', 'body'], ['private-purpose', 'purpose'], ['private-basis', 'lawful_basis'], ['private-licence', 'source_licence'], ['private-state', 'status']]) $(id).value = record[key];
   $('private-retention').value = Math.max(1, Math.min(365, Math.ceil((record.expires_at - Date.now()) / 86400000)));
   note('private-save', 'Save revision'); note('private-editor-title', `Edit record · revision ${record.revision}`);
-  note('private-editor-note', 'Saving restarts retention from this write. Changing review scope or state can block existing grants.');
+  note('private-editor-note', 'Saving restarts current retention; earlier versions keep their own expiry. A review deadline must fit within the new retention. Changing review scope or state can block existing grants.');
   $('private-editor-title').scrollIntoView({block: 'start'}); $('private-body').focus();
 }
 function filters() {return {query: $('record-search').value, kind: $('record-kind').value, status: $('record-state').value,
@@ -92,6 +94,7 @@ function renderRecords() {
     if (record.expires_at <= Date.now() + 7 * 86400000) {expiry.classList.add('atlas-expiring'); expiry.append(' · Expires within 7 days');}
     card.append(expiry);
     const details = el('details'); details.append(el('summary', 'Purpose, source rights and record identity'), el('p', `Purpose: ${record.purpose}`), el('p', `Lawful basis: ${record.lawful_basis}`), el('p', `Source rights: ${record.source_licence}`), el('p', `Record ID: ${record.id}`, 'atlas-record-meta')); card.append(details);
+    const versions = el('button', 'Revision history'); versions.onclick = () => reviews.openHistory(record.id); card.append(versions);
     if (canWrite()) {
       const actions = el('div', undefined, 'atlas-actions'), update = el('button', 'Edit record'), remove = el('button', 'Delete record');
       update.onclick = () => edit(record);
@@ -173,7 +176,7 @@ async function load() {
       const button = el('button', 'Revoke grant'); button.onclick = async () => {button.disabled = true; try {await api(`grants/${grant.id}/revoke`, 'POST', {}); dismissToken(); await load(); note('private-grant-status', 'Grant revoked immediately.');} catch (error) {note('private-grant-status', error.message); button.disabled = false;}};
       card.append(button); $('private-grant-list').append(card);
     }
-    dossiers.sync(data); reports.sync(data); renderSelection();
+    dossiers.sync(data); reports.sync(data); renderSelection(); return await reviews.sync(data);
   } catch (error) {if (data) note('private-status', `Refresh failed: ${error.message}. Previously loaded records remain visible.`); else {note('private-status', error.message); if (error.status !== 401) $('private-reload').hidden = false;} throw error;}
 }
 
@@ -182,13 +185,13 @@ $('private-record').addEventListener('submit', async event => {
   const version = editorVersion, recordId = editing?.id;
   const body = {kind: $('private-kind').value, subject: $('private-subject').value, body: $('private-body').value, purpose: $('private-purpose').value, lawful_basis: $('private-basis').value, source_licence: $('private-licence').value, status: $('private-state').value, retention_days: Number($('private-retention').value), ...(editing ? {revision: editing.revision} : {})};
   try {await api(recordId ? `records/${recordId}` : 'records', 'POST', body); if (version === editorVersion) clearEditor(); await load(); note('private-write-status', 'Record saved with an access audit event.');}
-  catch (error) {note('private-write-status', error.message === 'record_unavailable_or_revision_conflict' ? 'This record changed, expired or is no longer available. Refresh records and reopen the latest revision; your draft remains in the form.' : error.message);}
+  catch (error) {note('private-write-status', error.message === 'record_unavailable_or_revision_conflict' ? 'This record changed, expired, reached its 100-version capacity or has a deadline beyond the new retention. Refresh records and reopen the latest revision; your draft remains in the form.' : error.message);}
   finally {savingRecord = false; $('private-save').disabled = !canWrite();}
 });
 $('private-cancel').onclick = clearEditor;
 $('private-reload').onclick = () => location.reload();
 $('private-refresh').onclick = async () => {const button = $('private-refresh'); button.disabled = true; try {await load(); await loadAnalyses(); await reports.load();} catch (error) {note('private-write-status', error.message);} finally {button.disabled = false;}};
-$('private-purge').onclick = async () => {try {const result = await api('purge', 'POST', {}); await load(); await reports.load(); note('private-write-status', `${result.deleted} expired records, ${result.deleted_reports} expired reports and ${result.deleted_grants} expired or revoked grants deleted.`);} catch (error) {note('private-write-status', error.message);}};
+$('private-purge').onclick = async () => {try {const result = await api('purge', 'POST', {}); await load(); await reports.load(); note('private-write-status', `${result.deleted} expired records, ${result.deleted_versions} expired versions, ${result.deleted_reports} expired reports and ${result.deleted_grants} expired or revoked grants deleted.`);} catch (error) {note('private-write-status', error.message);}};
 $('private-export').onclick = () => {if (data) download('private-organization-atlas.json', data);};
 $('record-export').onclick = () => {if (data) download('private-atlas-matching-records.json', {kind: 'private_atlas_records', exported_at: new Date().toISOString(), tenant: data.tenant, filters: filters(), records: atlasRecords(data.records, filters())});};
 for (const id of ['record-search', 'record-kind', 'record-state', 'record-selected-only']) $(id).addEventListener(id === 'record-search' ? 'input' : 'change', () => {recordPage = 0; renderRecords();});
@@ -217,7 +220,7 @@ $('private-source-form').addEventListener('submit', async event => {
 });
 function expireVisibleRecords() {
   if (!data || document.hidden) return;
-  renderRecords(); renderReviews(); reports.expire(); dossiers.expire();
+  renderRecords(); renderReviews(); reports.expire(); dossiers.expire(); reviews.expire();
   if (sourceExpiry !== null && Date.now() >= sourceExpiry) {sourceExpiry = null; $('private-source-output').textContent = ''; $('private-source-output').hidden = true; note('private-source-status', 'The displayed snapshot expired. Run the lookup again.');}
 }
 setInterval(expireVisibleRecords, 30000);

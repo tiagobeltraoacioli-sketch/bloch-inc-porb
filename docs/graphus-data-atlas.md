@@ -20,6 +20,20 @@ JSON reports retain the selected exact records, reference metrics, source snapsh
 
 `analysis_id` hashes a sorted-key JSON object containing the transform version, dataset digest, optional baseline digest, parameters, evaluation time and imported flag. `feature_revision` identifies the transform, input digest and parameter digest. Local holdout evaluations have a separate `report_sha256`; they remain distinct from the chain capture and do not change its analysis identity.
 
+## Review queue and decision history
+
+The private **Review queue** gathers active review and correction records from the organization's existing 200-record inventory. It starts with pending work and provides text, state, assigned-to-me, needs-reviewer, priority and overdue filters with five-item pages. Ordering is human priority, earliest deadline, then oldest creation time and ID. No model chooses the priority. Retained report subjects expose report inspection and links to their investigations; those details require the evidence read scopes and disappear when the report expires or is deleted. Independently retained review text remains governed by its own expiry.
+
+**Assign review** selects a current owner, administrator or analyst, a high/normal/low priority and an optional local-time deadline. The API receives UTC epoch milliseconds. Null clears the reviewer or deadline. Deadlines must fall between creation and current expiry. The directory exposes the first 200 eligible members and discloses truncation; an existing active assignee remains selectable even outside that page. Removed members and viewers are marked unavailable, and their work is counted as needing an active reviewer. Eligibility is checked again inside the write. Assignment does not change roles, approve evidence, infer reviewer independence or extend retention.
+
+Assignment uses the same optimistic revision as record editing. A concurrent assignment/decision admits one write; the loser must reopen the current revision. Record content, revision snapshot and conditional audit are committed atomically. Assignment shares the 30 record writes/minute/organization budget. **Record decision** opens the existing editor with the current revision and state; saving a reviewed/resolved decision removes it from the default pending view. Reopening preserves the previous decisions in retained history and follows the existing score-grant revocation rules. Shortening current retention past an existing deadline is rejected; switching kind to annotation/processing clears workflow fields in the new revision.
+
+**Revision history** is available on every governance record. It shows the recorded actor credential ID, exact text, status, scope, declarations, assignment and expiry for each retained version, newest first in five-version pages. Changed fields are compared only with an immediately preceding retained revision. Unknown migration authors stay unknown; different actor IDs are not evidence of independent review. Export re-reads the current history and returns `porb-atlas-record-history-1.0.0`, explicit completeness/missing counts and `history_sha256` over `JSON.stringify(response without history_sha256)` in returned property order. The checksum verifies export bytes, not the truth or independent attestation of a decision. A changed record or inconsistent latest snapshot fails closed with HTTP 409. Reads are limited to 30/minute/organization, and require only `cases:read`; assignments additionally require `cases:write`.
+
+Migration `0007_atlas_review_workflow.sql` adds workflow columns, the version table/index and transactional snapshot triggers. It preserves each pre-existing current revision as a migration baseline, without fabricating earlier versions. New creates and accepted updates append snapshots. Each record may retain 100 physical versions, including expired ones until administrator purge. Expiry immediately denies historical reads; the active parent is also required. Extending current retention never renews earlier versions. Deletion cascades every version and leaves the audit identity. Purge can remove expired versions of still-active records. Existing dossier bundles include the current workflow fields, while their historical versions have the separate history export.
+
+The browser clears failed queue reads, invalidates delayed history reads when records refresh, clears private state on organization changes, and checks displayed expiry every 30 seconds and when returning to the tab. A confirmed assignment remains reported as saved if refreshing the queue fails. Viewers can inspect history and evidence but receive no assignment or decision controls. JSON downloads are static copies and do not automatically enforce server retention.
+
 ## Implemented calculation families
 
 | Family | Implementation and limits |
@@ -32,7 +46,7 @@ JSON reports retain the selected exact records, reference metrics, source snapsh
 | Descriptive statistics | UTC daily counts and exact totals, OLS count trend, conservative 95% Student-t slope interval, residuals, R², RMSE, outlier days and same-sample reference cohorts. At most 366 UTC day buckets. |
 | Feature transparency | Versioned definitions, units, missing-value rules, inputs, parameters, uncertainty and independent model-evaluation reports. No protected observation scores enter public results. |
 | Official sources | Public registry metadata; private UN/UK/EU exact listing-reference lookup with streaming XML, byte digest, parser version and six-hour expiry. Existing OFAC exact-address enrichment remains a separate private workflow. |
-| Governance | Organization notes, purpose/lawful-basis/source-rights declarations, expiry, corrections, review status, optimistic revision updates, deletion and access audit. |
+| Governance | Organization notes, purpose/lawful-basis/source-rights declarations, expiry, corrections, review status, reviewer assignment, human priorities/deadlines, retained revision history, optimistic updates, deletion and access audit. |
 | Delegation | Named recipient and purpose, one reference in one retained analysis, current scoped human review, dedicated token, expiry and immediate revocation. Only descriptive observation scores are deliverable. |
 
 ERC-20 records retain timestamps from their matched block headers, enabling temporal calculations without extra RPC requests. Source-head metadata is retained separately from sampled anchors; finality failure still leaves Bloch head information unavailable.
@@ -124,10 +138,13 @@ Pinning a source capture compares record identities, changed values and overlapp
 | `POST /api/porb/v1/atlas/cases/{id}/reports` | Same read scopes plus `cases:write`; attach a verified report to an open case, deduplicated by case/report identity. |
 | `DELETE /api/porb/v1/atlas/cases/{id}/reports/{link_id}` | Same four scopes; detach with exact attachment digest. Original report remains. |
 | `GET /api/porb/v1/atlas/cases/{id}/export` | Same three read scopes; complete verified Atlas report bundle, at most 12 MB, six/minute. Expired/deleted reports are explicit unavailable items. |
+| `GET /api/porb/v1/atlas/reviews` | `cases:read`; retained review/correction queue and active reviewer directory. Report/case context also requires `analyses:read` and `scores:read`. |
+| `POST /api/porb/v1/atlas/records/{id}/assignment` | `cases:read` + `cases:write`; exact revision, eligible reviewer or null, priority and deadline or null. Does not extend retention or change decision state. |
+| `GET /api/porb/v1/atlas/records/{id}/history` | `cases:read`; retained versions, explicit gaps and export checksum. Parent and per-version expiry apply. |
 | `POST /api/porb/v1/atlas/records` | `cases:write`; create annotation, processing, correction or review record. |
 | `POST /api/porb/v1/atlas/records/{id}` | `cases:write`; replace with current `revision`. Conflicting revisions and expired records are rejected. |
 | `DELETE /api/porb/v1/atlas/records/{id}` | `cases:write`; current revision required. Deletes the content and retains the audit event. |
-| `POST /api/porb/v1/atlas/purge` | Administrator session; physically delete expired records/reports and expired/revoked grants in this tenant. |
+| `POST /api/porb/v1/atlas/purge` | Administrator session; physically delete expired record versions, records/reports and expired/revoked grants in this tenant. |
 | `GET /api/porb/v1/atlas/sources` | `data:read`; fixed official source registry and reference formats. |
 | `POST /api/porb/v1/atlas/sources` | `data:read`; `{source,references}` with 1–25 official reference numbers; six calls per minute per organization. |
 | `GET/POST /api/porb/v1/atlas/grants` | Administrator session; inspect or issue a resource-scoped grant. |
@@ -154,6 +171,7 @@ python3 scripts/build_portal_modules.py
 node scripts/build_partner_docs.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_browser.mjs
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_cases_browser.mjs
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_reviews_browser.mjs
 node scripts/check_atlas_sources.mjs
 ```
 
@@ -163,7 +181,7 @@ The browser check covers all five assets, exact values, field inspection, compar
 
 Live adapter validation returned BTC 92, ETH 24, USDT 193, USDC 198 and BLCH 844 records in separate samples. Official XML parsing retained 1,011 UN, 6,339 UK and 6,241 EU references, without names. These are point-in-time checks, not promised coverage or synchronized network totals. The local check artifact records its actual timestamp in ignored `.data/atlas-source-check.json`. Both Pages Functions bundles compile. Local source parsing does not by itself verify deployed Worker execution quotas.
 
-Before the private release, apply pending migrations through `portal/migrations/0006_atlas_case_reports.sql` to the portal D1 database using the project's normal migration workflow. Build the mounted Graphus modules and partner contract, deploy the private portal from `site/`, and deploy the public Atlas and Functions from `graphus/`. Verify authenticated record/grant paths and public schema/analysis paths after deployment. This change does not modify source pilot databases or chain consensus. No deployment is asserted by local tests.
+Before the private release, apply pending migrations through `portal/migrations/0007_atlas_review_workflow.sql` to the portal D1 database using the project's normal migration workflow. Build the mounted Graphus modules and partner contract and deploy the private portal from `site/`. Deploy the public Atlas and Functions from `graphus/` when their assets change. Verify the changed endpoints and assets after deployment. This change does not modify source pilot databases or chain consensus. No deployment is asserted by local tests.
 
 ### Production release — 2026-09-26 UTC
 
@@ -228,3 +246,12 @@ Portal deployment `1b6bd646` publishes investigation dossiers at [rednblue.space
 The full Node regression passed 255 checks. Final focused validation passed 16 checks, including the additional report-expiry-during-export regression. Nine dossier tests cover verified attachment and concurrent deduplication, intact report exports after source-analysis retention, exact current review scope, all read/write scopes, tenant pinning, viewer/closed-case restrictions, expired/deleted report placeholders, corruption, optimistic export consistency, digest-guarded detach, link/storage limits, audit rollback and export budgets. The Atlas, portal and new dossier WebKit suites pass. The dossier browser flow exercises creation, recovery of a lost successful attachment response, bundle digest reproduction, current reviews, report inspection, close/reopen, unavailable evidence, incomplete export, detach, late responses, login/portal deep links, organization clearing and desktop/mobile layout. The portal Functions bundle compiles.
 
 Production verification confirms byte-identical Atlas/portal assets, the new dossier module, investigation launcher and OpenAPI contract on `rednblue.space`. Anonymous dossier reads/exports return HTTP 401 with no-store headers. Atlas launchers, login destination and mobile login layout pass without browser errors. No production case, account, report or review was created by verification. Authenticated production dossier operations remain unverified because no existing owner session or credential file is available; they were validated locally with isolated accounts and synthetic fixtures. The scoped release report remains ignored at `.data/porb-portal/atlas-portal-release.json`.
+
+
+### Review-workflow release — 2026-09-26 UTC
+
+Portal deployment `0162da62` publishes the [review queue and retained decision history](https://rednblue.space/atlas.html#review-workspace), succeeding `1b6bd646`. Migration `0007_atlas_review_workflow.sql` was the only pending migration and was applied to `bi-porb-portal`. It adds workflow columns, version storage and snapshot triggers, preserving existing current revisions as explicit migration baselines. The partner contract documents 60 operations. Public Graphus assets are unchanged.
+
+All 267 Node tests pass. Eleven focused review tests cover exact retained snapshots and checksum reproduction, competing assignments, reviewer membership, deadline/kind validation, human-priority ordering, role/key/tenant boundaries, evidence-context scopes, expiry without revival, purge/deletion, retention shortening, 100-version capacity, transactional audit rollback, migration gaps and unknown authors, concurrent export changes, corruption and read budgets. Four WebKit suites pass: Atlas, dossiers, portal and the new review workflow. Browser checks cover pagination, search, priorities, overdue/self/unassigned filters, literal text rendering, assignment conflict/retry, stable retention, report/dossier links, revision comparisons and fresh export, explicit decision state, delayed-response rejection, failed refresh clearing, viewer controls, expired records, organization changes and desktop/mobile layouts. The portal Functions bundle compiles.
+
+Production verification confirms byte-identical portal/Atlas assets, the new review module, styles and OpenAPI contract on `rednblue.space`. Anonymous queue/history reads and assignment writes return HTTP 401 with no-store headers. The existing Atlas icon, sign-in destination and mobile login layout pass without browser errors. No production account, review, report, case or assignment was created by verification. Authenticated production workflow execution remains unverified because no existing owner session or credential file is available; it was exercised locally with isolated accounts and synthetic fixtures. The timestamped release report remains ignored at `.data/porb-portal/atlas-portal-release.json`.

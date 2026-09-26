@@ -33,6 +33,9 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {status: 401});
+  await api(anonymous, '/v1/atlas/reviews', {status: 401});
+  await api(anonymous, '/v1/atlas/records/00000000-0000-4000-8000-000000000001/history', {status: 401});
+  await api(anonymous, '/v1/atlas/records/00000000-0000-4000-8000-000000000001/assignment', {method:'POST',body:{},status:401});
   await api(anonymous, '/v1/atlas/cases/00000000-0000-4000-8000-000000000001', {status: 401});
   await api(anonymous, '/v1/atlas/cases/00000000-0000-4000-8000-000000000001/export', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
@@ -87,6 +90,7 @@ async function publicChecks() {
     [privateOrigin, '/portal/atlas-comparison.js', 'site/portal/atlas-comparison.js'],
     [privateOrigin, '/portal/atlas-reports.js', 'site/portal/atlas-reports.js'],
     [privateOrigin, '/portal/atlas-cases.js', 'site/portal/atlas-cases.js'],
+    [privateOrigin, '/portal/atlas-reviews.js', 'site/portal/atlas-reviews.js'],
     [privateOrigin, '/portal/intelligence.js', 'site/portal/intelligence.js'],
     [privateOrigin, '/portal/atlas.css', 'site/portal/atlas.css'],
     [privateOrigin, '/portal/', 'site/portal/index.html'],

@@ -38,6 +38,297 @@
     }
   ],
   "paths": {
+    "/v1/atlas/reviews": {
+      "get": {
+        "operationId": "get_v1_atlas_reviews",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Read the organization review queue and eligible reviewers",
+        "description": "Up to 200 active review/correction records, ordered by human priority, earliest deadline, then creation time and ID. Includes up to 200 active owner/admin/analyst reviewers, with reviewers_truncated when the picker is bounded. Missing or read-only assignees are marked unavailable; assignment never grants access or implies approval or independence. Saved report metadata and linked case context are included only with analyses:read and scores:read as well, and only while the report is retained. No model ranking or source collection. Private, no-store and audited.",
+        "x-required-scopes": [
+          "cases:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/atlas/records/{id}/assignment": {
+      "post": {
+        "operationId": "post_v1_atlas_records__id__assignment",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Assign a reviewer, priority and deadline with revision control",
+        "description": "Only active review/correction records. Reviewer must currently hold owner/admin/analyst membership in the same organization; null clears assignment. Requires exact current revision. Assignment increments revision and atomically preserves the version and audit, without changing decision state or retention. Competing writes, invalid membership/deadline, expired records or 100 stored versions fail 409 review_assignment_conflict. Shares the 30 record writes/minute/organization budget.",
+        "x-required-scopes": [
+          "cases:read",
+          "cases:write"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "assignee_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "high",
+                      "normal",
+                      "low"
+                    ]
+                  },
+                  "due_at": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "UTC epoch milliseconds, between record creation and current expiry. Null clears the deadline."
+                  }
+                },
+                "required": [
+                  "revision",
+                  "assignee_id",
+                  "priority",
+                  "due_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/atlas/records/{id}/history": {
+      "get": {
+        "operationId": "get_v1_atlas_records__id__history",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Read and export retained governance revisions",
+        "description": "Up to 100 server-recorded versions, oldest first, with exact text, scope, declarations, state, actor credential ID, assignment and original expiry. Migration retains only the then-current revision and does not invent prior authors or versions. complete=false and missing_revisions disclose expired or pre-migration gaps. Each version retains its own expiry; current parent expiry/deletion denies all history. Extending retention never revives expired versions. A concurrent edit or inconsistent latest snapshot fails 409. 30 reads/minute/organization, private, no-store and audited. history_sha256 covers JSON.stringify of the response without history_sha256, preserving property order. It is an export checksum, not independent attestation of decisions or reviewer independence. Downloaded copies do not automatically enforce server retention.",
+        "x-required-scopes": [
+          "cases:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/atlas/cases/{id}": {
       "get": {
         "operationId": "get_v1_atlas_cases__id_",
@@ -1613,7 +1904,7 @@
           "Atlas"
         ],
         "summary": "Update an Atlas record with optimistic revision control",
-        "description": "Requires the current revision and an unexpired record in this organization. Revision increments on success. Expiry is reset from this write according to retention_days; update events are audited. A conflict returns 409 without overwriting a newer revision.",
+        "description": "Requires the current revision and an unexpired record in this organization. Revision, retained snapshot and audit are atomic. At most 100 stored versions per record, including expired ones until administrator purge. Current expiry resets from this write; earlier versions retain their original expiry. Existing review deadlines must fit within the new retention; changing kind to annotation/processing clears assignment, priority and deadline. Conflicts return 409 without overwriting newer decisions.",
         "x-required-scopes": [
           "cases:write"
         ],

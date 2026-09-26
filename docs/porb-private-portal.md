@@ -32,6 +32,8 @@ Time-series analysis reuses Space statistics, rolling estimates, autocorrelation
 
 References: [Isolation Forest, Liu, Ting and Zhou, ICDM 2008](https://cs.nju.edu.cn/zhouzh/zhouzh.files/publication/icdm08b.pdf), [Cloudflare D1 transactional batches](https://developers.cloudflare.com/d1/worker-api/d1-database/).
 
+The [private Atlas review queue](graphus-data-atlas.md#review-queue-and-decision-history) assigns reviewers, priorities and deadlines to retained review/correction records, with report and investigation links. Every accepted governance write retains its exact revision and actor credential ID. History has separate per-version expiry, explicit migration/expiry gaps, bounded JSON exports, and deletion/purge rules; assignment does not grant access or imply independent approval.
+
 ## Authentication and storage
 
 Password hashing uses scrypt (`N=16384`, `r=8`, `p=5`, 64-byte output), a random salt and a separate server secret pepper. This is the 16 MiB profile in the [OWASP password storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt). The runtime uses [Workers Node crypto](https://developers.cloudflare.com/workers/runtime-apis/nodejs/crypto/).

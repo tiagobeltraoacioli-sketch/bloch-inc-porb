@@ -7,3 +7,5 @@
 .private-atlas #report-form[hidden]{display:none}#report-form{padding:20px;background:#edf1f3;margin-block:20px}#report-count,#report-list-status,#report-save-status{font:12px/1.8 ui-monospace,monospace}#report-detail pre{max-height:520px;overflow:auto}#report-detail{border-top:3px solid #526e7c}#report-detail details{margin-block:16px}#report-detail summary{cursor:pointer}
 
 #dossier-create{margin-block:16px}#dossier-status,#dossier-page{font:12px/1.8 ui-monospace,monospace}#dossier-list details{margin-block:18px}#dossier-list summary{cursor:pointer}.atlas-dossier-record{padding:12px 0;border-top:1px solid #c2cdd3}#dossier-detail{margin-top:24px}
+
+.private-atlas #queue-assignment[hidden]{display:none}#queue-status,#queue-page,#history-status,#history-page{font:12px/1.8 ui-monospace,monospace}#record-history{margin-top:24px;border-top:3px solid #526e7c}#history-list details{margin-top:14px}#history-list summary{cursor:pointer}

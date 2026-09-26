@@ -1,5 +1,6 @@
 import {authorize,audit,bodyOf,budget,digest,json,requireValue,statement} from './security.js';
 import {REPORT_COLUMNS,reportMetadata,readVerifiedReport} from './atlas-reports.js';
+import {RECORD_COLUMNS} from './atlas-reviews.js';
 
 export const CASE_REPORT_LIMITS=Object.freeze({links:20,bundle_bytes:12000000});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -16,7 +17,7 @@ async function manifest(db,tenant,id){
   const links=(await statement(db,`SELECT ${LINK_COLUMNS} FROM atlas_case_reports WHERE case_id=? ORDER BY created_at,id`,id).all()).results;
   requireValue(links.length<=20,'case_report_capacity',409);
   const rows=(await statement(db,`SELECT ${REPORT_COLUMNS.split(',').map(key=>'r.'+key).join(',')} FROM atlas_reports r JOIN atlas_case_reports l ON l.report_id=r.id WHERE l.case_id=? AND r.tenant_id=? AND r.expires_at>?`,id,tenant,now).all()).results;
-  const records=(await statement(db,`SELECT id,kind,subject,body,purpose,lawful_basis,source_licence,status,revision,created_by,created_at,updated_at,expires_at FROM atlas_records
+  const records=(await statement(db,`SELECT ${RECORD_COLUMNS} FROM atlas_records
     WHERE tenant_id=? AND expires_at>? AND subject IN (SELECT 'atlas-report:'||report_id FROM atlas_case_reports WHERE case_id=?) ORDER BY updated_at,id LIMIT 201`,tenant,now,id).all()).results;
   requireValue(records.length<=200,'case_record_capacity',409);
   const reports=new Map(rows.map(row=>[row.id,reportMetadata(row)]));
