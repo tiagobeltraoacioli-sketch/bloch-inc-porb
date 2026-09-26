@@ -60,6 +60,8 @@ The [Atlas timeline graph](graphus-data-atlas.md#graph-linked-to-the-timeline) n
 5. **Active review loop:** prioritize informative borderline cases for analysts, record reasons, appeals, corrections, and independent review. Keep unverified allegations out of ground truth. Retraining is a controlled release with reproducible feature/model manifests and rollback.
 6. **ZK computation:** benchmark a small deterministic feature calculation or model inference against committed inputs and pinned model/circuit hashes. Proof validity shows calculation integrity under the stated circuit; it does not attest source truth, legal entitlement, calibration, or guilt. Full private graph training is outside the first ZK scope.
 
+The [observed window comparison](graphus-data-atlas.md#observed-window-comparison) now supports explicit earlier/later baselines within one verified timeline. It calculates exact per-kind/direction differences, endpoint concentration and reference presence with complete underlying events, inherited source coverage and separate reproducibility hashes. It also works over retained timelines. These bounded descriptive comparisons do not provide calibrated anomaly detection, independent peer cohorts, network-wide baselines or significance tests; those require the evidence and validation gates above.
+
 ## Practical two-server build
 
 | Host | First durable workload | Later workload after gates |

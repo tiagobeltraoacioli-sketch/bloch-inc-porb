@@ -99,7 +99,7 @@ async function publicChecks() {
     ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css'].map(name => [privateOrigin, '/graphus/assets/' + name, 'site/graphus/assets/' + name]),
     ...['atlas_motifs.js','atlas_motifs_ui.js','atlas_motifs.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
-    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css','atlas_timeline_graph.js','atlas_timeline_graph_ui.js'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
+    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css','atlas_timeline_graph.js','atlas_timeline_graph_ui.js','atlas_timeline_compare.js','atlas_timeline_compare_ui.js'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
@@ -227,6 +227,20 @@ async function browserChecks() {
   const graphCsv=page.waitForEvent('download');await page.click('[data-graph=csv]');const graphText=await readFile(await(await graphCsv).path(),'utf8');assert.ok(graphText.includes(timelineHash));assert.equal(graphText.split('\r\n').length,timeline.events.length+1);
   note('Production temporal graph renders the retained ETH connections and exports all events with original report hashes.');
   note(`Production activity timeline reused the ETH capture and exported ${timeline.events.length} exact events with matching report and dataset hashes.`);
+  // Add one explicitly unknown earlier interval without collecting another source page.
+  const step=timeline.window.interval_seconds*1000,utcInput=time=>new Date(time).toISOString().slice(0,19).replace(/:00$/,'');
+  await page.selectOption('[data-time=interval]',timeline.window.interval);
+  await page.fill('[data-time=start]',utcInput(Math.floor(Date.parse(timeline.events[0].block_time)/step)*step-step));
+  await page.fill('[data-time=end]',utcInput(Math.floor(Date.parse(timeline.events.at(-1).block_time)/step)*step+step-1000));
+  await page.click('[data-time=run]');await page.locator('[data-time=result]:visible').waitFor();
+  const expandedDownload=page.waitForEvent('download');await page.click('[data-time=json]');const expanded=JSON.parse(await readFile(await(await expandedDownload).path(),'utf8'));
+  await page.click('[data-time=comparison] > summary');await page.click('[data-time-bin="0"]');await page.click('[data-window=pin]');
+  await page.locator('[data-time=last]').evaluate(node=>{node.value=node.max;node.dispatchEvent(new Event('input',{bubbles:true}));});
+  await page.locator('[data-time=first]').evaluate(node=>{node.value='1';node.dispatchEvent(new Event('input',{bubbles:true}));});await page.locator('[data-window=result]:visible').waitFor();
+  const windowDownload=page.waitForEvent('download');await page.click('[data-window=json]');const windows=JSON.parse(await readFile(await(await windowDownload).path(),'utf8')),{comparison_sha256:windowHash,...windowBody}=windows;
+  assert.equal(hash(Buffer.from(JSON.stringify(windowBody))),windowHash);assert.equal(windows.provenance.timeline_report_sha256,expanded.report_sha256);assert.equal(windows.provenance.dataset_sha256,packet.dataset_sha256);assert.equal(windows.baseline.observed_events,0);assert.equal(windows.comparison.observed_events,timeline.events.length);assert.equal(windows.baseline.complete_history,false);assert.equal(windows.groups[0].source_references.baseline.event_concentration,null);
+  const referencesDownload=page.waitForEvent('download');await page.click('[data-window=csv]');const referencesCsv=await readFile(await(await referencesDownload).path(),'utf8');assert.ok(referencesCsv.includes(windowHash));assert.equal(referencesCsv.split('\r\n').length,windows.groups[0].source_references.rows.length+1);
+  note(`Production window comparison preserves ${windows.comparison.observed_events} ETH events, an explicitly unknown earlier window, exact reference CSV and matching parent/comparison hashes.`);
   const event = packet.dataset.edges.find(e => e.kind === 'native_value' && e.from !== e.to && e.block_time);
   assert.ok(event, 'A timed direct ETH event is available for the path check');
   await page.fill('[data-path=from]', event.from); await page.fill('[data-path=to]', event.to);

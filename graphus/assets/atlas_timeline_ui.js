@@ -1,5 +1,6 @@
 import {TIMELINE_KINDS,timelineView,timelineCsv} from './atlas_timeline.js';
 import {mountTimelineGraph} from './atlas_timeline_graph_ui.js';
+import {mountTimelineComparison} from './atlas_timeline_compare_ui.js';
 
 const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
 const sha=async value=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -22,17 +23,19 @@ export function mountAtlasTimeline(root,query,onReport=()=>{},options={}){
       <p class="atlas-note">Solid bars show returned events; dotted markers have no returned events and unknown coverage. Select a bar, scroll the chart or use the two sliders. Bars show the complete queried timeline; the selected range and event search control the event list, totals and CSV. JSON preserves the complete query.</p>
       <p data-time="selection" role="status"></p><label class="atlas-timeline-search">Find an event, transaction or reference<input data-time="search" type="search" maxlength="200"></label>
       <details data-time="network" class="atlas-time-network"><summary>Explore the selected event graph</summary><div data-time="graph"></div></details>
+      <details data-time="comparison" class="atlas-time-network"><summary>Compare observed time windows</summary><div data-time="compare"></div></details>
       <div data-time="totals" class="atlas-timeline-totals"></div><div data-time="ledger" class="atlas-timeline-ledger"></div>
       <div class="atlas-actions"><button data-time="previous" disabled>Previous events</button><span data-time="page" role="status"></span><button data-time="next" disabled>Next events</button></div>
       <details><summary>Coverage, exclusions and reproducibility</summary><div data-time="notes"></div><pre data-time="provenance"></pre></details>
     </div><div class="atlas-actions"><button data-time="json" disabled>Download complete timeline JSON</button><button data-time="csv" disabled>Export selected events CSV</button></div>`;
   const $=name=>root.querySelector(`[data-time="${name}"]`),optionId='atlas-timeline-options-'+crypto.randomUUID();$('options').id=optionId;$('reference').setAttribute('list',optionId);
   const network=mountTimelineGraph($('graph'));
+  const comparison=mountTimelineComparison($('compare'));
   let source=null,report=null,version=0,busy=false,loading=false,first=0,last=-1,page=0;
   const selection=()=>({first,last,query:$('search').value}),available=()=>!options.readOnly&&source&&!loading;
   function controls(){for(const control of $('form').elements)control.disabled=!available();$('run').disabled=!available()||busy;for(const name of ['json','csv'])$(name).disabled=!report||busy||loading;root.setAttribute('aria-busy',String(busy||loading));}
   function clear(message='Filters changed. Build a new activity timeline.'){
-    version++;report=null;onReport(null);network.reset();busy=false;first=0;last=-1;page=0;$('result').hidden=true;$('search').value='';
+    version++;report=null;onReport(null);network.reset();comparison.reset();busy=false;first=0;last=-1;page=0;$('result').hidden=true;$('search').value='';
     for(const name of ['chart','coverage','selection','totals','ledger','page','notes','provenance'])$(name).replaceChildren();$('status').textContent=message;controls();
   }
   function setSource(next){const changed=source?.key!==next?.key;source=next;
@@ -66,6 +69,7 @@ export function mountAtlasTimeline(root,query,onReport=()=>{},options={}){
     if(!selected.events.length)$('ledger').append(el('p','No timed observations match this selection. This is not a finding of inactivity.'));
     for(const bar of $('chart').querySelectorAll('[data-time-bin]')){const index=Number(bar.dataset.timeBin);bar.setAttribute('aria-pressed',String(index>=first&&index<=last));bar.setAttribute('tabindex',index===first?'0':'-1');}
     network.setReport(report,selection());
+    comparison.setReport(report,selection());
   }
   function choose(a,b){first=a;last=b;page=0;view();}
   function render(){
