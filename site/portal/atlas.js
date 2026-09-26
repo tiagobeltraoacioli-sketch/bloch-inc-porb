@@ -1,6 +1,7 @@
 import {atlasSelection, atlasSubject, atlasReviews, atlasRecords, atlasRecordSummary, atlasLink} from './atlas-context.js';
 import {comparisonWorkspace} from './atlas-comparison.js';
 import {reportWorkspace} from './atlas-reports.js';
+import {caseWorkspace} from './atlas-cases.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node;};
@@ -11,6 +12,7 @@ let contextVersion = 0, selectionVersion = 0, editorVersion = 0, loadingAnalysis
 let sourceVersion = 0, sourceExpiry = null;
 let issuingGrant = false, savingRecord = false;
 let pendingSelection = atlasSelection(new URLSearchParams(location.search));
+let selectedCase = pendingSelection.case || null;
 const canWrite = () => Boolean(data?.granted_scopes.includes('cases:write'));
 const subject = () => atlasSubject(analysis, selectedNode);
 const selected = () => analysis?.scores.rows.find(row => row.id === selectedNode);
@@ -21,7 +23,7 @@ function lock(message, login = false) {
   contextVersion++; selectionVersion++; sourceVersion++; sourceExpiry = null; data = null; analysis = null; selectedNode = ''; runs = []; editing = null;
   comparison.reset();
   pathWorkspace.reset();
-  reports.reset();
+  reports.reset(); dossiers.reset(); selectedCase = null;
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
   for (const id of ['atlas-reference-search', 'record-search']) $(id).value = '';
@@ -46,14 +48,16 @@ async function request(path, method = 'GET', body) {
   return result;
 }
 const api = (path, method, body) => request('/v1/atlas/' + path, method, body);
-const reports = reportWorkspace(request, row => {
+function reviewReport(row) {
   if (!canWrite()) return; clearEditor(); $('private-kind').value = 'review'; $('private-subject').value = row.review_subject;
   for (const [id, key] of [['private-purpose','purpose'],['private-basis','lawful_basis'],['private-licence','source_licence']]) $(id).value = row[key];
   $('private-retention').value = Math.max(1, Math.min(30, Math.floor((row.expires_at - Date.now()) / 86400000)));
   $('record-selected-only').checked = false; $('record-search').value = row.review_subject; $('record-kind').value = 'review'; $('record-state').value = 'all'; recordPage = 0; renderRecords();
   note('private-editor-title', 'Review saved report'); note('private-editor-note', `Reviewing “${row.title}”. This starts open. Review retention is separate from report retention; a report review does not authorize score access.`);
   $('private-editor-title').scrollIntoView({block:'start'}); $('private-body').focus();
-});
+}
+const dossiers = caseWorkspace(request, {initialCase:selectedCase, review:reviewReport, inspect:id=>reports.open(id), refreshContext:load, onSelect:id=>{selectedCase=id||null;history.replaceState(null,'',atlasLink(analysis?.id,selectedNode,selectedCase));}});
+const reports = reportWorkspace(request, reviewReport, (rows,complete)=>dossiers.setReports(rows,complete));
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 function download(name, value) {
@@ -134,12 +138,12 @@ function referenceOptions() {
 }
 async function selectAnalysis(id, node = null) {
   const run = ++selectionVersion; analysis = null; selectedNode = ''; loadingAnalysis = Boolean(id); dismissToken(); $('atlas-reference-search').value = ''; $('atlas-reference-search').disabled = true; referenceOptions(); renderSelection();
-  if (!id) {loadingAnalysis = false; history.replaceState(null, '', atlasLink()); return;}
+  if (!id) {loadingAnalysis = false; history.replaceState(null, '', atlasLink(null,null,selectedCase)); return;}
   note('atlas-saved-status', 'Opening saved evidence…');
   try {
     const result = await request('/v1/analyses/' + id); if (run !== selectionVersion) return;
     analysis = result; selectedNode = result.scores.rows.some(row => row.id === node) ? node : ''; loadingAnalysis = false;
-    $('atlas-reference-search').disabled = false; referenceOptions(); renderSelection(); history.replaceState(null, '', atlasLink(id, selectedNode));
+    $('atlas-reference-search').disabled = false; referenceOptions(); renderSelection(); history.replaceState(null, '', atlasLink(id, selectedNode, selectedCase));
     if (node && !selectedNode) note('atlas-saved-status', 'That reference is absent from this saved analysis. Select one of its retained references.');
   } catch (error) {if (run === selectionVersion) {loadingAnalysis = false; referenceOptions(); renderSelection(); note('atlas-saved-status', `Saved evidence unavailable: ${error.message}`);}}
 }
@@ -169,7 +173,7 @@ async function load() {
       const button = el('button', 'Revoke grant'); button.onclick = async () => {button.disabled = true; try {await api(`grants/${grant.id}/revoke`, 'POST', {}); dismissToken(); await load(); note('private-grant-status', 'Grant revoked immediately.');} catch (error) {note('private-grant-status', error.message); button.disabled = false;}};
       card.append(button); $('private-grant-list').append(card);
     }
-    reports.sync(data); renderSelection();
+    dossiers.sync(data); reports.sync(data); renderSelection();
   } catch (error) {if (data) note('private-status', `Refresh failed: ${error.message}. Previously loaded records remain visible.`); else {note('private-status', error.message); if (error.status !== 401) $('private-reload').hidden = false;} throw error;}
 }
 
@@ -191,7 +195,7 @@ for (const id of ['record-search', 'record-kind', 'record-state', 'record-select
 $('record-previous').onclick = () => {recordPage--; renderRecords();}; $('record-next').onclick = () => {recordPage++; renderRecords();};
 $('atlas-saved-analysis').onchange = () => selectAnalysis($('atlas-saved-analysis').value);
 $('atlas-reference-search').oninput = referenceOptions;
-$('atlas-saved-reference').onchange = () => {selectedNode = $('atlas-saved-reference').value; dismissToken(); recordPage = 0; renderSelection(); history.replaceState(null, '', atlasLink(analysis?.id, selectedNode));};
+$('atlas-saved-reference').onchange = () => {selectedNode = $('atlas-saved-reference').value; dismissToken(); recordPage = 0; renderSelection(); history.replaceState(null, '', atlasLink(analysis?.id, selectedNode, selectedCase));};
 $('atlas-clear-reference').onclick = () => {$('atlas-saved-analysis').value = ''; selectAnalysis('');};
 $('atlas-start-review').onclick = () => {if (!subject() || !canWrite()) return; clearEditor(); $('private-kind').value = 'review'; $('private-subject').value = subject(); $('record-selected-only').checked = true; recordPage = 0; renderRecords(); note('private-editor-title', 'Review selected reference'); $('private-editor-title').scrollIntoView({block: 'start'}); $('private-body').focus();};
 $('grant-days').oninput = renderReviews; $('grant-review').onchange = () => {$('grant-issue').disabled = !$('grant-review').value || !subject() || issuingGrant;};
@@ -213,10 +217,10 @@ $('private-source-form').addEventListener('submit', async event => {
 });
 function expireVisibleRecords() {
   if (!data || document.hidden) return;
-  renderRecords(); renderReviews(); reports.expire();
+  renderRecords(); renderReviews(); reports.expire(); dossiers.expire();
   if (sourceExpiry !== null && Date.now() >= sourceExpiry) {sourceExpiry = null; $('private-source-output').textContent = ''; $('private-source-output').hidden = true; note('private-source-status', 'The displayed snapshot expired. Run the lookup again.');}
 }
 setInterval(expireVisibleRecords, 30000);
 document.addEventListener('visibilitychange', expireVisibleRecords);
-const returnQuery = new URLSearchParams({view: 'atlas'}); if (pendingSelection.analysis) returnQuery.set('analysis', pendingSelection.analysis); if (pendingSelection.node) returnQuery.set('node', pendingSelection.node); $('private-login').href = '/portal/?' + returnQuery;
+const returnQuery = new URLSearchParams({view: 'atlas'}); if (pendingSelection.analysis) returnQuery.set('analysis', pendingSelection.analysis); if (pendingSelection.node) returnQuery.set('node', pendingSelection.node); if (selectedCase) returnQuery.set('case',selectedCase); $('private-login').href = '/portal/?' + returnQuery;
 try {await load(); await reports.load(); await loadAnalyses();} catch (error) {if (data) note('atlas-saved-status', `Saved analysis list unavailable: ${error.message}`);}

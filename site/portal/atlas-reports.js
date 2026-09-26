@@ -6,9 +6,9 @@ const messages = {report_preview_changed:'The calculation changed. Run it again 
 const message = error => messages[error.message] || error.message.replaceAll('_',' ');
 const summary = row => row.kind==='paths' ? `${row.summary.paths} ordered paths · ${row.summary.eligible_records} eligible events${row.summary.truncated?' · search limit reached':''}` : `${row.summary.events} compared events · ${row.summary.counts.changed} changed · ${row.summary.block_conflicts} block hash disagreements`;
 
-export function reportWorkspace(request, startReview) {
+export function reportWorkspace(request, startReview, onReports = () => {}) {
   let context=null, rows=[], retention=null, candidates={paths:null,comparison:null}, draft=null, pending=null, detail=null;
-  let epoch=0, listVersion=0, detailVersion=0, page=0, saving=false;
+  let epoch=0, listVersion=0, detailVersion=0, page=0, saving=false, initialized=false;
   const active = row => row.expires_at>Date.now();
   const writable = () => Boolean(context?.granted_scopes.includes('cases:write'));
   const note = (id,value) => {$(id).textContent=value;};
@@ -33,6 +33,7 @@ export function reportWorkspace(request, startReview) {
   }
   function render(){
     rows=rows.filter(active);
+    onReports(rows,initialized);
     const terms=$('report-search').value.trim().toLowerCase().split(/\s+/).filter(Boolean),kind=$('report-kind').value;
     const matches=rows.filter(row=>(kind==='all'||kind===row.kind)&&terms.every(term=>[row.title,row.purpose,row.asset,row.id,row.report_sha256].some(value=>value.toLowerCase().includes(term))));
     const pages=Math.max(1,Math.ceil(matches.length/10));page=Math.max(0,Math.min(page,pages-1));
@@ -51,7 +52,7 @@ export function reportWorkspace(request, startReview) {
         remove.onclick=async()=>{
           if(remove.dataset.confirm!=='yes'){remove.dataset.confirm='yes';remove.textContent='Confirm deletion';return;}
           const run=epoch;remove.disabled=true;
-          try{await route('/'+row.id,'DELETE',{payload_sha256:row.payload_sha256});if(run!==epoch)return;listVersion++;rows=rows.filter(value=>value.id!==row.id);clearDetail();if(retention)retention.retained--;render();note('report-list-status','Report deleted. Its access audit and separately retained reviews remain.');}
+          try{await route('/'+row.id,'DELETE',{payload_sha256:row.payload_sha256});if(run!==epoch)return;listVersion++;rows=rows.filter(value=>value.id!==row.id);clearDetail();if(retention)retention.retained--;render();note('report-list-status','Report deleted. Audit, separate reviews and investigation attachment identities remain.');}
           catch(error){if(run===epoch){note('report-list-status',message(error));remove.disabled=false;}}
         };actions.append(review,remove);
       }
@@ -85,7 +86,7 @@ export function reportWorkspace(request, startReview) {
   }
   async function load(){
     if(!context)return;const run=epoch,version=++listVersion;note('report-list-status','Loading saved reports…');
-    try{const result=await route();if(run!==epoch||version!==listVersion)return;rows=result.reports;retention=result.retention;if(detail&&!rows.some(row=>row.id===detail.id))clearDetail();render();note('report-list-status',retention.expired?`${retention.expired} expired report(s) await administrator purge.`:'Library refreshed.');}
+    try{const result=await route();if(run!==epoch||version!==listVersion)return;rows=result.reports;retention=result.retention;initialized=true;if(detail&&!rows.some(row=>row.id===detail.id))clearDetail();render();note('report-list-status',retention.expired?`${retention.expired} expired report(s) await administrator purge.`:'Library refreshed.');}
     catch(error){if(run===epoch&&version===listVersion){render();note('report-list-status',`Refresh failed: ${message(error)}. Previously loaded unexpired reports remain visible.`);}}
   }
   function expire(){
@@ -105,5 +106,5 @@ export function reportWorkspace(request, startReview) {
   for(const id of ['report-search','report-kind'])$(id).addEventListener(id==='report-search'?'input':'change',()=>{page=0;render();});
   $('report-previous').onclick=()=>{page--;render();};$('report-next').onclick=()=>{page++;render();};$('report-refresh').onclick=load;
   controls();
-  return {setCandidate,load,expire,sync(value){context=value;controls();render();},reset(){epoch++;listVersion++;clearDetail();context=null;rows=[];retention=null;candidates={paths:null,comparison:null};saving=false;page=0;clearDraft();$('report-search').value='';$('report-kind').value='all';$('report-list').replaceChildren();for(const id of ['report-count','report-page','report-save-status','report-list-status'])note(id,'');}};
+  return {setCandidate,load,expire,async open(id){await inspect({id});if(detail?.id===id)$('report-detail').scrollIntoView({block:'start'});},sync(value){context=value;controls();render();},reset(){epoch++;listVersion++;clearDetail();context=null;rows=[];retention=null;initialized=false;candidates={paths:null,comparison:null};saving=false;page=0;clearDraft();$('report-search').value='';$('report-kind').value='all';$('report-list').replaceChildren();for(const id of ['report-count','report-page','report-save-status','report-list-status'])note(id,'');}};
 }

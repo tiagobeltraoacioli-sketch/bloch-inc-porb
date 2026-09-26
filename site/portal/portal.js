@@ -47,7 +47,7 @@ async function session(){
   if(invitation){showGate();return;}
   const result=await api('/auth/session');if(!result.authenticated){showGate();return;}
   state.session=result;$('gate').hidden=true;$('workspace').hidden=false;
-  if(returnToAtlas){returnToAtlas=false;location.replace(atlasLink(pendingAtlas.analysis,pendingAtlas.node));return;}
+  if(returnToAtlas){returnToAtlas=false;location.replace(atlasLink(pendingAtlas.analysis,pendingAtlas.node,pendingAtlas.case));return;}
   $('organization').replaceChildren(...result.organizations.map(org=>{const option=element('option',org.name);option.value=org.id;return option;}));$('organization').value=result.organization.id;
   const isAdmin=['owner','admin'].includes(result.organization.role);$('admin-controls').hidden=!isAdmin;$('org-controls').hidden=result.organization.role!=='owner';$('collect-form').querySelector('button').disabled=result.organization.role==='viewer';
   $('access-description').textContent=`${result.user.email} · ${result.organization.role} · ${result.organization.name}`;

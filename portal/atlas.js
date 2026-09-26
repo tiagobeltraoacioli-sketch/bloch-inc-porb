@@ -5,6 +5,7 @@ import {GRANT_COLUMNS} from './atlas-grants.js';
 import {atlasComparisonRoute} from './atlas-comparison.js';
 import {atlasPathsRoute} from './atlas-paths.js';
 import {atlasReportsRoute} from './atlas-reports.js';
+import {atlasCasesRoute} from './atlas-cases.js';
 
 const keys=(body,allowed)=>requireValue(Object.keys(body).every(k=>allowed.includes(k)),'unexpected_fields');
 const text=(value,min,max)=>typeof value==='string'&&value.trim().length>=min&&value.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
@@ -13,6 +14,7 @@ export async function atlasPrivateRoute(path,request,env,principal,fetcher){
   if(path==='/v1/atlas/compare')return atlasComparisonRoute(request,env,principal);
   if(path==='/v1/atlas/paths')return atlasPathsRoute(request,env,principal);
   const savedReport=await atlasReportsRoute(path,request,env,principal);if(savedReport)return savedReport;
+  const dossier=await atlasCasesRoute(path,request,env,principal);if(dossier)return dossier;
   const db=env.PORB_DB,tenant=principal.tenant_id,now=Date.now(),method=request.method;
   if(path==='/v1/atlas/sources'){
     authorize(principal,'data:read');

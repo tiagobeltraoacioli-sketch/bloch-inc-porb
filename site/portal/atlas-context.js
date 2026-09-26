@@ -4,7 +4,7 @@ const DAY = 86400000;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 export function atlasSelection(query) {
   const analysis = query.get('analysis'), node = query.get('node');
-  return {analysis: uuid(analysis) ? analysis : null, node: typeof node === 'string' && /^[A-Z]{3,4}:(address|script_hash|transaction):[a-zA-Z0-9]{14,100}$/.test(node) ? node : null};
+  return {analysis: uuid(analysis) ? analysis : null, node: typeof node === 'string' && /^[A-Z]{3,4}:(address|script_hash|transaction):[a-zA-Z0-9]{14,100}$/.test(node) ? node : null,...(uuid(query.get('case'))?{case:query.get('case')}:{})};
 }
 export function atlasSubject(analysis, node) {
   return analysis && node && analysis.scores.rows.some(row => row.id === node) ? `${analysis.id}:${node}` : null;
@@ -28,8 +28,9 @@ export function atlasRecords(records, {query = '', kind = 'all', status = 'all',
       .some(value => String(value).toLowerCase().includes(term))))
     .sort((a, b) => b.updated_at - a.updated_at || b.id.localeCompare(a.id, 'en'));
 }
-export function atlasLink(analysis, node) {
+export function atlasLink(analysis, node, caseId) {
   const query = new URLSearchParams();
   if (uuid(analysis)) {query.set('analysis', analysis); if (atlasSelection(new URLSearchParams({node})).node) query.set('node', node);}
+  if (uuid(caseId)) query.set('case',caseId);
   return '/atlas.html' + (query.size ? '?' + query : '');
 }

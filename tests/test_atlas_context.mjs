@@ -23,4 +23,8 @@ test('Private Atlas links only carry validated analysis and reference identities
   assert.equal(atlasSelection(new URLSearchParams({analysis:id,node:'<script>'})).node,null);
   assert.equal(new URL(atlasLink(id,node),'https://private.test').origin,'https://private.test');
   assert.equal(new URL(atlasLink(id,node),'https://private.test').searchParams.get('node'),node);
+  assert.equal(atlasSelection(new URLSearchParams({case:id})).case,id);
+  assert.equal(atlasSelection(new URLSearchParams({case:'https://outside.test'})).case,undefined);
+  assert.equal(atlasLink(null,null,id),'/atlas.html?case='+id);
+  assert.equal(new URL(atlasLink(id,node,id),'https://private.test').searchParams.get('case'),id);
 });

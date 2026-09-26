@@ -10,10 +10,12 @@ const HASH=/^[a-f0-9]{64}$/;
 function chunks(payload){
   const parts=[];for(let start=0;start<payload.length;){let end=Math.min(start+200000,payload.length);const code=payload.charCodeAt(end-1);if(code>=0xd800&&code<=0xdbff)end--;parts.push(payload.slice(start,end));start=end;}return parts;
 }
-const COLUMNS='id,kind,title,purpose,lawful_basis,source_licence,asset,report_version,report_sha256,payload_sha256,parameters_json,summary_json,payload_bytes,part_count,created_by,created_at,expires_at';
+export const REPORT_COLUMNS='id,kind,title,purpose,lawful_basis,source_licence,asset,report_version,report_sha256,payload_sha256,parameters_json,summary_json,payload_bytes,part_count,created_by,created_at,expires_at';
+const COLUMNS=REPORT_COLUMNS;
 const keys=(body,allowed)=>requireValue(body&&typeof body==='object'&&!Array.isArray(body)&&Object.keys(body).every(key=>allowed.includes(key)),'unexpected_fields');
 const text=(value,max)=>typeof value==='string'&&value.trim().length>=3&&value.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
-const metadata=({parameters_json,summary_json,request_digest,request_id,...row})=>({...row,parameters:JSON.parse(parameters_json),summary:JSON.parse(summary_json),review_subject:'atlas-report:'+row.id});
+export const reportMetadata=({parameters_json,summary_json,request_digest,request_id,...row})=>({...row,parameters:JSON.parse(parameters_json),summary:JSON.parse(summary_json),review_subject:'atlas-report:'+row.id});
+const metadata=reportMetadata;
 function normalize(body){
   keys(body,['request_id','kind','title','purpose','lawful_basis','source_licence','retention_days','parameters','expected_report_sha256']);
   requireValue(UUID.test(body.request_id||'')&&['paths','comparison'].includes(body.kind)&&HASH.test(body.expected_report_sha256||''),'invalid_report_identity');
@@ -51,7 +53,7 @@ function replay(row,requestDigest){
   requireValue(row.expires_at>Date.now(),'report_request_expired',409);
   return json({...metadata(row),duplicate:true});
 }
-async function verified(db,tenant,id){
+export async function readVerifiedReport(db,tenant,id){
   const row=await statement(db,`SELECT ${COLUMNS} FROM atlas_reports WHERE id=? AND tenant_id=? AND expires_at>?`,id,tenant,Date.now()).first();
   requireValue(row,'report_unavailable',404);
   requireValue(Number.isInteger(row.part_count)&&row.part_count>=1&&row.part_count<=30&&Number.isInteger(row.payload_bytes)&&row.payload_bytes>=1&&row.payload_bytes<=REPORT_LIMITS.bytes,'report_integrity_failed',409);
@@ -80,7 +82,7 @@ export async function atlasReportsRoute(path,request,env,principal){
       return json({reports:rows.results.map(metadata),retention:{...REPORT_LIMITS,retained:counts.retained,expired:counts.expired||0,purge_endpoint:'/api/porb/v1/atlas/purge'}});
     }
     if(id&&method==='GET'){
-      const report=await verified(db,tenant,id);await audit(db,principal,operation?'atlas.report.export':'atlas.report.read',id).run();
+      const report=await readVerifiedReport(db,tenant,id);await audit(db,principal,operation?'atlas.report.export':'atlas.report.read',id).run();
       return json(report,200,operation?{'content-disposition':`attachment; filename="atlas-report-${id}.json"`}:{});
     }
     authorize(principal,'cases:write');

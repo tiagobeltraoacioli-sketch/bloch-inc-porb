@@ -87,7 +87,7 @@ test('OpenAPI exposes each mounted Graphus route and requires authentication on 
   assert.equal(doc.openapi,'3.1.0');for(const route of Object.keys(MODULE_ROUTES))assert.ok(doc.paths['/v1/graphus/'+route]);
   for(const [path,methods] of Object.entries(doc.paths))for(const [method,op] of Object.entries(methods)){
     assert.ok(op['x-required-scopes'].length);assert.deepEqual(op.security,[{PartnerKey:[]}]);assert.ok(op.operationId);
-    const resolved=path.replaceAll('{id}',crypto.randomUUID());const response=await s.call(resolved,method.toUpperCase(),method==='get'?undefined:{});assert.equal(response.status,401,method+' '+path);
+    const resolved=path.replace(/\{[^}]+\}/g,()=>crypto.randomUUID());const response=await s.call(resolved,method.toUpperCase(),method==='get'?undefined:{});assert.equal(response.status,401,method+' '+path);
   }
   assert.equal(s.calls(),0);
 });

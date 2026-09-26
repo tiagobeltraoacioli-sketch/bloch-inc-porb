@@ -1,3 +1,4 @@
+import {atlasLink} from './atlas-context.js';
 const $=id=>document.getElementById(id);
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 const date=v=>new Date(v).toLocaleString(),short=v=>v.length>30?v.slice(0,14)+'…'+v.slice(-10):v;
@@ -58,7 +59,7 @@ export class Intelligence {
   async attach(analysis,node){this.pendingEvidence={analysis,node};this.showView('cases');if(this.currentCase)await this.openCase(this.currentCase.id);}
   async evidenceOptions(){const form=$('evidence-form'),id=form.elements.analysis.value;form.elements.node.replaceChildren();if(!id)return;const run=await this.api(`/v1/analyses/${id}`);for(const row of run.scores.rows){const option=el('option',row.address);option.value=row.id;form.elements.node.append(option);}if(this.pendingEvidence?.analysis===id)form.elements.node.value=this.pendingEvidence.node;}
   async openCase(id){
-    const c=await this.api(`/v1/cases/${id}`);this.currentCase=c;$('case-detail').hidden=false;$('case-title').textContent=c.title;$('case-state').textContent=`${c.status} · ${c.evidence.length}/50 snapshots`;$('case-status').textContent=c.status==='open'?'Close investigation':'Reopen investigation';$('case-status').disabled=this.role()==='viewer';
+    const c=await this.api(`/v1/cases/${id}`);this.currentCase=c;$('case-atlas').href=atlasLink(null,null,id)+'#case-workspace';$('case-detail').hidden=false;$('case-title').textContent=c.title;$('case-state').textContent=`${c.status} · ${c.evidence.length}/50 snapshots`;$('case-status').textContent=c.status==='open'?'Close investigation':'Reopen investigation';$('case-status').disabled=this.role()==='viewer';
     const form=$('evidence-form');form.hidden=c.status!=='open'||this.role()==='viewer';this.analysisOptions(form.elements.analysis);if(this.pendingEvidence)form.elements.analysis.value=this.pendingEvidence.analysis;await this.evidenceOptions();
     $('evidence-list').replaceChildren();for(const evidence of c.evidence){const s=evidence.snapshot,item=el('details',undefined,'evidence-item'),summary=el('summary',`${s.asset} · ${short(s.score.address)} · ${s.records_returned}/${s.records_total} records`);item.append(summary,el('p',`Snapshot SHA-256: ${evidence.digest}`),el('p',`${s.source} · ${date(s.analysis_created_at)} · Red ${s.score.red??'unavailable'} / Blue ${s.score.blue}`));item.append(this.action('Inspect retained source graph',()=>this.openRun(s.analysis_id,s.score.id)),el('pre',JSON.stringify(s,null,2)));$('evidence-list').append(item);}if(!c.evidence.length)$('evidence-list').append(el('p','No evidence attached yet.'));
   }
