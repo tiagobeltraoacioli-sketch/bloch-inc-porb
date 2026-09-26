@@ -2,7 +2,7 @@ import {ASSETS,LAYERS,STATUS,CATEGORIES,MODULES,CONNECTIONS,actionLinks} from '.
 
 // Public capability descriptions only. No account state or private findings.
 export function systemMapManifest(){
-  return {schema_version:1,registry_version:'2026-09-25.1',source:'https://bloch-graphus.xyz/map',
+  return {schema_version:1,registry_version:'2026-09-25.2',source:'https://bloch-graphus.xyz/map',
     availability_semantics:'Implementation description, not continuous source health or an executed analysis.',
     connection_semantics:'Module dependencies, not wallet transfers.',
     assets:ASSETS,layers:LAYERS,statuses:STATUS,categories:CATEGORIES,

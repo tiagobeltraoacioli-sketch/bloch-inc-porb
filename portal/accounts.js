@@ -100,7 +100,7 @@ export async function adminRoute(path,request,env,principal){
   }
   if(path==='/keys'&&request.method==='POST'){
     const body=await bodyOf(request);
-    requireValue(typeof body.label==='string'&&body.label.trim().length>=2&&body.label.length<=80&&Array.isArray(body.scopes)&&body.scopes.length>0&&body.scopes.length<=4&&body.scopes.every(s=>SCOPES.includes(s))&&Number.isInteger(body.days)&&body.days>=1&&body.days<=90,'invalid_key_parameters');
+    requireValue(typeof body.label==='string'&&body.label.trim().length>=2&&body.label.length<=80&&Array.isArray(body.scopes)&&body.scopes.length>0&&body.scopes.length<=SCOPES.length&&body.scopes.every(s=>SCOPES.includes(s))&&Number.isInteger(body.days)&&body.days>=1&&body.days<=90,'invalid_key_parameters');
     await reauthenticate(env,principal,body.password);await budget(env,`keys:${principal.tenant_id}`,20,86400);
     const id=crypto.randomUUID(),token=`porb_${random()}`,expires=now+body.days*86400000,scopes=[...new Set(body.scopes)];
     await db.batch([statement(db,'INSERT INTO api_keys(id,tenant_id,created_by,label,prefix,key_hash,scopes_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)',id,principal.tenant_id,principal.id,body.label.trim(),token.slice(0,13),await digest(token),JSON.stringify(scopes),now,expires),audit(db,principal,'key.create',id)]);

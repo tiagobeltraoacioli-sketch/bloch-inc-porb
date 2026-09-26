@@ -1,3 +1,4 @@
+import {evidenceProfile} from './evidence_profile.js';
 (function(){
   'use strict';
   const params=new URLSearchParams(location.search),importing=params.get('import')==='evidence',legacy=!importing&&(params.has('address')||params.has('wallet')||params.get('mode')==='demo');
@@ -84,6 +85,7 @@
     const from=$('net-path-from').value,to=$('net-path-to').value;for(const id of ['net-path-from','net-path-to'])$(id).replaceChildren(...filtered.nodes.map(n=>new Option(short(n.label),n.id)));if(filtered.nodes.some(n=>n.id===from))$('net-path-from').value=from;if(filtered.nodes.some(n=>n.id===to))$('net-path-to').value=to;
     referenceList();detail();ledger();timeline();layout();
     $('net-sources').replaceChildren(...collection.snapshots.map((s,i)=>{const p=el('p',`${i+1}. ${s.source} · ${s.retrieved_at} · anchor ${s.anchor.height} / ${s.anchor.hash} · ${s.anchor.finality} · ${s.coverage}`);return p;}));
+    const profile=evidenceProfile(filtered),profileBox=el('details');profileBox.id='net-evidence-profile';profileBox.append(el('summary','Filtered evidence profile'),el('p',profile.interpretation),el('pre',JSON.stringify(profile,null,2)));$('net-sources').prepend(profileBox);
   }
   function referenceList(){
     if(!stats)return;const rows=stats.ranking.filter(n=>I.matches(n,$('net-search').value,data.asset));

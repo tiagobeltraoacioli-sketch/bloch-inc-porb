@@ -1,6 +1,8 @@
 import {describe, correlation, cluster, histogram} from '../space/public/assets/science.js';
+import {neighborBaseline,NEIGHBOR_CARD} from './neighbors.js';
+import {evidenceProfile} from '../graphus/assets/evidence_profile.js';
 
-export const VERSION = 'porb-observation-1.0.0';
+export const VERSION = 'porb-observation-1.1.0';
 export const FEATURES = ['log_in_events','log_out_events','log_neighbors','log_in_amount','log_out_amount','direction_balance','neighbor_concentration','log_active_blocks'];
 export const MODEL_CARD = {
   version: VERSION, name: 'BI-PoRB observation scores', networks: ['Bitcoin','Ethereum','Bloch'],
@@ -14,6 +16,8 @@ export const MODEL_CARD = {
   comparability: 'Red depends on the asset, cohort and sampling window. Different runs and networks are not calibrated against each other.',
   graph_semantics: 'For UTXO networks, neighbors are adjacent transactions, not inferred counterparties. Inputs and outputs remain separate; no common ownership inference.',
   amount_precision: 'Original amounts remain exact integer strings. Log10(1 + amount) is a floating-point model feature.',
+  neighborhood_baseline: NEIGHBOR_CARD,
+  revision: 'Adds a separate neighborhood baseline and descriptive evidence profile. Red and Blue definitions and forest parameters are unchanged.',
 };
 
 const average = a => a.reduce((s,v)=>s+v,0)/a.length;
@@ -70,12 +74,14 @@ export function scoreGraph(graph) {
       incoming_base_units:String(w.inAmount),outgoing_base_units:String(w.outAmount),features,blue:round(100*components.reduce((s,c,i)=>s+c*[.30,.25,.25,.20][i],0)),blue_components:components};
   });
   const vectors=rows.map(r=>r.features),forest=isolationForest(vectors),groups=cluster(vectors,FEATURES),stats=FEATURES.map(f=>{const s=describe(vectors.map(v=>v[f]));if(s.std!==null&&s.std<=1e-12*Math.max(1,Math.abs(s.mean)))s.std=0;return s;});
+  const neighbors=neighborBaseline(rows,FEATURES),neighborRows=new Map(neighbors.rows.map(r=>[r.id,r]));
   const labels=new Map((groups.labels||[]).map(x=>[x.index,x.cluster]));
   rows.forEach((row,i)=>{
     Object.assign(row,forest.available?forest.scores[i]:{red:null,ensemble_spread:null},{cluster:labels.get(i)??null});
+    row.neighborhood=neighborRows.get(row.id)??null;
     row.factors=FEATURES.map((feature,j)=>({feature,value:row.features[feature],cohort_mean:stats[j].mean,standard_deviation:stats[j].std,z:stats[j].std?(row.features[feature]-stats[j].mean)/stats[j].std:0})).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)).slice(0,3);
   });
-  return {model:MODEL_CARD,asset:graph.asset,cohort_size:rows.length,ml:{...forest,scores:undefined},clusters:groups,rows,
+  return {model:MODEL_CARD,asset:graph.asset,cohort_size:rows.length,ml:{...forest,scores:undefined},neighborhood:{...neighbors,rows:undefined},evidence_profile:evidenceProfile(graph),clusters:groups,rows,
     distributions:{red:histogram(rows.map(r=>r.red)),blue:histogram(rows.map(r=>r.blue))},statistics:{red:describe(rows.map(r=>r.red)),blue:describe(rows.map(r=>r.blue))},
     correlation:{features:FEATURES,matrix:FEATURES.map((a,i)=>FEATURES.map((b,j)=>stats[i].std&&stats[j].std?correlation(vectors.map(v=>v[a]),vectors.map(v=>v[b])):null))},
     factor_note:'Factors describe standardized feature differences from the cohort; they are not causal explanations or feature attributions of the forest.'};

@@ -1,9 +1,9 @@
 name: System Map contracts
 on:
   push:
-    paths: ['graphus/assets/map.*', 'graphus/chain/system-map-api.js', 'graphus/functions/api/**', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
+    paths: ['graphus/assets/evidence_profile.js', 'graphus/assets/map.*', 'graphus/chain/system-map-api.js', 'graphus/functions/api/**', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
   pull_request:
-    paths: ['graphus/assets/map.*', 'graphus/chain/system-map-api.js', 'graphus/functions/api/**', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
+    paths: ['graphus/assets/evidence_profile.js', 'graphus/assets/map.*', 'graphus/chain/system-map-api.js', 'graphus/functions/api/**', 'graphus/assets/system_*.js', 'graphus/assets/network_*', 'graphus/assets/constellation.js', 'graphus/map.html', 'graphus/constellation.html', 'tests/*system_*', 'tests/test_evidence_graph.mjs', 'tests/test_graphus_collection.mjs', '.github/workflows/system-map.yml']
 permissions:
   contents: read
 jobs:
@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tests/test_system_map_api.mjs tests/test_system_map.mjs tests/test_system_observation.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
+      - run: node --test tests/test_evidence_profile.mjs tests/test_system_map_api.mjs tests/test_system_map.mjs tests/test_system_observation.mjs tests/test_evidence_graph.mjs tests/test_graphus_collection.mjs
       - run: node --check graphus/assets/map.js
       - run: node --check graphus/assets/system_workbench.js
       - run: node --check graphus/assets/network_explorer.js

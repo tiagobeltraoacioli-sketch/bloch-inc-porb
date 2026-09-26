@@ -19,7 +19,7 @@ def main():
     report = {"origin": origin, "collections": [], "checks": []}
 
     def call(path, method="GET", body=None, key=None, expected=(200,)):
-        headers = {"Accept": "application/json", "User-Agent": "BI-PoRB-Unified-Release-Check/1.1"}
+        headers = {"Accept": "application/json", "User-Agent": "BI-PoRB-Unified-Release-Check/1.2"}
         if method != "GET":
             headers.update({"Content-Type": "application/json", "Origin": origin, "X-Porb-Action": "1"})
         if key:
@@ -33,7 +33,7 @@ def main():
         data = json.load(response)
         if response.status not in expected:
             raise RuntimeError(f"{method} {path.split('?')[0]}: HTTP {response.status}: {data.get('error', 'unknown error')}")
-        assert response.headers.get("X-Request-Id") and response.headers.get("X-Porb-Api-Version") == "1.1"
+        assert response.headers.get("X-Request-Id") and response.headers.get("X-Porb-Api-Version") == "1.2"
         return data
 
     call("/v1/cases", expected=(401,))

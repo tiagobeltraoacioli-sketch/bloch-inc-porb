@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Bloch Inc Unified Intelligence — Partner API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Private BI-PoRB, investigations, observation watchlists and Graphus source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal."
   },
   "servers": [
@@ -28,10 +28,88 @@
       "name": "Watchlists"
     },
     {
+      "name": "Enrichment"
+    },
+    {
       "name": "Graphus"
     }
   ],
   "paths": {
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "get_v1_capabilities",
+        "tags": [
+          "Research"
+        ],
+        "summary": "Inspect supported assets, limits and this key’s granted scopes",
+        "description": "No source queries. Describes installed capabilities and the current credential permissions, not source health.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/overview": {
       "get": {
         "operationId": "get_v1_overview",
@@ -61,7 +139,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -150,7 +228,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -225,7 +303,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -302,7 +380,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -366,7 +444,7 @@
                   "pages": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 4,
+                    "maximum": 8,
                     "default": 2
                   }
                 },
@@ -408,7 +486,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -494,7 +572,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -580,7 +658,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -666,7 +744,578 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/analyses/{id}/enrichment": {
+      "post": {
+        "operationId": "post_v1_analyses__id__enrichment",
+        "tags": [
+          "Enrichment"
+        ],
+        "summary": "Compare saved references with official OFAC identifiers",
+        "description": "Fetches official SDN and supplementary remarks. 3 requests/minute and 24/day per organization. Shared source snapshots expire after 6 hours. Stores the latest report separately from scores; failures preserve the prior report. No personal names, ownership inference or indirect exposure. Match status is potential_exact_identifier_match, no_exact_identifier_match_in_snapshot or not_covered. BLCH script hashes are not comparable. Red/Blue are unchanged.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read",
+          "data:read",
+          "analyses:write"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_v1_analyses__id__enrichment",
+        "tags": [
+          "Enrichment"
+        ],
+        "summary": "Read the latest retained official identifier evidence",
+        "description": "Does not fetch sources. Returns source_expired when the snapshot is past its 6-hour freshness window. report_digest is SHA-256 of JSON.stringify(report) in returned property order before adding report_digest and source_expired. File digests cover downloaded source bytes. Reports are tenant-scoped and removed with the analysis.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read",
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/references/batch": {
+      "post": {
+        "operationId": "post_v1_references_batch",
+        "tags": [
+          "Research"
+        ],
+        "summary": "Research up to 25 exact references in one asset",
+        "description": "Read-only batch lookup of retained indexed samples; no collection or score recalculation. Normalizes and deduplicates references. Up to five recent observations per reference, stable created_at/id order. 20 batches/minute per organization. Returns index coverage; no observation is not a clearance or inactivity finding.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "asset": {
+                    "type": "string",
+                    "enum": [
+                      "BTC",
+                      "ETH",
+                      "BLCH",
+                      "USDT",
+                      "USDC"
+                    ]
+                  },
+                  "references": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 25,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  },
+                  "runs_per_reference": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "default": 3
+                  }
+                },
+                "required": [
+                  "asset",
+                  "references"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analyses/{id}/profile": {
+      "get": {
+        "operationId": "get_v1_analyses__id__profile",
+        "tags": [
+          "Research"
+        ],
+        "summary": "Read time, structure and exact typed-amount evidence profile",
+        "description": "Returns source anchors and dataset digest. For legacy runs, derives only the descriptive profile from the retained graph without modifying saved scores.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/analyses/{id}/ml": {
+      "get": {
+        "operationId": "get_v1_analyses__id__ml",
+        "tags": [
+          "Models"
+        ],
+        "summary": "Read Isolation Forest, neighborhood and clustering results",
+        "description": "Returns saved model versions, availability, feature scaling, statistics and correlation. Does not retrain a saved run.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/analyses/{id}/neighbors": {
+      "get": {
+        "operationId": "get_v1_analyses__id__neighbors",
+        "tags": [
+          "Models"
+        ],
+        "summary": "Inspect the three nearest feature neighbors of one reference",
+        "description": "The ten-neighbor mean distance uses the saved asset cohort; three nearest references are retained. Feature neighbors are not transaction counterparties. Small cohorts and older runs explicitly return available=false.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
                 }
               }
             },
@@ -787,7 +1436,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -883,7 +1532,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -956,7 +1605,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1064,7 +1713,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1147,7 +1796,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1245,7 +1894,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1366,7 +2015,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1478,7 +2127,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1574,7 +2223,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1658,7 +2307,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1774,7 +2423,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1864,7 +2513,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -1982,7 +2631,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2067,7 +2716,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2155,7 +2804,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2230,7 +2879,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2329,7 +2978,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2436,7 +3085,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2551,7 +3200,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2659,7 +3308,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2751,7 +3400,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2842,7 +3491,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },
@@ -2941,7 +3590,7 @@
               },
               "X-Porb-Api-Version": {
                 "schema": {
-                  "const": "1.1"
+                  "const": "1.2"
                 }
               }
             },

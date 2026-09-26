@@ -16,7 +16,7 @@ jobs:
           node-version: '24'
       - run: node scripts/build_partner_docs.mjs && git diff --exit-code -- site/developers/openapi.json
       - run: python3 scripts/build_portal_modules.py
-      - run: node --test tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_porb_access_help.mjs tests/test_porb_intelligence.mjs tests/test_space_science.mjs tests/test_system_map.mjs tests/test_system_map_api.mjs
+      - run: node --test tests/test_porb_research.mjs tests/test_porb_enrichment.mjs tests/test_porb_neighbors.mjs tests/test_evidence_profile.mjs tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_porb_access_help.mjs tests/test_porb_intelligence.mjs tests/test_space_science.mjs tests/test_system_map.mjs tests/test_system_map_api.mjs
       - run: node --check site/portal/portal.js
       - run: node --check site/portal/explorer.js
       - run: node --check site/portal/intelligence.js
@@ -24,3 +24,4 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.58.2
       - run: npx playwright install --with-deps webkit
       - run: node scripts/test_porb_browser.mjs
+      - run: node scripts/check_enrichment_browser.mjs

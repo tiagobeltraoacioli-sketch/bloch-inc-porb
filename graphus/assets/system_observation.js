@@ -1,4 +1,5 @@
 // Only committed public evidence is summarized. Availability is not source health.
+import {evidenceProfile} from './evidence_profile.js';
 export function summarizeSample(packet){
   if(!packet)return null;
   const {dataset:d,diagnostics:q}=packet;
@@ -6,7 +7,7 @@ export function summarizeSample(packet){
     anchor:{height:d.anchor.height,hash:d.anchor.hash,finality:d.anchor.finality??null},
     coverage:d.coverage,dataset_sha256:packet.dataset_sha256,
     pages:q.source_pages,references:q.references,records:q.records,transactions:q.transactions,
-    blocks:q.blocks,missing_timestamps:q.records_without_timestamp};
+    blocks:q.blocks,missing_timestamps:q.records_without_timestamp,profile:evidenceProfile(d)};
 }
 
 export function supportsCapturedSample(node){

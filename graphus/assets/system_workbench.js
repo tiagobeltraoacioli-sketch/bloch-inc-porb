@@ -1,5 +1,6 @@
 import {fetchEvidence,mergeEvidence,selectRecords,filteredEvidence,compareEvidence,COLLECTION_LIMITS} from './system_evidence.js';
 import {summarizeSample} from './system_observation.js';
+import {evidenceProfile} from './evidence_profile.js';
 
 export function createEvidenceWorkbench({onObservation=()=>{}}={}){
   const $=id=>document.getElementById(id);
@@ -58,6 +59,7 @@ export function createEvidenceWorkbench({onObservation=()=>{}}={}){
     const{dataset:d,diagnostics:q}=packet;$('capture-result').hidden=false;
     $('capture-metrics').replaceChildren(...[['Source pages',q.source_pages],['References',q.references],['Records',q.records],['Transactions',q.transactions],['Returned blocks',q.blocks],['Missing timestamps',q.records_without_timestamp]].map(([name,value])=>{const box=el('div');box.append(el('span',name),el('strong',value.toLocaleString()));return box;}));
     $('capture-source').replaceChildren(el('strong',d.source),el('p',`${d.asset} / ${d.network} · Highest sampled anchor ${d.anchor.height} · ${d.anchor.hash}`),el('p',d.coverage),el('p',`Finality at this anchor: ${d.anchor.finality||'not supplied'}. Each source page retains its own provenance below.`));
+    const profile=evidenceProfile(d),profileBox=el('details');profileBox.id='capture-evidence-profile';profileBox.append(el('summary','Evidence profile · time, structure and exact record totals'),el('p',profile.interpretation));const profileJson=el('pre',JSON.stringify(profile,null,2));profileBox.append(profileJson);$('capture-source').append(profileBox);
     const blocks=new Map();for(const edge of d.edges)blocks.set(String(edge.block_number),(blocks.get(String(edge.block_number))||0)+1);
     bars('capture-blocks',[...blocks].sort((a,b)=>Number(a[0])-Number(b[0])).slice(-32),block=>{$('filter-from').value=$('filter-to').value=block;recordPage=0;ledger();});
     bars('capture-types',Object.entries(q.record_types),kind=>{$('filter-kind').value=kind;recordPage=0;ledger();});

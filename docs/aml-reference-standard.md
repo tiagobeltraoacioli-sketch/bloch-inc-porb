@@ -1,11 +1,11 @@
 # Graphus / BI-PoRB AML/FT reference standard
 
-This is an engineering and evidence standard for a future service, not a claim of regulatory certification, production coverage, or AML/FT effectiveness. The current deployment has an official OFAC snapshot job, a bounded private Bloch research sample, Ethereum/Bitcoin height probes, offline parsers, synthetic visualizations, and no trained or validated AML model or live score. An unsupervised transaction-shape experiment is research only.
+This is an engineering and evidence standard for a future service, not a claim of regulatory certification, production coverage, or AML/FT effectiveness. The current private portal provides descriptive Red/Blue scores, an unsupervised nearest-neighbor baseline and official OFAC exact-identifier evidence. Public Graphus provides bounded source observations. These are not trained or validated AML classifications; there is no measured AML detection effectiveness. See [the current evidence and API contract](aml-data-enrichment.md).
 
 ## 1. Evidence layers
 
 1. **Chain observation:** raw transaction, output or log, exact units, block/slot, source, finality, reorg and parse revision. A Bitcoin input references a prior output; it does not identify a person or prove wallet ownership.
-2. **Official-source claim:** exact identifier, listing reference, jurisdiction, list version, retrieval time, effective date, expiry, and applicable restrictions. Keep named-person matching in a restricted store. OFAC is connected for private exact-identifier screening only. UN, UK, and EU sources are candidates, not connected.
+2. **Official-source claim:** exact identifier, listing reference, jurisdiction, list version, retrieval time, effective date, expiry, and applicable restrictions. Keep named-person matching in a restricted store. OFAC is connected for private exact-identifier evidence only, with a six-hour portal source freshness window. UN, UK, and EU sources are candidates, not connected.
 3. **Analytic hypothesis:** temporal path, fan-in/out, concentration, dwell time, cycle or pass-through candidate, with alternative explanations and missing-data flags. A FATF red flag prompts review; it is not a guilt label or an automatic reporting decision.
 4. **ML feature and model:** public lawful feature definitions and reviewed non-score values, pinned model/card version, temporal/entity-disjoint evaluation, calibration, drift, uncertainty, and an independent comparison with transparent rules. No AML model is trained yet.
 5. **Human decision:** named reviewer, reason, source context, uncertainty, challenge and correction route. Only an explicitly delegated, identity-verified person may see a future score. Customer action remains the customer's responsibility.

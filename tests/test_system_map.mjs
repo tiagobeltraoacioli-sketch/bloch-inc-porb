@@ -11,7 +11,7 @@ test('module contracts resolve every dependency and active action stays on an ap
     for(const action of actionLinks(node,'BLCH')){const url=new URL(action.href,'https://bloch-graphus.xyz/');assert.ok(['bloch-graphus.xyz','bloch.space','rednblue.space','aml-blochinc.xyz'].includes(url.hostname));assert.equal(url.protocol,'https:');}
   }
   assert.equal(effectiveAsset(MODULES.find(n=>n.id==='usdt-source'),'BTC'),'USDT');
-  assert.equal(MODULES.find(n=>n.id==='list-normal').status,'prototype');assert.equal(MODULES.find(n=>n.id==='review').status,'available');
+  assert.equal(MODULES.find(n=>n.id==='list-normal').status,'available');assert.equal(MODULES.find(n=>n.id==='review').status,'available');
 });
 test('asset, implementation and AML filters combine without exposing unrelated modules',()=>{
   const nodes=MODULES.filter(n=>matchesModule(n,{asset:'BTC',category:'aml',status:'available'}));assert.ok(nodes.length>=2);assert.ok(nodes.every(n=>n.category==='aml'&&n.status==='available'));

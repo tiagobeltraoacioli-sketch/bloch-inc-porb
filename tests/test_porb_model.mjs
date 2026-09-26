@@ -35,3 +35,9 @@ test('transient public reads retry once, redirects are rejected and records rema
   let calls=0;const result=await collect('ETH',1,async(url,options)=>{assert.equal(options.redirect,'manual');calls++;return calls===1?new Response('temporary',{status:502}):Response.json(sourceGraph());});assert.equal(calls,2);assert.equal(result.edges.length,39);
   let redirects=0;await assert.rejects(collect('ETH',1,async()=>{redirects++;return new Response('',{status:302,headers:{location:'https://untrusted.example/'}});}),/public_source_http_302/);assert.equal(redirects,1);
 });
+
+test('eight-page collection increases observations under unchanged record bounds',async()=>{
+  const graph=await collect('ETH',8,async url=>{const u=new URL(url);return Response.json(sourceGraph('ETH',Number(u.searchParams.get('cursor')||100)));});
+  assert.equal(graph.returned_pages,8);assert.equal(graph.edges.length,312);assert.equal(graph.nodes.length,40);
+  await assert.rejects(collect('ETH',9),/invalid_collection_parameters/);
+});

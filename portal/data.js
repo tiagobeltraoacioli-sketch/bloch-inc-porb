@@ -39,7 +39,7 @@ export function mergePage(previous,page,asset){
     snapshots:[...(previous?.snapshots||[]),{anchor:page.anchor,scope:page.scope,coverage:page.coverage,retrieved_at:page.retrieved_at,source:page.source}],next_cursor:page.next_cursor??null,complete_chain_history:false};
 }
 export async function collect(asset,pages,fetcher=fetch){
-  requireValue(Object.hasOwn(ASSETS,asset)&&Number.isInteger(pages)&&pages>=1&&pages<=4,'invalid_collection_parameters');
+  requireValue(Object.hasOwn(ASSETS,asset)&&Number.isInteger(pages)&&pages>=1&&pages<=8,'invalid_collection_parameters');
   let graph=null,cursor=null,stopped=null;
   for(let i=0;i<pages;i++){
     const url=new URL('/api/chain/network',GRAPHUS);url.searchParams.set('asset',asset);if(cursor!==null)url.searchParams.set('cursor',cursor);

@@ -8,15 +8,17 @@ The user requested an invitation-only portal for Bitcoin, Ethereum and Bloch, wi
 - Owners create organizations for research, exchanges, banks, government and other market participants. Sector is descriptive metadata, not a permission grant.
 - Owners/admins generate API keys, show secrets once, choose scopes and a 1–90 day expiry, and revoke access immediately. Inviting an administrator requires an owner. Sensitive administration requires password reauthentication.
 - Graphus supplies BTC, ETH, BLCH and Ethereum USDT/USDC connection records. Space supplies network overviews and time series. Upstream origins are fixed in `portal/data.js`.
-- A collection reads 1–4 source pages, up to 1,200 references and 4,000 records. Capacity stops preserve completed pages with an explicit reason. Source errors and conflicting events fail closed; repeated events are deduplicated and conflicting block hashes rejected.
+- A collection reads 1–8 source pages, up to 1,200 references and 4,000 records. Capacity stops preserve completed pages with an explicit reason. Source errors and conflicting events fail closed; repeated events are deduplicated and conflicting block hashes rejected.
 - The latest 50 analyses per organization preserve exact source amounts, model version, dataset SHA-256, observation times, block anchors and individual wallet/script results. Ordered database parts keep each value below D1's size limit; deletion cascades to those parts.
 - Collection is on request, not an exhaustive background index. Space and Graphus windows are generated separately; their heads, graph samples and telemetry are not one atomic cross-network snapshot.
 - The interactive graph supports pointer/keyboard selection of references and directed connections, pan/zoom, selected neighborhoods, and search across all loaded references and transaction hashes (including hashes stored only on account-chain records). Selected references synchronize with the score scatter/table. Paginated records retain exact amounts, direction, transaction IDs and block anchors.
 - Drawing is bounded to 160 references and 600 directed connections, with selected references and neighbors prioritized. Search covers the entire saved sample; record inspection is paginated in groups of 20. Missing search results mean only absence from that sample. Explicit links query a public reference in Graphus or Oculum; private scores, run IDs and credentials are never included in those links.
 
+See [official-source enrichment, nearest-neighbor ML and the expanded partner API](aml-data-enrichment.md) for this release.
+
 ## Model contract
 
-`porb-observation-1.0.0` returns two independent descriptive indices on a 0–100 scale, without identity labels or legal, AML, credit or ownership classifications.
+`porb-observation-1.1.0` returns two independent descriptive indices on a 0–100 scale, without identity labels or legal, AML, credit or ownership classifications.
 
 **Red:** Isolation Forest isolation score × 100, fitted separately to each saved asset sample. Configuration: 64 trees, sample size up to 64, seed 20260924; at least 20 wallets/scripts and three distinct feature vectors. Ineligible cohorts return `red: null`. Shorter average isolation paths give higher indices. Results are sample-relative and are not calibrated across networks or collection windows.
 

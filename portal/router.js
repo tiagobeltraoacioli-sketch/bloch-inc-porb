@@ -4,12 +4,14 @@ import {VERSION,MODEL_CARD,scoreGraph} from './model.js';
 import {collect,overview,science} from './data.js';
 import {intelligenceRoute,indexStatements,readAnalysis,watchStatements} from './intelligence.js';
 import {moduleRoute,moduleQuery} from './modules.js';
+import {enrichmentRoute} from './enrichment.js';
+import {researchRoute} from './research.js';
 
 export async function handlePortal({request,env={},waitUntil,fetcher=fetch}){
   const requestId=crypto.randomUUID();
   const response=await route({request,env,waitUntil,fetcher});
   response.headers.set('x-request-id',requestId);
-  response.headers.set('x-porb-api-version','1.1');
+  response.headers.set('x-porb-api-version','1.2');
   return response;
 }
 async function route({request,env,waitUntil,fetcher}){
@@ -17,7 +19,7 @@ async function route({request,env,waitUntil,fetcher}){
   try{
     requireValue(url.pathname.startsWith('/api/porb/'),'not_found',404);
     requireValue(['GET','POST','DELETE'].includes(method),'method_not_allowed',405);
-    const allowed=moduleQuery(path)||(path==='/v1/science'?['network']:path==='/v1/references'?['asset','reference','limit','cursor']:['/v1/cases','/v1/watchlists','/v1/observations'].includes(path)?['limit','cursor']:[]);
+    const allowed=moduleQuery(path)||(/^\/v1\/analyses\/[0-9a-f-]{36}\/neighbors$/.test(path)?['reference']:path==='/v1/science'?['network']:path==='/v1/references'?['asset','reference','limit','cursor']:['/v1/cases','/v1/watchlists','/v1/observations'].includes(path)?['limit','cursor']:[]);
     requireValue([...url.searchParams.keys()].every(k=>allowed.includes(k)&&url.searchParams.getAll(k).length===1),'unexpected_parameters');
     if(method!=='GET'&&!request.headers.has('authorization'))requireValue(request.headers.get('origin')===url.origin&&request.headers.get('x-porb-action')==='1','same_origin_action_required',403);
     if(path==='/auth/config'&&method==='GET')return json({enabled:Boolean(env.PORB_DB&&env.PORB_AUTH_PEPPER),access:'invitation-only',networks:['Bitcoin','Ethereum','Bloch'],model:VERSION});
@@ -35,6 +37,8 @@ async function route({request,env,waitUntil,fetcher}){
     if(principal.type==='key')await statement(env.PORB_DB,'UPDATE api_keys SET last_used_at=? WHERE id=?',Date.now(),principal.key_id).run();
     const administration=await adminRoute(path,request,env,principal);if(administration)return administration;
     const module=await moduleRoute(path,request,env,principal,fetcher);if(module)return module;
+    const enrichment=await enrichmentRoute(path,request,env,principal,fetcher);if(enrichment)return enrichment;
+    const research=await researchRoute(path,request,env,principal);if(research)return research;
     const intelligence=await intelligenceRoute(path,request,env,principal);if(intelligence)return intelligence;
     if(path==='/v1/model'&&method==='GET'){authorize(principal,'scores:read');return json(MODEL_CARD);}
     if(path==='/v1/overview'&&method==='GET'){

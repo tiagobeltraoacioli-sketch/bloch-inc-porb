@@ -1,3 +1,4 @@
+import {balanceProfile} from './evidence_profile.js';
 const canvas=document.getElementById('oculum-canvas');
 const context=canvas.getContext('2d');
 const assetSelect=document.getElementById('oculum-asset');
@@ -162,6 +163,7 @@ function renderDetail(record){
   graphLink.href=graphUrl.pathname+graphUrl.search;
   graphLink.textContent='Open this identifier in the source constellation ↗';
   detail.append(graphLink);
+  const research=document.createElement('a');research.className='oculum-graph-link';research.href='https://rednblue.space/portal/?view=references&'+new URLSearchParams({asset:record.asset,reference:record.address});research.textContent='Research this reference in the private workspace ↗';research.target='_blank';research.rel='noopener noreferrer';detail.append(research);
   if(record.limitations.length){
     const heading=document.createElement('h4');heading.textContent='Source limitations';
     const notes=document.createElement('ul');
@@ -382,6 +384,14 @@ function renderSampleAnalytics(items){
   const A=window.GraphusAnalytics,asset=assetSelect.value.toUpperCase(),sum=items.reduce((n,r)=>n+BigInt(r.baseUnits),0n),ranked=[...items].sort((a,b)=>BigInt(a.baseUnits)>BigInt(b.baseUnits)?-1:BigInt(a.baseUnits)<BigInt(b.baseUnits)?1:0);
   const top=ranked[0],summary=document.getElementById('oculum-sample-summary'),bars=document.getElementById('oculum-balance-bars');
   summary.textContent=items.length?`${items.length} observed identifiers · sum ${formattedAmount(sum.toString(),asset)} · largest share ${sum?(A.ratio(BigInt(top.baseUnits),sum)*100).toFixed(2):'0.00'}%. Shares describe these returned identifiers only; anchors may differ.`:'No real balances collected for this asset.';
+  document.getElementById('oculum-evidence-profile')?.remove();
+  if(items.length){
+    const box=document.createElement('details');box.id='oculum-evidence-profile';const heading=document.createElement('summary');heading.textContent='Balance concentration and observation quality';box.append(heading);
+    try{const profile=balanceProfile(items),facts=document.createElement('dl');facts.className='balance-profile-facts';
+      for(const [label,value] of [['Top five share',profile.top_five_share===null?'Unavailable':(profile.top_five_share*100).toFixed(2)+'%'],['Concentration HHI',profile.concentration_hhi===null?'Unavailable':profile.concentration_hhi.toFixed(4)+' / 1'],['Block alignment',profile.shared_block_anchor?'One shared block anchor':profile.distinct_block_anchors+' distinct anchors · '+profile.unanchored_records+' unanchored'],['Retrieval span',profile.retrieval_span_seconds===null?'Unavailable':profile.retrieval_span_seconds+' seconds']]){const row=document.createElement('div'),term=document.createElement('dt'),valueNode=document.createElement('dd');term.textContent=label;valueNode.textContent=value;row.append(term,valueNode);facts.append(row);}
+      const note=document.createElement('p');note.textContent=profile.interpretation;const raw=document.createElement('details'),rawHeading=document.createElement('summary'),body=document.createElement('pre');rawHeading.textContent='Exact profile JSON';body.textContent=JSON.stringify(profile,null,2);raw.append(rawHeading,body);box.append(facts,note,raw);
+    }catch(error){const note=document.createElement('p');note.textContent=error.message;box.append(note);}summary.after(box);
+  }
   bars.replaceChildren(...ranked.slice(0,12).map(record=>{
     const row=document.createElement('button');row.type='button';row.className='oculum-balance-bar';row.title=`${record.address}: ${formattedAmount(record.baseUnits,asset)}`;
     const label=document.createElement('span');label.textContent=record.address.slice(0,10)+'…'+record.address.slice(-6);
