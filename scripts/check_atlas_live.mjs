@@ -99,7 +99,7 @@ async function publicChecks() {
     ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css'].map(name => [privateOrigin, '/graphus/assets/' + name, 'site/graphus/assets/' + name]),
     ...['atlas_motifs.js','atlas_motifs_ui.js','atlas_motifs.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
-    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
+    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css','atlas_timeline_graph.js','atlas_timeline_graph_ui.js'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
@@ -223,6 +223,9 @@ async function browserChecks() {
   const {report_sha256:timelineHash,...timelineBody}=timeline;assert.equal(hash(Buffer.from(JSON.stringify(timelineBody))),timelineHash);
   assert.equal(new Set(timeline.events.map(event=>event.event_id)).size,timeline.events.length);
   const timelineCsv=page.waitForEvent('download');await page.click('[data-time=csv]');const csv=await readFile(await(await timelineCsv).path(),'utf8');assert.ok(csv.includes(timelineHash));assert.equal(csv.split('\r\n').length,timeline.events.length+1);
+  await page.click('[data-time=network] > summary');await page.locator('[data-graph=diagram] svg').waitFor();
+  const graphCsv=page.waitForEvent('download');await page.click('[data-graph=csv]');const graphText=await readFile(await(await graphCsv).path(),'utf8');assert.ok(graphText.includes(timelineHash));assert.equal(graphText.split('\r\n').length,timeline.events.length+1);
+  note('Production temporal graph renders the retained ETH connections and exports all events with original report hashes.');
   note(`Production activity timeline reused the ETH capture and exported ${timeline.events.length} exact events with matching report and dataset hashes.`);
   const event = packet.dataset.edges.find(e => e.kind === 'native_value' && e.from !== e.to && e.block_time);
   assert.ok(event, 'A timed direct ETH event is available for the path check');

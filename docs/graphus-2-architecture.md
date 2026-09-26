@@ -49,6 +49,8 @@ Use exact integer units per asset, explicit decimals and valuation timestamp whe
 
 The graph map should expose a time slider, typed edge filters, direction/amount/asset filters, path limit, shared-service hub warnings, source card, finality, evidence strength, and alternative explanations. It must visually separate **observation**, **official exact match**, **third-party attribution**, **community allegation**, **model hypothesis**, and **human decision**. Public address search and lawful chain/ML details are planned, while private cases and scores require tenant authorization and audit logging. Public features require source-rights and data-protection review and must not trivially reveal the protected score.
 
+The [Atlas timeline graph](graphus-data-atlas.md#graph-linked-to-the-timeline) now links time-range and event-search selection to typed directed connections over a bounded, verified report. Exact reference and direction filters, per-connection event inspection, shape distinctions for addresses/scripts/transactions and all-page CSV also work after timeline retention. Diagrams page eight connections at a time and disclose their bounds. Their layout and grouped values do not infer ownership, execution order, conserved funds or complete-chain coverage.
+
 ## Deep analytics engine
 
 1. **Deterministic features:** bounded time-window fan-in/out, velocity, dwell time, pass-through, peel-chain candidate, cyclic flow, asset conversion, concentration, burstiness, repeated micro-transfers, bridge round trips, source freshness, and graph degree/hub status. Features carry applicability and missingness; a missing trace is not zero activity.

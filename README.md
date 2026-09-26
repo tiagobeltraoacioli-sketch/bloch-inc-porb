@@ -16,7 +16,7 @@ Private timeline, path, pattern and comparison results can be saved as immutable
 
 The Atlas also explores return cycles, incoming/outgoing sequences, fan-in/fan-out windows and repeated directed pairs. Public captures and private saved analyses expose the exact events, bounded diagrams, query limits and reproducible JSON without inferring ownership or continuity of funds.
 
-The interactive activity timeline adds minute/hour/day bins, keyboard and slider selection, exact-reference/direction filters, event inspection and complete JSON or selected-event CSV. Empty intervals retain unknown coverage; integer sums keep input/output types and directions separate. Both the public and private views reuse their captured evidence and verify the report checksum before display.
+The interactive activity timeline adds minute/hour/day bins, keyboard and slider selection, exact-reference/direction filters, event inspection and complete JSON or selected-event CSV. Its linked graph explores typed directed connections, exact reference focus, all-page event exports and retained-report evidence with separate address/script/transaction shapes. Empty intervals retain unknown coverage; integer sums keep input/output types and directions separate. Both the public and private views reuse their captured evidence and verify the report checksum before display.
 
 Organization administrators can inspect retained Atlas access events by UTC window, exact action, credential or resource. Signed snapshot pagination keeps new insertions from shifting pages, and complete JSON/CSV exports include a verifiable JSON payload checksum. This audit workspace requires an owner/administrator session and stays private to the organization.
 
