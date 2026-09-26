@@ -15,12 +15,13 @@ jobs:
         with:
           node-version: '24'
       - run: python3 scripts/build_portal_modules.py
-      - run: node --test tests/test_network_graph.mjs tests/test_atlas.mjs tests/test_porb_atlas.mjs tests/test_atlas_context.mjs tests/test_atlas_comparison.mjs tests/test_atlas_comparison_view.mjs tests/test_atlas_paths.mjs tests/test_atlas_motifs.mjs tests/test_atlas_reports.mjs tests/test_atlas_motif_reports.mjs tests/test_atlas_cases.mjs tests/test_atlas_reviews.mjs tests/test_graphus_api.mjs tests/test_evidence_graph.mjs
+      - run: node --test tests/test_network_graph.mjs tests/test_atlas.mjs tests/test_porb_atlas.mjs tests/test_atlas_context.mjs tests/test_atlas_comparison.mjs tests/test_atlas_comparison_view.mjs tests/test_atlas_paths.mjs tests/test_atlas_motifs.mjs tests/test_atlas_reports.mjs tests/test_atlas_motif_reports.mjs tests/test_atlas_cases.mjs tests/test_atlas_reviews.mjs tests/test_atlas_audit.mjs tests/test_atlas_audit_view.mjs tests/test_graphus_api.mjs tests/test_evidence_graph.mjs
       - run: npm install --no-save --package-lock=false playwright@1.58.2
       - run: npx playwright install --with-deps webkit
       - run: node scripts/check_atlas_browser.mjs
       - run: node scripts/check_atlas_cases_browser.mjs
       - run: node scripts/check_atlas_reviews_browser.mjs
+      - run: node scripts/check_atlas_audit_browser.mjs
       - run: node scripts/check_atlas_motifs_browser.mjs
       - run: node scripts/check_atlas_motif_reports_browser.mjs
       - run: node scripts/check_atlas_report_viewers_browser.mjs

@@ -3,6 +3,7 @@ import {comparisonWorkspace} from './atlas-comparison.js';
 import {reportWorkspace} from './atlas-reports.js';
 import {caseWorkspace} from './atlas-cases.js';
 import {reviewWorkspace} from './atlas-reviews.js';
+import {auditWorkspace} from './atlas-audit.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
 import {mountAtlasMotifs} from '/graphus/assets/atlas_motifs_ui.js';
 const $ = id => document.getElementById(id);
@@ -26,7 +27,7 @@ function lock(message, login = false) {
   comparison.reset();
   pathWorkspace.reset();
   motifWorkspace.reset();
-  reports.reset(); dossiers.reset(); reviews.reset(); selectedCase = null;
+  reports.reset(); dossiers.reset(); reviews.reset(); accessAudit.reset(); selectedCase = null;
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
   for (const id of ['atlas-reference-search', 'record-search']) $(id).value = '';
@@ -63,6 +64,7 @@ const dossiers = caseWorkspace(request, {initialCase:selectedCase, review:review
 const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossiers.setReports(rows,complete);reviews.setReports(rows,complete);});
 const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
+const accessAudit = auditWorkspace(request);
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('motifs',report));
 function download(name, value) {
@@ -181,7 +183,7 @@ async function load() {
       const button = el('button', 'Revoke grant'); button.onclick = async () => {button.disabled = true; try {await api(`grants/${grant.id}/revoke`, 'POST', {}); dismissToken(); await load(); note('private-grant-status', 'Grant revoked immediately.');} catch (error) {note('private-grant-status', error.message); button.disabled = false;}};
       card.append(button); $('private-grant-list').append(card);
     }
-    dossiers.sync(data); reports.sync(data); renderSelection(); return await reviews.sync(data);
+    dossiers.sync(data); reports.sync(data); accessAudit.sync(data); renderSelection(); return await reviews.sync(data);
   } catch (error) {if (data) note('private-status', `Refresh failed: ${error.message}. Previously loaded records remain visible.`); else {note('private-status', error.message); if (error.status !== 401) $('private-reload').hidden = false;} throw error;}
 }
 
@@ -225,7 +227,7 @@ $('private-source-form').addEventListener('submit', async event => {
 });
 function expireVisibleRecords() {
   if (!data || document.hidden) return;
-  renderRecords(); renderReviews(); reports.expire(); dossiers.expire(); reviews.expire();
+  renderRecords(); renderReviews(); reports.expire(); dossiers.expire(); reviews.expire(); accessAudit.expire();
   if (sourceExpiry !== null && Date.now() >= sourceExpiry) {sourceExpiry = null; $('private-source-output').textContent = ''; $('private-source-output').hidden = true; note('private-source-status', 'The displayed snapshot expired. Run the lookup again.');}
 }
 setInterval(expireVisibleRecords, 30000);

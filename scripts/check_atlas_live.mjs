@@ -32,6 +32,8 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
+  await api(anonymous, '/v1/atlas/audit', {status: 401});
+  await api(anonymous, '/v1/atlas/audit/export', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {method:'POST',body:{kind:'motifs'},status:401});
   await api(anonymous, '/v1/atlas/reviews', {status: 401});
@@ -103,6 +105,7 @@ async function publicChecks() {
     [privateOrigin, '/portal/atlas-reports.js', 'site/portal/atlas-reports.js'],
     [privateOrigin, '/portal/atlas-cases.js', 'site/portal/atlas-cases.js'],
     [privateOrigin, '/portal/atlas-reviews.js', 'site/portal/atlas-reviews.js'],
+    [privateOrigin, '/portal/atlas-audit.js', 'site/portal/atlas-audit.js'],
     [privateOrigin, '/portal/intelligence.js', 'site/portal/intelligence.js'],
     [privateOrigin, '/portal/atlas.css', 'site/portal/atlas.css'],
     [privateOrigin, '/portal/', 'site/portal/index.html'],
@@ -240,6 +243,9 @@ async function browserChecks() {
   await privatePage.setViewportSize({width: 390, height: 844});
   assert.ok(await privatePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Private mobile layout');
   if (publicOnly) {
+    assert.ok(await privatePage.isHidden('#audit-workspace'), 'Anonymous audit workspace hidden');
+    assert.ok(await privatePage.isHidden('#audit-link'), 'Anonymous audit navigation hidden');
+    assert.equal(await privatePage.locator('#audit-list > article').count(), 0);
     await privatePage.click('#private-login');
     await privatePage.locator('#gate:visible').waitFor();
     assert.equal(new URL(privatePage.url()).searchParams.get('view'), 'atlas');
