@@ -32,9 +32,676 @@
     },
     {
       "name": "Graphus"
+    },
+    {
+      "name": "Atlas"
     }
   ],
   "paths": {
+    "/v1/atlas/private": {
+      "get": {
+        "operationId": "get_v1_atlas_private",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Read organization Data Atlas records and access context",
+        "description": "Up to 200 unexpired private governance records and 100 case summaries. Only administrator sessions receive the latest 50 access audit events. Session identity is omitted for API keys. The observation model card also requires scores:read; public AML scores are never returned.",
+        "x-required-scopes": [
+          "cases:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/atlas/records": {
+      "post": {
+        "operationId": "post_v1_atlas_records",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Save a private note, processing ground, correction or review",
+        "description": "200 records per organization, including expired records until an administrator purges them. 30 writes/minute. Required purpose, lawful basis and source rights are user declarations, not legal validation. Expiry blocks reads; manual administrative purge physically deletes expired records.",
+        "x-required-scopes": [
+          "cases:write"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "annotation",
+                      "processing",
+                      "correction",
+                      "review"
+                    ]
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "lawful_basis": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "source_licence": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "reviewed",
+                      "resolved"
+                    ]
+                  },
+                  "retention_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  }
+                },
+                "required": [
+                  "kind",
+                  "subject",
+                  "body",
+                  "purpose",
+                  "lawful_basis",
+                  "source_licence",
+                  "status",
+                  "retention_days"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/atlas/records/{id}": {
+      "post": {
+        "operationId": "post_v1_atlas_records__id_",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Update an Atlas record with optimistic revision control",
+        "description": "Requires the current revision and an unexpired record in this organization. Revision increments on success. Expiry is reset from this write according to retention_days; update events are audited. A conflict returns 409 without overwriting a newer revision.",
+        "x-required-scopes": [
+          "cases:write"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "annotation",
+                      "processing",
+                      "correction",
+                      "review"
+                    ]
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "lawful_basis": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "source_licence": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 300
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "reviewed",
+                      "resolved"
+                    ]
+                  },
+                  "retention_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "kind",
+                  "subject",
+                  "body",
+                  "purpose",
+                  "lawful_basis",
+                  "source_licence",
+                  "status",
+                  "retention_days",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_v1_atlas_records__id_",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Delete a private Atlas record",
+        "description": "Requires the current revision and organization scope; audit event remains after deletion.",
+        "x-required-scopes": [
+          "cases:write"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/atlas/sources": {
+      "get": {
+        "operationId": "get_v1_atlas_sources",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Inspect official reference sources and identifier formats",
+        "description": "Lists the fixed UN, UK and EU reference adapters without downloading their snapshots.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_atlas_sources",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Look up exact official listing references",
+        "description": "Reads official XML, retaining reference numbers only. Includes source digest, byte count, parser and six-hour expiry. 6 lookups/minute. A reference match does not link a name, person, wallet or owner to the listing. Unavailable, malformed, oversize or redirected sources fail closed; failed refreshes do not return expired snapshots.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "un-consolidated",
+                      "uk-sanctions",
+                      "eu-financial-sanctions"
+                    ]
+                  },
+                  "references": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 25,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "references"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/capabilities": {
       "get": {
         "operationId": "get_v1_capabilities",
@@ -2867,6 +3534,228 @@
           }
         ],
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/graphus/atlas/schema": {
+      "get": {
+        "operationId": "get_v1_graphus_atlas_schema",
+        "tags": [
+          "Graphus"
+        ],
+        "summary": "Graphus · atlas/schema",
+        "description": "Versioned 84-field registry with implementation states, asset identities, methods and limits. Fixed source gateway; keys/cookies are never forwarded. Shared 60 upstream reads/minute per organization. Upstream errors remain errors.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/graphus/atlas/analyze": {
+      "get": {
+        "operationId": "get_v1_graphus_atlas_analyze",
+        "tags": [
+          "Graphus"
+        ],
+        "summary": "Graphus · atlas/analyze",
+        "description": "asset required. Descriptive fields over one bounded source page. Optional UTC start/end, exact reference, minimum base units, kind and max_hops (1–6). No private records or scores. Fixed source gateway; keys/cookies are never forwarded. Shared 60 upstream reads/minute per organization. Upstream errors remain errors.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "asset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BTC",
+                "ETH",
+                "BLCH",
+                "USDT",
+                "USDC"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "max_hops",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minimum",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success",

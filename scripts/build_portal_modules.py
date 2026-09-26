@@ -1,6 +1,7 @@
 """Mount the repository's Graphus UI in the authenticated portal (no copied backend/secrets)."""
 from pathlib import Path
 import shutil
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "graphus"
@@ -9,7 +10,7 @@ PAGES = ("app", "map", "constellation", "oculum", "analytics", "catalog", "daas"
 
 
 def adapted(text):
-    return (text.replace("/api/", "/api/porb/v1/graphus/")
+    return (re.sub(r"/api/(?!porb/)", "/api/porb/v1/graphus/", text)
             .replace("https://rednblue.space/portal/", "/portal/")
             .replace("https://rednblue.space/developers/", "/developers/")
             .replace("https://bloch.space/", "/portal/?view=science")

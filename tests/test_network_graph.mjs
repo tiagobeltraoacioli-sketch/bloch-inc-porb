@@ -84,6 +84,8 @@ test('USDT and USDC logs stay contract-scoped and preserve self transfers once',
   for(const asset of ['USDT','USDC']){
     const result=await queryNetworkGraph({asset,env,fetcher:ethereumFixture(asset),now});assert.equal(result.status,200);
     assert.equal(result.body.scope.contract,contracts[asset]);assert.equal(result.body.edges.length,2);
+    assert.equal(result.body.scope.source_head_height,100);assert.equal(result.body.scope.source_head_kind,'finalized');
+    assert.equal(result.body.edges[0].block_time,new Date(Number(BigInt('0x6b49d200'))*1000).toISOString());
     assert.equal(result.body.edges[1].from,result.body.edges[1].to);
     assert.equal(result.body.edges[0].amount_base_units,'9007199254740993');
     assert.equal(A.analyze(A.normalize(result.body)).groups[0].amount,'18014398509481986');

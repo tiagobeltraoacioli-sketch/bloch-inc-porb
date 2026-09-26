@@ -5,6 +5,7 @@ import {queryBlochHistoryPage} from '../../chain/bloch-chain.js';
 import {queryNetworkGraph} from '../../chain/network-graph.js';
 import {queryBalanceSample} from '../../chain/balance-sample.js';
 import {systemMapManifest,PUBLIC_READ_CORS} from '../../chain/system-map-api.js';
+import {atlasPublicRoute} from '../../chain/atlas-api.js';
 
 // Bounded recent and cursor-page cache; failed responses are never retained.
 const networkGraphCache=new Map();
@@ -90,6 +91,15 @@ export async function onRequest({request,env}) {
   const path=url.pathname.replace(/^\/api\/?/,'').replace(/\/$/,'');
   const method=request.method;
   const secure=url.protocol==='https:';
+  const atlas=await atlasPublicRoute(path,request,async(asset,cursor)=>{
+    const key=`${asset}:${cursor??'latest'}`;let entry=networkGraphCache.get(key);
+    if(!entry||entry.until<=Date.now()){
+      if(networkGraphCache.size>=32)networkGraphCache.delete(networkGraphCache.keys().next().value);
+      entry={until:Date.now()+30000,promise:queryNetworkGraph({asset,cursor,env})};networkGraphCache.set(key,entry);
+      entry.promise.then(result=>{if(result.status!==200&&networkGraphCache.get(key)===entry)networkGraphCache.delete(key);},()=>{if(networkGraphCache.get(key)===entry)networkGraphCache.delete(key);});
+    }return entry.promise;
+  });
+  if(atlas)return atlas;
   if(['system/map','chain/network'].includes(path)){
     if(method==='OPTIONS')return new Response(null,{status:204,headers:PUBLIC_READ_CORS});
     if(method!=='GET')return json({error:'read_only'},405,{...PUBLIC_READ_CORS,Allow:'GET, OPTIONS'});
@@ -153,6 +163,7 @@ export async function onRequest({request,env}) {
     transaction_coverage:'bounded-on-demand-public-chain-samples',
     initial_assets:INITIAL_ASSETS,
     query_capabilities:{
+      data_atlas:{schema:'/api/atlas/schema',analysis:'/api/atlas/analyze',assets:['BTC','ETH','USDT','USDC','BLCH'],scope:'bounded-source-reported-descriptive-features',private_fields:'authenticated-portal-only',aml_scores:false},
       recent_network_graph:{endpoint:'/api/chain/network',assets:['BTC','ETH','USDT','USDC','BLCH'],scope:'bounded-source-reported-samples',pagination:'next_cursor',independently_verified:false},
       observed_balance_sample:{endpoint:'/api/chain/balances',assets:['BTC','ETH','USDT','USDC'],limit:16,ethereum_anchor:'one-source-finalized-block-per-batch',bitcoin_anchor:'unpinned-confirmed-aggregates',holder_identity:false},
       address_search:'synthetic-browser-fixture-and-bounded-source-reported-query',

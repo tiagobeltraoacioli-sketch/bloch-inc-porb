@@ -1,6 +1,7 @@
 import {writeFile,mkdir} from 'node:fs/promises';
 import {MODULE_ROUTES} from '../portal/modules.js';
 import {SCOPES} from '../portal/security.js';
+import {registerAtlasEndpoints} from './atlas_openapi.mjs';
 
 const string={type:'string'},uuid={type:'string',format:'uuid'},asset={type:'string',enum:['BTC','ETH','BLCH','USDT','USDC']};
 const object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
@@ -17,6 +18,7 @@ function endpoint(path,method,summary,scopes,{body,parameters=[],description='',
   paths[path]??={};paths[path][method]=operation;
 }
 const reading=['analyses:read','scores:read'];
+registerAtlasEndpoints(endpoint);
 endpoint('/v1/capabilities','get','Inspect supported assets, limits and this key’s granted scopes',['data:read'],{tag:'Research',description:'No source queries. Describes installed capabilities and the current credential permissions, not source health.'});
 endpoint('/v1/overview','get','Connected network observations',['data:read']);
 endpoint('/v1/science','get','Time series and historical model evaluation',['data:read'],{parameters:[query('network',{type:'string',enum:['bitcoin','ethereum','bloch']},true)],tag:'Models'});
@@ -47,6 +49,8 @@ endpoint('/v1/watchlists/evaluate','post','Evaluate watchlists against one retai
 endpoint('/v1/observations','get','Read the observation inbox',['watchlists:read',...reading],{parameters:pages,tag:'Watchlists',description:'Latest 500 matches per organization, including reviewed matches. Returns {items,next_cursor,retention,coverage}. Snapshot fields survive source-analysis retention; the source graph may no longer be available.'});
 endpoint('/v1/observations/{id}/review','post','Mark an observation as reviewed',['watchlists:write'],{body:object({}),tag:'Watchlists'});
 const routeNotes={
+  'atlas/schema':'Versioned 84-field registry with implementation states, asset identities, methods and limits.',
+  'atlas/analyze':'asset required. Descriptive fields over one bounded source page. Optional UTC start/end, exact reference, minimum base units, kind and max_hops (1–6). No private records or scores.',
   'system/map':'Module registry, implementation/access states, workflow and data contracts.',
   'daas/manifest':'Public Graphus capability manifest. Any prototype/planned status remains unchanged by portal aggregation.',
   'chain/network':'Bounded network page. asset required. Feed next_cursor into cursor for the next page. No score or ownership label.',
@@ -57,9 +61,9 @@ const routeNotes={
   'chain/holders':'asset=BLCH required. Up to 64 indexed positive script balances, without identities.',
   'chain/balances':'asset and comma-separated addresses required; 1–16 BTC/ETH/USDT/USDC addresses. Anchoring and source limitations are returned.',
 };
-const required={ 'chain/network':['asset'],'chain/wallet':['asset','network','address'],'chain/activity':['asset','address'],'chain/transaction-receipt':['hash','expected_block','expected_hash','expected_index'],'chain/bloch-history':['address'],'chain/holders':['asset'],'chain/balances':['asset','addresses']};
+const required={ 'atlas/analyze':['asset'],'chain/network':['asset'],'chain/wallet':['asset','network','address'],'chain/activity':['asset','address'],'chain/transaction-receipt':['hash','expected_block','expected_hash','expected_index'],'chain/bloch-history':['address'],'chain/holders':['asset'],'chain/balances':['asset','addresses']};
 for(const [route,names] of Object.entries(MODULE_ROUTES))endpoint('/v1/graphus/'+route,'get','Graphus · '+route,['data:read'],{tag:'Graphus',parameters:names.map(name=>query(name,name==='asset'?asset:string,required[route]?.includes(name)||false)),description:routeNotes[route]+' Fixed source gateway; keys/cookies are never forwarded. Shared 60 upstream reads/minute per organization. Upstream errors remain errors.'});
 const errors={400:'Invalid JSON, reference, parameters or fields',401:'Missing/expired/revoked authentication',403:'Required scope, role or same-origin action missing',404:'Resource unavailable in this organization',409:'Capacity, state or conflict',413:'Request body exceeds 8 KiB',422:'Collection exceeds supported bounds',429:'Rate limit; honor Retry-After in seconds',502:'Public source failed or returned inconsistent data',503:'Service unavailable'};
-const doc={openapi:'3.1.0',info:{title:'Bloch Inc Unified Intelligence — Partner API',version:'1.2.0',description:'Private BI-PoRB, investigations, observation watchlists and Graphus source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal.'},servers:[{url:'/api/porb',description:'Same host as this documentation. Production currently rednblue.space.'}],tags:['Analysis','Models','Research','Investigations','Watchlists','Enrichment','Graphus'].map(name=>({name})),paths,components:{securitySchemes:{PartnerKey:{type:'http',scheme:'bearer',bearerFormat:'porb_<64 hex characters>',description:'Generated by an organization owner/admin in Access & API. All scopes in x-required-scopes are required. Send only through Authorization, never URLs.'}},schemas:{Error:object({error:string})},responses:Object.fromEntries(Object.entries(errors).map(([code,description])=>[code,{description,headers:code==='429'?{'Retry-After':{schema:{type:'integer'}}}:{},content:{'application/json':{schema:{$ref:'#/components/schemas/Error'}}}}]))},'x-available-scopes':SCOPES};
+const doc={openapi:'3.1.0',info:{title:'Bloch Inc Unified Intelligence — Partner API',version:'1.2.0',description:'Private BI-PoRB, investigations, observation watchlists and Graphus source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal.'},servers:[{url:'/api/porb',description:'Same host as this documentation. Production currently rednblue.space.'}],tags:['Analysis','Models','Research','Investigations','Watchlists','Enrichment','Graphus','Atlas'].map(name=>({name})),paths,components:{securitySchemes:{PartnerKey:{type:'http',scheme:'bearer',bearerFormat:'porb_<64 hex characters>',description:'Generated by an organization owner/admin in Access & API. All scopes in x-required-scopes are required. Send only through Authorization, never URLs.'}},schemas:{Error:object({error:string})},responses:Object.fromEntries(Object.entries(errors).map(([code,description])=>[code,{description,headers:code==='429'?{'Retry-After':{schema:{type:'integer'}}}:{},content:{'application/json':{schema:{$ref:'#/components/schemas/Error'}}}}]))},'x-available-scopes':SCOPES};
 const target=new URL('../site/developers/',import.meta.url);await mkdir(target,{recursive:true});await writeFile(new URL('openapi.json',target),JSON.stringify(doc,null,2)+'\n');
 console.log(`Documented ${Object.values(paths).reduce((n,p)=>n+Object.keys(p).length,0)} partner operations.`);

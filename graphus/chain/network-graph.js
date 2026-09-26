@@ -23,7 +23,7 @@ function graph(asset,source,now){
   return {nodes,edges,
     reference(value,kind='address'){const id=`${asset}:${kind}:${value}`;if(!nodes.has(id))nodes.set(id,{id,kind,...(kind==='transaction'?{txid:value}:{address:value})});return id;},
     result(anchor,scope,coverage){return {status:'source-reported',asset,network:asset==='BTC'?'bitcoin-mainnet':asset==='BLCH'?'bloch-mainnet':'ethereum-mainnet',
-      source,retrieved_at:now().toISOString(),independent_verification:false,anchor,scope,coverage,nodes:[...nodes.values()],edges,
+      source,retrieved_at:now().toISOString(),independent_verification:false,anchor,scope:{...scope,adapter_version:'graphus-network-1.1.0'},coverage,nodes:[...nodes.values()],edges,
       limitations:['This is a bounded source-reported sample, not a complete chain index or independently verified history.',
         'References and graph paths do not establish identity, ownership or continuity of value.',
         'Input references and created outputs are separate records, not additive transfer volume.']};},
@@ -61,7 +61,7 @@ async function bitcoin(fetcher,now,cursor){
   }
   const status=await read(fetcher,`${BTC}/block/${block.id}/status`);check(status?.in_best_chain===true);
   const result=g.result({height:block.height,hash:block.id,time:new Date(block.timestamp*1000).toISOString(),finality:'source-reported best chain; at least three confirmations at selection'},
-    {transactions_returned:seen.size,transactions_in_block:block.tx_count,endpoint_records_omitted:omitted,selection:'first 20 transactions; up to 24 input and output records each'},
+    {transactions_returned:seen.size,transactions_in_block:block.tx_count,endpoint_records_omitted:omitted,source_head_height:blocks[0].height,source_head_hash:blocks[0].id,source_head_kind:'best-chain',selection:'first 20 transactions; up to 24 input and output records each'},
     `${seen.size} transactions from block ${block.height} (${block.tx_count} in source block); ${omitted} endpoint records omitted, including coinbase or non-address scripts`);
   return {...result,next_cursor:block.height>0&&blocks[2].height-block.height<8192?String(block.height-1):null};
 }
@@ -94,7 +94,7 @@ async function bloch(fetcher,now,cursor){
   }
   const result=g.result({height:page.as_of_height,hash:page.chain_tip,...(finalized!==null?{finalized_height:finalized}:{}),
     finality:finalized!==null?'transaction heights compared with separately source-reported finalized height':'finality unavailable; indexed block references only'},
-    {transactions_returned:seen.size-notFinalized,transactions_in_page:seen.size,finality_available:finalized!==null,not_finalized_omitted:notFinalized,endpoint_records_omitted:omitted,has_more:Boolean(page.next_cursor),selection:'latest 32 indexed transactions; up to 3000 endpoint records within a bounded reference set'},
+    {transactions_returned:seen.size-notFinalized,transactions_in_page:seen.size,finality_available:finalized!==null,...(finalized!==null?{source_head_height:finalized,source_head_kind:'finalized'}:{}),not_finalized_omitted:notFinalized,endpoint_records_omitted:omitted,has_more:Boolean(page.next_cursor),selection:'latest 32 indexed transactions; up to 3000 endpoint records within a bounded reference set'},
     `${seen.size-notFinalized} recent indexed transactions${finalized!==null?' at or below reported finalized height '+finalized:'; finality status unavailable'}; ${omitted} endpoint records omitted`);
   return {...result,next_cursor:page.next_cursor||null};
 }
@@ -127,7 +127,7 @@ async function ethereum(asset,env,fetcher,now,cursor){
     coverage=`${g.edges.length} successful direct ETH value records from finalized block ${height}; ${eligible.length} candidates checked out of ${head.transactions.length} transactions; internal calls excluded`;
   }else{
     const first=Math.max(0,height-3),headers=await Promise.all(Array.from({length:height-first},(_,i)=>rpc('eth_getBlockByNumber',[`0x${(first+i).toString(16)}`,false])));
-    headers.push(head);const hashes=new Map();for(const [i,b] of headers.entries()){check(HEX.test(b?.hash||'')&&number(b.number)===first+i);if(i)check(b.parentHash?.toLowerCase()===headers[i-1].hash.toLowerCase());hashes.set(first+i,b.hash.toLowerCase());}
+    headers.push(head);const hashes=new Map(),times=new Map();for(const [i,b] of headers.entries()){check(HEX.test(b?.hash||'')&&number(b.number)===first+i);if(i)check(b.parentHash?.toLowerCase()===headers[i-1].hash.toLowerCase());hashes.set(first+i,b.hash.toLowerCase());times.set(first+i,new Date(number(b.timestamp)*1000).toISOString());}
     const contract=CONTRACTS[asset];const logs=await rpc('eth_getLogs',[{address:contract,fromBlock:`0x${first.toString(16)}`,toBlock:head.number,topics:[TRANSFER]}]);
     check(Array.isArray(logs)&&logs.length<=4096);const seen=new Set(),txBlocks=new Map();
     const normalized=logs.map(log=>{
@@ -136,13 +136,14 @@ async function ethereum(asset,env,fetcher,now,cursor){
       check(hashes.get(block)===log.blockHash?.toLowerCase()&&!seen.has(key));seen.add(key);
       const txAnchor=`${block}:${log.blockHash.toLowerCase()}:${txIndex}`;check(!txBlocks.has(txid)||txBlocks.get(txid)===txAnchor);txBlocks.set(txid,txAnchor);
       const address=topic=>{check(typeof topic==='string'&&/^0x0{24}[a-f0-9]{40}$/i.test(topic));return `0x${topic.slice(-40).toLowerCase()}`;};
-      return {from:address(log.topics[1]),to:address(log.topics[2]),kind:'erc20_transfer',amount_base_units:BigInt(log.data).toString(),event_id:key,txid,position,block_number:block,block_hash:hashes.get(block)};
+      return {from:address(log.topics[1]),to:address(log.topics[2]),kind:'erc20_transfer',amount_base_units:BigInt(log.data).toString(),event_id:key,txid,position,block_number:block,block_hash:hashes.get(block),block_time:times.get(block)};
     }).sort((a,b)=>a.block_number-b.block_number||a.position-b.position);
     for(const row of normalized.slice(0,512))g.edges.push({...row,from:g.reference(row.from),to:g.reference(row.to)});
     scope={from_block:first,to_block:height,contract,source_logs:logs.length,returned_logs:g.edges.length,truncated:logs.length>512,selection:'first 512 matching logs ordered by block and log index'};
     coverage=`${g.edges.length} of ${logs.length} source-returned ${asset} Transfer logs across finalized blocks ${first}–${height}${logs.length>512?'; capped sample':''}`;
   }
   const recheck=await rpc('eth_getBlockByNumber',[head.number,false]);check(recheck?.hash?.toLowerCase()===anchor.hash&&number(recheck.number)===height);
+  check(HEX.test(finalized.hash||''));scope={...scope,source_head_height:number(finalized.number),source_head_hash:finalized.hash.toLowerCase(),source_head_kind:'finalized'};
   const first=scope.from_block??height;
   return {...g.result(anchor,scope,coverage),next_cursor:first>0&&number(finalized.number)-first<8192?String(first-1):null};
 }

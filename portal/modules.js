@@ -5,6 +5,8 @@ import {readPublicJson} from '../graphus/chain/network-graph.js';
 export const MODULE_ROUTES={
   'system/map':[],
   'daas/manifest':[],
+  'atlas/schema':[],
+  'atlas/analyze':['asset','cursor','reference','start','end','max_hops','kind','minimum'],
   'chain/network':['asset','cursor'],
   'chain/wallet':['asset','network','address'],
   'chain/activity':['asset','address','to_block','expected_hash'],

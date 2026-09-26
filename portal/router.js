@@ -6,6 +6,8 @@ import {intelligenceRoute,indexStatements,readAnalysis,watchStatements} from './
 import {moduleRoute,moduleQuery} from './modules.js';
 import {enrichmentRoute} from './enrichment.js';
 import {researchRoute} from './research.js';
+import {atlasPrivateRoute} from './atlas.js';
+import {atlasGrantRoute,atlasDelegatedRoute} from './atlas-grants.js';
 
 export async function handlePortal({request,env={},waitUntil,fetcher=fetch}){
   const requestId=crypto.randomUUID();
@@ -24,6 +26,7 @@ async function route({request,env,waitUntil,fetcher}){
     if(method!=='GET'&&!request.headers.has('authorization'))requireValue(request.headers.get('origin')===url.origin&&request.headers.get('x-porb-action')==='1','same_origin_action_required',403);
     if(path==='/auth/config'&&method==='GET')return json({enabled:Boolean(env.PORB_DB&&env.PORB_AUTH_PEPPER),access:'invitation-only',networks:['Bitcoin','Ethereum','Bloch'],model:VERSION});
     requireValue(env.PORB_DB&&typeof env.PORB_AUTH_PEPPER==='string'&&env.PORB_AUTH_PEPPER.length>=32,'portal_unavailable',503);
+    const delegated=await atlasDelegatedRoute(path,request,env);if(delegated)return delegated;
     const principal=await principalOf(request,env);
     if(path.startsWith('/auth/')){
       requireValue(!request.headers.has('authorization'),'browser_session_required',403);
@@ -37,6 +40,8 @@ async function route({request,env,waitUntil,fetcher}){
     if(principal.type==='key')await statement(env.PORB_DB,'UPDATE api_keys SET last_used_at=? WHERE id=?',Date.now(),principal.key_id).run();
     const administration=await adminRoute(path,request,env,principal);if(administration)return administration;
     const module=await moduleRoute(path,request,env,principal,fetcher);if(module)return module;
+    const atlas=await atlasPrivateRoute(path,request,env,principal,fetcher);if(atlas)return atlas;
+    const grant=await atlasGrantRoute(path,request,env,principal);if(grant)return grant;
     const enrichment=await enrichmentRoute(path,request,env,principal,fetcher);if(enrichment)return enrichment;
     const research=await researchRoute(path,request,env,principal);if(research)return research;
     const intelligence=await intelligenceRoute(path,request,env,principal);if(intelligence)return intelligence;

@@ -1,0 +1,21 @@
+name: Data Atlas contracts
+on:
+  push:
+    paths: ['graphus/assets/atlas_*', 'graphus/assets/catalog.*', 'graphus/catalog.html', 'graphus/chain/atlas-api.js', 'graphus/chain/network-graph.js', 'graphus/assets/system_evidence.js', 'tests/test_network_graph.mjs', 'graphus/functions/**', 'portal/atlas*', 'portal/router.js', 'portal/migrations/**', 'site/atlas.html', 'site/portal/atlas.js', 'scripts/*atlas*', 'tests/*atlas*', '.github/workflows/atlas.yml']
+  pull_request:
+    paths: ['graphus/assets/atlas_*', 'graphus/assets/catalog.*', 'graphus/catalog.html', 'graphus/chain/atlas-api.js', 'graphus/chain/network-graph.js', 'graphus/assets/system_evidence.js', 'tests/test_network_graph.mjs', 'graphus/functions/**', 'portal/atlas*', 'portal/router.js', 'portal/migrations/**', 'site/atlas.html', 'site/portal/atlas.js', 'scripts/*atlas*', 'tests/*atlas*', '.github/workflows/atlas.yml']
+permissions:
+  contents: read
+jobs:
+  atlas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python3 scripts/build_portal_modules.py
+      - run: node --test tests/test_network_graph.mjs tests/test_atlas.mjs tests/test_porb_atlas.mjs tests/test_graphus_api.mjs tests/test_evidence_graph.mjs
+      - run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps webkit
+      - run: node scripts/check_atlas_browser.mjs

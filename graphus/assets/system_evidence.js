@@ -30,7 +30,7 @@ export async function evidencePacket(raw,asset,{cursor=null}={}) {
     return {event_id:edge.id,from:edge.from,to:edge.to,kind:edge.kind,amount_base_units:edge.amount,txid:edge.txid,block_number:edge.block,block_hash:blockHash,
       ...(edge.position!==undefined?{position:edge.position}:{}),...(edge.block_time?{block_time:edge.block_time}:{}),...(edge.outpoint?{outpoint:edge.outpoint}:{})};
   });
-  const anchor=normalized.anchor,scopeKeys=['transactions_returned','transactions_in_block','transactions_in_page','endpoint_records_omitted','selection','candidates_checked','successful_transfers','failed_transactions_omitted','internal_calls_included','from_block','to_block','contract','source_logs','returned_logs','truncated','not_finalized_omitted','has_more','finality_available'];
+  const anchor=normalized.anchor,scopeKeys=['adapter_version','source_head_height','source_head_hash','source_head_kind','transactions_returned','transactions_in_block','transactions_in_page','endpoint_records_omitted','selection','candidates_checked','successful_transfers','failed_transactions_omitted','internal_calls_included','from_block','to_block','contract','source_logs','returned_logs','truncated','not_finalized_omitted','has_more','finality_available'];
   const scope=Object.fromEntries(Object.entries(normalized.scope||{}).filter(([key])=>scopeKeys.includes(key)));
   const dataset={status:'source-reported',asset,network:NETWORK[asset],source:raw.source,retrieved_at:raw.retrieved_at,anchor,coverage:normalized.coverage,scope,independent_verification:false,nodes,edges,
     snapshots:[{source:raw.source,retrieved_at:raw.retrieved_at,anchor,scope,coverage:normalized.coverage,records:edges.length,requested_cursor:cursor}]};
@@ -133,7 +133,7 @@ export async function validateEvidenceCollection(packet){
   fields(d,['status','asset','network','source','retrieved_at','anchor','coverage','scope','independent_verification','nodes','edges','snapshots'],'dataset');
   check(d.independent_verification===false&&typeof d.coverage==='string'&&d.coverage.length<=1000,'Invalid source coverage.');
   check(Array.isArray(d.snapshots)&&d.snapshots.length>0&&d.snapshots.length<=COLLECTION_LIMITS.pages,'Expected one to eight source snapshots.');
-  const scopeKeys=['transactions_returned','transactions_in_block','transactions_in_page','endpoint_records_omitted','selection','candidates_checked','successful_transfers','failed_transactions_omitted','internal_calls_included','from_block','to_block','contract','source_logs','returned_logs','truncated','not_finalized_omitted','has_more','finality_available','source_pages','unique_records','complete_chain_history','filtered_records','source_records'];
+  const scopeKeys=['adapter_version','source_head_height','source_head_hash','source_head_kind','transactions_returned','transactions_in_block','transactions_in_page','endpoint_records_omitted','selection','candidates_checked','successful_transfers','failed_transactions_omitted','internal_calls_included','from_block','to_block','contract','source_logs','returned_logs','truncated','not_finalized_omitted','has_more','finality_available','source_pages','unique_records','complete_chain_history','filtered_records','source_records'];
   function metadata(value){
     fields(value.anchor,['height','hash','time','finality','finalized_height'],'anchor');
     fields(value.scope,scopeKeys,'scope');
@@ -142,6 +142,8 @@ export async function validateEvidenceCollection(packet){
     check(value.anchor.time===undefined||typeof value.anchor.time==='string'&&Number.isFinite(Date.parse(value.anchor.time)),'Invalid source block time.');
     check(value.anchor.finalized_height===undefined||Number.isSafeInteger(value.anchor.finalized_height)&&value.anchor.finalized_height>=0,'Invalid source finalized height.');
     check(Object.values(value.scope).every(v=>typeof v==='boolean'||Number.isSafeInteger(v)||typeof v==='string'&&v.length<=500),'Invalid scope values.');
+    if(value.scope.source_head_height!==undefined)check(Number.isSafeInteger(value.scope.source_head_height)&&value.scope.source_head_height>=0&&['best-chain','finalized'].includes(value.scope.source_head_kind),'Invalid source head.');
+    if(value.scope.source_head_hash!==undefined)check(hash(value.scope.source_head_hash)&&value.scope.source_head_height!==undefined,'Invalid source head hash.');
   }
   metadata(d);const checked=await evidencePacket({...d,next_cursor:null},d.asset);
   check(stable(d.nodes)===stable(checked.dataset.nodes)&&stable(d.edges)===stable(checked.dataset.edges)&&stable(d.anchor)===stable(checked.dataset.anchor),'Unexpected or invalid reference, event or anchor fields.');
