@@ -14,6 +14,17 @@ test('official CSV parsing handles quoted multiline fields and discards names; m
   assert.throws(()=>parseIdentifiers({...ofacFixture(),sdn:'<html>unavailable</html>'}),/invalid_csv/);
 });
 
+test('supplementary remarks continue labels and addresses exactly across the primary character boundary',()=>{
+  const encode=row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',');
+  for(const [symbol,address] of [['ETH','0x'+'a'.repeat(40)],['XBT','1BoatSLRHtKNngkdXEeobR76b53LETtpyT']])for(const cut of [10,30,45,60]){
+    const remarks='x'.repeat(999-cut)+' '+`Digital Currency Address - ${symbol} ${address};`;
+    const sdn=encode(['1','SYNTHETIC PERSON',...Array(9).fill('-0-'),remarks.slice(0,1000)]),comments=encode(['1',remarks.slice(1000)]);
+    assert.deepEqual(parseIdentifiers({sdn,comments}).records,[{entry_id:'1',symbol,address}],`${symbol} split at ${cut}`);
+    assert.throws(()=>parseIdentifiers({sdn:sdn+'\n'+sdn,comments}),/inconsistent_files/);
+    assert.throws(()=>parseIdentifiers({sdn,comments:comments+'\n'+comments}),/inconsistent_files/);
+  }
+});
+
 test('snapshots retain file hashes, share fresh reads and expire without a stale success fallback',async()=>{
   let calls=0,fail=false;const fetcher=officialFetcher(undefined,(_url,options)=>{calls++;assert.equal(options.redirect,'manual');assert.equal(options.credentials,'omit');if(fail)throw new Error('upstream unavailable');});
   const now=Date.now(),a=await officialSnapshot(fetcher,now),b=await officialSnapshot(fetcher,now+1000);
@@ -55,10 +66,13 @@ test('private enrichment is tenant-scoped, auditable, stored separately, digest-
   let sourceCalls=0;const fetcher=officialFetcher(undefined,(_url,options)=>{sourceCalls++;assert.equal(options.headers.authorization,undefined);assert.equal(options.headers.cookie,undefined);});
   const response=await s.call(path,'POST',{},cookie,{fetcher});assert.equal(response.status,201,await response.clone().text());const result=await response.json();
   assert.equal(sourceCalls,2);assert.equal(result.summary.matched,40);assert.match(response.headers.get('cache-control'),/no-store/);
-  const {report_digest,source_expired,...report}=result;assert.equal(report_digest,await digest(JSON.stringify(report)));assert.equal(source_expired,false);
+  const {report_digest,source_expired,policy_outdated,...report}=result;assert.equal(report_digest,await digest(JSON.stringify(report)));assert.equal(source_expired,false);assert.equal(policy_outdated,false);
   const read=await s.call(path,'GET',undefined,cookie);assert.deepEqual(await read.json(),result);
   assert.deepEqual((await(await s.call(`/v1/analyses/${run.id}`,'GET',undefined,cookie)).json()).scores,run.scores,'Enrichment never mutates model outputs');
   const failed=await s.call(path,'POST',{},cookie,{fetcher:async()=>new Response('unavailable',{status:503})});assert.equal(failed.status,502);assert.deepEqual(await(await s.call(path,'GET',undefined,cookie)).json(),result);
+  const previous=structuredClone(report);previous.policy.version='ofac-identifiers-1.0.0';const previousPayload=JSON.stringify(previous),previousDigest=await digest(previousPayload);
+  s.sqlite.prepare('UPDATE analysis_enrichments SET payload=?,digest=? WHERE analysis_id=?').run(previousPayload,previousDigest,run.id);
+  const outdated=await(await s.call(path,'GET',undefined,cookie)).json();assert.equal(outdated.policy_outdated,true);assert.equal(outdated.report_digest,previousDigest);assert.equal(outdated.source_expired,false);
   const key=await(await s.call('/keys','POST',{label:'No source permission',days:1,scopes:['analyses:read','scores:read','analyses:write'],password:credentials.password},cookie)).json();
   assert.equal((await s.call(path,'GET',undefined,key.key)).status,403);assert.equal((await s.call(path,'POST',{},key.key,{fetcher})).status,403);
   const other=crypto.randomUUID();s.sqlite.prepare('INSERT INTO tenants VALUES(?,?,?,?)').run(other,'Other test tenant','research',Date.now());s.sqlite.prepare('INSERT INTO memberships VALUES(?,?,?)').run(other,s.owner,'owner');
@@ -66,4 +80,13 @@ test('private enrichment is tenant-scoped, auditable, stored separately, digest-
   assert.equal((await s.call(path,'GET',undefined,otherCookie)).status,404);assert.equal((await s.call(path,'POST',{},otherCookie,{fetcher})).status,404);assert.equal(sourceCalls,2);
   s.sqlite.prepare('UPDATE memberships SET role=? WHERE tenant_id=?').run('viewer',other);assert.equal((await s.call(path,'POST',{},otherCookie,{fetcher})).status,403);
   s.sqlite.prepare('DELETE FROM analyses WHERE id=?').run(run.id);assert.equal(s.sqlite.prepare('SELECT count(*) AS n FROM analysis_enrichments').get().n,0);
+});
+
+test('retention during a source refresh cannot report or audit an enrichment that was not stored',async t=>{
+  const s=await setup();t.after(()=>s.sqlite.close());const cookie=await s.login();
+  const run=await(await s.call('/v1/analyses','POST',{asset:'ETH',pages:1},cookie)).json(),path=`/v1/analyses/${run.id}/enrichment`;
+  const fetcher=officialFetcher(undefined,()=>s.sqlite.prepare('DELETE FROM analyses WHERE id=?').run(run.id));
+  const response=await s.call(path,'POST',{},cookie,{fetcher});assert.equal(response.status,404);assert.equal((await response.json()).error,'analysis_unavailable');
+  assert.equal(s.sqlite.prepare('SELECT count(*) AS n FROM analysis_enrichments').get().n,0);
+  assert.equal(s.sqlite.prepare("SELECT count(*) AS n FROM audit WHERE action='enrichment.create' AND resource_id=?").get(run.id).n,0);
 });

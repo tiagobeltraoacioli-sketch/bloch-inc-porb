@@ -16,6 +16,8 @@ The baseline retains the three nearest feature references and the midrank percen
 
 An analyst or administrator opens a saved analysis and selects **Check official identifiers**. The connector reads the [official OFAC Sanctions List Service](https://ofac.treasury.gov/sanctions-list-service) SDN CSV and supplementary remarks CSV. It follows only the observed SLS government-region publication bucket, requires matching publication paths, bounds each file to 16 MB and each fetch chain to 25 seconds, and parses quoted CSV and the official trailing DOS EOF marker. Source failures, oversized responses and inconsistent publications cannot become a no-match result.
 
+The parser joins each primary remarks field directly to its one-to-one supplementary continuation by entry ID, without inserting whitespace, before extracting identifiers. This preserves labels and addresses split at the primary field's 1,000-character boundary, as documented in the [OFAC flat-file tutorial](https://ofac.treasury.gov/sdn-list-data-formats-data-schemas/tutorial-on-the-use-of-list-related-legacy-flat-files). Duplicate entry rows and orphan supplementary rows fail closed.
+
 Only the remarks identifiers, source entry IDs and symbol tags are retained by the parser. Names and other personal fields are discarded. The report preserves original endpoint URLs, SHA-256 of fetched file bytes, last-modified headers, retrieval/expiry times, publication path, source row counts and the saved dataset digest. Signed download query parameters are not retained. A warm runtime can share a source snapshot for up to six hours; no tenant query or credential is sent upstream.
 
 Matching distinguishes:
@@ -26,9 +28,9 @@ Matching distinguishes:
 
 Bitcoin `XBT` and `BTC` tags are aliases; Base58 remains case-sensitive and uniformly cased Bech32 is normalized. EVM hex identifiers are normalized. ETH identifiers are compared as Ethereum address context for the configured Ethereum USDT/USDC assets; token-symbol entries still require independent network verification. BLCH script hashes are not treated as listed wallet addresses. No name matching, ownership resolution, indirect exposure, 50-percent ownership analysis, UN/EU/UK feed or automatic compliance decision is implemented. OFAC states that its [digital currency identifiers are not exhaustive](https://ofac.treasury.gov/faqs/562); absence is not clearance.
 
-The latest report is retained separately from scores in `analysis_enrichments`, removed when its source analysis is removed, and replaced only after a successful refresh. GET returns the last report with `source_expired`; it never silently refreshes. POST requires `data:read`, `analyses:read`, `scores:read` and `analyses:write`, with budgets of three requests/minute and 24/day per organization. GET requires the three read scopes. The report does not change Red/Blue or existing investigation snapshots. Export the report to retain it beyond analysis retention.
+The latest report is retained separately from scores in `analysis_enrichments`, removed when its source analysis is removed, and replaced only after a successful refresh. GET returns the last report with `source_expired` and `policy_outdated`; it never silently refreshes. POST requires `data:read`, `analyses:read`, `scores:read` and `analyses:write`, with budgets of three requests/minute and 24/day per organization. GET requires the three read scopes. The report does not change Red/Blue or existing investigation snapshots. Export the report to retain it beyond analysis retention.
 
-`report_digest` is SHA-256 over UTF-8 `JSON.stringify(report)` in returned property order, excluding the added `report_digest` and `source_expired` fields. It identifies report bytes, not the truth or legal effect of the underlying observations.
+`report_digest` is SHA-256 over UTF-8 `JSON.stringify(report)` in returned property order, excluding the added `report_digest`, `source_expired` and `policy_outdated` fields. It identifies report bytes, not the truth or legal effect of the underlying observations.
 
 ## Shared evidence profiles
 
@@ -73,3 +75,30 @@ node scripts/check_enrichment_source.mjs
 ```
 
 Apply additive migration `0003_enrichment.sql` before deploying the private portal. Portal and public Graphus deploy independently; the public site has no enrichment report endpoint or private results. Source research files and screenshots remain ignored under `.data/` or outside the repository.
+
+## Published release verification
+
+Commit `2b70f30` is published as portal deployment `977c6930` and Graphus deployment `058d9da8`. The additive D1 migration `0003_enrichment.sql` succeeded. At 2026-09-26 01:27 UTC, the custom portal domain advertised API `1.2`, model `porb-observation-1.1.0`, and OpenAPI `1.2.0` with 38 operations. The seven added operations rejected anonymous access with HTTP 401, request IDs and no-store headers. Published portal/enrichment and Graphus evidence/Oculum JavaScript matched the local release bytes. The public registry reported version `2026-09-25.2` and 44 modules.
+
+All 74 selected local unit/API tests passed, together with portal, observation and enrichment WebKit checks. Both GitHub workflows passed: [Private portal checks](https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/actions/runs/36208315060) and [System Map contracts](https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/actions/runs/36208315054).
+
+A production WebKit run captured bounded real observations for all five assets and verified the original packet through inspector exports and Constellation/Analytics handoffs, without additional source requests:
+
+| Asset | References, including transaction nodes | Returned records | Destination |
+| --- | ---: | ---: | --- |
+| BTC | 111 | 114 | Constellation |
+| ETH | 40 | 24 | Analytics |
+| BLCH | 51 | 844 | Constellation |
+| USDT | 279 | 222 | Analytics |
+| USDC | 289 | 270 | Constellation |
+
+These are separate, changing source samples, not network totals or synchronized observations. The run also passed mobile inspection and reported no page errors. No production owner credentials or signed-in browser were available in this workspace, so authenticated production key issuance and enrichment persistence were not re-executed. Those paths, including tenant/scope isolation and revocation, passed the local API and browser tests. No production key was generated for this release check.
+
+
+### Follow-up parser and persistence correction
+
+Independent review identified that the first parser treated supplementary remarks as separate text. Policy `ofac-identifiers-1.0.1` now joins the two fields exactly before matching. Reprocessing the same downloaded bytes yields 1,058 identifiers across 20 symbols: 17 complete identifiers recovered and seven truncated fragments removed from the former 1,048 count. The recovered identifiers include nine XBT and two ETH records. No source addresses or names are included in this verification record.
+
+Retained reports from policy 1.0.0 are returned unchanged with `policy_outdated: true`, and the portal asks for an explicit refresh. File hashes and original report digests stay intact. The persistence transaction now writes the audit entry only while its analysis exists and verifies that one report was stored before returning HTTP 201; retention during source fetching returns `analysis_unavailable` instead of a false success.
+
+Regression coverage includes identifiers and labels split at four positions for BTC/Ethereum, duplicate entry IDs, stale-policy reports and deletion during a source fetch. The developer page also includes read-only batch/profile/ML examples and explicit enrichment refresh/read examples, with the current eight-page limit.

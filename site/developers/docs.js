@@ -30,6 +30,34 @@ const data = await response.json();
 if (!response.ok) throw new Error(data.error);
 console.log(data.analyses);
 // Exact amounts: BigInt(record.amount_base_units)`;
+$('research-code').textContent=`# Required scopes: data:read
+curl --fail-with-body "$PORB_BASE/v1/capabilities" \\
+  -H "Authorization: Bearer $PORB_API_KEY"
+
+# Required scopes: analyses:read, scores:read
+# POST carries read-only search parameters. No source collection occurs.
+curl --fail-with-body "$PORB_BASE/v1/references/batch" \\
+  -H "Authorization: Bearer $PORB_API_KEY" \\
+  -H 'Content-Type: application/json' \\
+  --data '{"asset":"ETH","references":["0x1111111111111111111111111111111111111111"],"runs_per_reference":3}'
+
+# Saved profile and ML metadata; set PORB_ANALYSIS_ID first.
+curl --fail-with-body "$PORB_BASE/v1/analyses/$PORB_ANALYSIS_ID/profile" \\
+  -H "Authorization: Bearer $PORB_API_KEY"
+curl --fail-with-body "$PORB_BASE/v1/analyses/$PORB_ANALYSIS_ID/ml" \\
+  -H "Authorization: Bearer $PORB_API_KEY"`;
+$('enrichment-code').textContent=`# Required: data:read, analyses:read, scores:read, analyses:write
+curl --fail-with-body --max-time 120 \\
+  "$PORB_BASE/v1/analyses/$PORB_ANALYSIS_ID/enrichment" \\
+  -H "Authorization: Bearer $PORB_API_KEY" \\
+  -H 'Content-Type: application/json' --data '{}'
+
+# Read the retained report; analyses:write is not needed for GET.
+curl --fail-with-body \\
+  "$PORB_BASE/v1/analyses/$PORB_ANALYSIS_ID/enrichment" \\
+  -H "Authorization: Bearer $PORB_API_KEY"
+# Check source_expired, policy_outdated and source.expires_at before review.
+# A missing report returns enrichment_unavailable; source failures are errors.`;
 function el(tag,text){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;}
 let contract;
 function render(){const filter=$('endpoint-search').value.toLowerCase(),box=$('endpoints');box.replaceChildren();let count=0;

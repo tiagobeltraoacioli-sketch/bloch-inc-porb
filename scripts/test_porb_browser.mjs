@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {setup,credentials} from '../tests/porb_helpers.mjs';
 import {ofacFixture} from '../tests/ofac_fixture.mjs';
 import {handlePortal} from '../portal/router.js';
+import {digest} from '../portal/security.js';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const test=await setup(),root=resolve(new URL('../site/',import.meta.url).pathname),errors=[];
 const server=createServer(async(req,res)=>{
@@ -32,6 +33,11 @@ try{
   await page.locator('#official-enrichment button').first().click();await page.waitForFunction(()=>document.getElementById('official-enrichment').textContent.includes('40 potential exact matches'));
   const evidenceDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Export official evidence JSON ↓',exact:true}).click();const evidence=JSON.parse(await readFile(await(await evidenceDownload).path(),'utf8'));assert.equal(evidence.summary.matched,40);assert.ok(!JSON.stringify(evidence).includes('SYNTHETIC PERSON'));
   await page.locator('#official-enrichment').screenshot({path:new URL('../.data/porb-browser/official-enrichment.png',import.meta.url).pathname});
+  const savedEvidence=test.sqlite.prepare('SELECT payload FROM analysis_enrichments WHERE analysis_id=?').get(evidence.analysis_id),previous=JSON.parse(savedEvidence.payload);previous.policy.version='ofac-identifiers-1.0.0';const previousPayload=JSON.stringify(previous);
+  test.sqlite.prepare('UPDATE analysis_enrichments SET payload=?,digest=? WHERE analysis_id=?').run(previousPayload,await digest(previousPayload),evidence.analysis_id);
+  await page.reload();await page.waitForSelector('#workspace:not([hidden])');await page.selectOption('#saved-analysis',evidence.analysis_id);
+  await page.waitForFunction(()=>document.getElementById('official-enrichment').textContent.includes('Parser update available'));
+  await page.locator('#official-enrichment button').first().click();await page.waitForFunction(()=>document.getElementById('official-enrichment').textContent.includes('40 potential exact matches')&&!document.getElementById('official-enrichment').textContent.includes('Parser update available'));
   await page.click('#wallet-rows button');assert.equal(await page.locator('#wallet-detail').isVisible(),true);
   const address='0x'+(40).toString(16).padStart(40,'0');
   await page.fill('#graph-search',address.toUpperCase());await page.press('#graph-search','Enter');

@@ -1,6 +1,6 @@
 # Graphus System Map and evidence workbench
 
-The public [System Map](https://bloch-graphus.xyz/map) now connects 44 modules across source, normalization, data, graph, analysis and delivery layers. Ten modules belong to the AML workspace group. Thirty-five capabilities are available; the remaining operator prototypes and planned workflows are explicitly marked. These are implementation descriptions, not continuous uptime measurements.
+The public [System Map](https://bloch-graphus.xyz/map) now connects 44 modules across source, normalization, data, graph, analysis and delivery layers. Ten modules belong to the AML workspace group. Thirty-nine capabilities are available, including linked private portal workflows; one prototype and four planned workflows are explicitly marked. These are implementation descriptions, not continuous uptime measurements.
 
 ## Module navigation
 
@@ -29,7 +29,7 @@ The panel updates after each committed page. A failed or canceled continuation k
 
 ## Public integration API
 
-`GET /api/system/map` returns schema version 1 of the central module registry: supported assets, layers, categories, implementation labels, module contracts, connections and per-asset action links. Registry version `2026-09-24.1` describes implementation availability, not current source health. No query parameters are accepted.
+`GET /api/system/map` returns schema version 1 of the central module registry: supported assets, layers, categories, implementation labels, module contracts, connections and per-asset action links. Registry version `2026-09-25.2` describes implementation availability, not current source health. No query parameters are accepted.
 
 The registry endpoint and `GET /api/chain/network` permit credential-free browser reads through public CORS (`GET, OPTIONS`). Error responses on the network read retain these headers. Account/session, annotation and private portal routes do not inherit this CORS policy. These public endpoints do not require or accept a portal API key to authorize their public observations.
 
@@ -37,7 +37,7 @@ The native [Bloch Explorer System Map](https://blochl1.com/system-map) consumes 
 
 ## AML evidence preparation
 
-The workbench queries the existing public `/api/chain/network?asset=...` endpoint only when requested. BTC, ETH, Ethereum USDT/USDC and BLCH use their existing bounded source adapters. This does not activate a sanctions matcher, case manager, automatic monitoring schedule, identity resolver or AML classifier. Those modules retain their documented prototype/planned stages. The private Red/Blue portal provides descriptive observation scores under its existing model and organization access contract.
+The workbench queries the existing public `/api/chain/network?asset=...` endpoint only when requested. BTC, ETH, Ethereum USDT/USDC and BLCH use their existing bounded source adapters. The private portal separately provides descriptive observation scores, investigations, explicitly evaluated watchlists and [official identifier evidence](aml-data-enrichment.md), under organization access controls. Public capture does not execute these private workflows. Automatic monitoring schedules, identity resolution and validated AML classification remain unavailable.
 
 A capture validates network/asset identity, typed reference IDs, event identity, exact unsigned integer amounts, transaction IDs and block hashes. Duplicate IDs within a page and conflicting block anchors are rejected. The browser caps each source response and serialized dataset at 3 MB and applies a 65-second deadline to each request. No failed request is replaced with synthetic data.
 

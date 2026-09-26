@@ -1,6 +1,6 @@
 import {authorize,bodyOf,requireValue,budget,json,statement,audit,digest} from './security.js';
 import {readAnalysis} from './intelligence.js';
-import {officialSnapshot,enrichIdentifiers} from './ofac.js';
+import {officialSnapshot,enrichIdentifiers,IDENTIFIER_POLICY_VERSION} from './ofac.js';
 
 export async function enrichmentRoute(path,request,env,principal,fetcher) {
   const match=path.match(/^\/v1\/analyses\/([0-9a-f-]{36})\/enrichment$/);if(!match)return null;
@@ -11,14 +11,16 @@ export async function enrichmentRoute(path,request,env,principal,fetcher) {
     requireValue(row,'enrichment_unavailable',404);
     const result=JSON.parse(row.payload);
     await audit(db,principal,'enrichment.read',id).run();
-    return json({...result,report_digest:row.digest,source_expired:Date.now()>=Date.parse(result.source.expires_at)});
+    return json({...result,report_digest:row.digest,source_expired:Date.now()>=Date.parse(result.source.expires_at),policy_outdated:result.policy?.version!==IDENTIFIER_POLICY_VERSION});
   }
   requireValue(request.method==='POST','method_not_allowed',405);authorize(principal,'analyses:write');
   requireValue(Object.keys(await bodyOf(request)).length===0,'unexpected_fields');
   const analysis=await readAnalysis(db,principal.tenant_id,id);
   await budget(env,`enrichment-minute:${principal.tenant_id}`,3,60);await budget(env,`enrichment-day:${principal.tenant_id}`,24,86400);
   const snapshot=await officialSnapshot(fetcher),result=enrichIdentifiers(analysis,snapshot),payload=JSON.stringify(result),hash=await digest(payload);
-  await db.batch([statement(db,`INSERT INTO analysis_enrichments(analysis_id,payload,digest,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM analyses WHERE id=? AND tenant_id=?)
-    ON CONFLICT(analysis_id) DO UPDATE SET payload=excluded.payload,digest=excluded.digest,created_at=excluded.created_at`,id,payload,hash,Date.now(),id,principal.tenant_id),audit(db,principal,'enrichment.create',id)]);
-  return json({...result,report_digest:hash,source_expired:false},201);
+  const [write]=await db.batch([statement(db,`INSERT INTO analysis_enrichments(analysis_id,payload,digest,created_at) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM analyses WHERE id=? AND tenant_id=?)
+    ON CONFLICT(analysis_id) DO UPDATE SET payload=excluded.payload,digest=excluded.digest,created_at=excluded.created_at`,id,payload,hash,Date.now(),id,principal.tenant_id),
+    statement(db,`INSERT INTO audit(id,tenant_id,actor_id,action,resource_id,created_at) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM analyses WHERE id=? AND tenant_id=?)`,crypto.randomUUID(),principal.tenant_id,principal.key_id||principal.id,'enrichment.create',id,Date.now(),id,principal.tenant_id)]);
+  requireValue(write.meta.changes===1,'analysis_unavailable',404);
+  return json({...result,report_digest:hash,source_expired:false,policy_outdated:false},201);
 }

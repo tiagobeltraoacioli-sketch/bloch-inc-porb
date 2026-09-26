@@ -5,6 +5,7 @@ export const OFAC_FILES = {
   comments:'https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_COMMENTS.CSV',
 };
 export const SNAPSHOT_TTL = 6*60*60*1000;
+export const IDENTIFIER_POLICY_VERSION = 'ofac-identifiers-1.0.1';
 const MAX_BYTES = 16_000_000;
 const snapshots = new WeakMap();
 const sha256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -29,22 +30,28 @@ export function* csvRows(text) {
 }
 
 export function parseIdentifiers(files) {
-  const records=new Map(),counts={},entryIds=new Set(),commentIds=new Set();
+  const records=new Map(),counts={},remarksByEntry=new Map(),commentsByEntry=new Map();
   for(const name of ['sdn','comments']) {
     let count=0;
     for(const row of csvRows(files[name].replace(/^\uFEFF/,'').replace(/\x1a\s*$/,''))) {
       requireValue(/^\d+$/.test(row[0]?.trim()||'')&&row.length===(name==='sdn'?12:2),'official_source_invalid_csv',502);
-      const entry=row[0].trim();count++;(name==='sdn'?entryIds:commentIds).add(entry);
+      const entry=row[0].trim(),entries=name==='sdn'?remarksByEntry:commentsByEntry;count++;
+      requireValue(!entries.has(entry),'official_source_inconsistent_files',502);
       // Only the remarks column is inspected. Names and other personal fields are discarded.
-      const remarks=row[name==='sdn'?11:1];
-      for(const match of remarks.matchAll(/Digital Currency Address\s*-\s*([A-Za-z0-9]+)\s+([A-Za-z0-9]{12,256})(?=[\s;,.()]|$)/g)) {
-        const [,symbol,address]=match,record={entry_id:entry,symbol:symbol.toUpperCase(),address};
-        records.set(JSON.stringify([entry,record.symbol,address]),record);
-      }
+      entries.set(entry,row[name==='sdn'?11:1]);
     }
     counts[name]=count;
   }
-  requireValue([...commentIds].every(id=>entryIds.has(id)),'official_source_inconsistent_files',502);
+  requireValue([...commentsByEntry.keys()].every(id=>remarksByEntry.has(id)),'official_source_inconsistent_files',502);
+  for(const [entry,primary] of remarksByEntry){
+    // SDN_COMMENTS continues the primary field at its character boundary, including inside identifiers.
+    // Preserve every character: adding whitespace would corrupt a split address or label.
+    const remarks=primary+(commentsByEntry.get(entry)||'');
+    for(const match of remarks.matchAll(/Digital Currency Address\s*-\s*([A-Za-z0-9]+)\s+([A-Za-z0-9]{12,256})(?=[\s;,.()]|$)/g)) {
+      const [,symbol,address]=match,record={entry_id:entry,symbol:symbol.toUpperCase(),address};
+      records.set(JSON.stringify([entry,record.symbol,address]),record);
+    }
+  }
   return {records:[...records.values()],row_counts:counts};
 }
 
@@ -110,7 +117,7 @@ export function enrichIdentifiers(analysis,snapshot,now=Date.now()) {
   });
   return {schema_version:1,kind:'official_identifier_evidence',analysis_id:analysis.id,asset,dataset_digest:analysis.digest,evaluated_at:new Date(now).toISOString(),
     source:{id:snapshot.source_id,digest:snapshot.digest,retrieved_at:snapshot.retrieved_at,expires_at:snapshot.expires_at,files:snapshot.files,row_counts:snapshot.row_counts,identifier_count:snapshot.records.length,scope:snapshot.scope},
-    policy:{version:'ofac-identifiers-1.0.0',symbols,matching:'Exact identifiers; BTC/XBT alias, case-insensitive EVM hex and uniformly cased Bech32. Bitcoin Base58 is case-sensitive. ETH identifiers provide Ethereum address context for the configured Ethereum tokens; USDT/USDC symbol records still require independent network verification.',
+    policy:{version:IDENTIFIER_POLICY_VERSION,symbols,matching:'Exact identifiers from joined primary and supplementary remarks; BTC/XBT alias, case-insensitive EVM hex and uniformly cased Bech32. Bitcoin Base58 is case-sensitive. ETH identifiers provide Ethereum address context for the configured Ethereum tokens; USDT/USDC symbol records still require independent network verification.',
       coverage:'Only listed digital currency identifiers. No names, ownership, indirect exposure, other jurisdictions or 50-percent ownership rule evaluation. BLCH script hashes are not comparable to listed wallet addresses. Absence is not clearance.',reference:'https://ofac.treasury.gov/faqs/562'},
     summary:{references:rows.length,matched:rows.filter(r=>r.matches.length).length,compared:rows.filter(r=>r.status!=='not_covered').length,not_covered:rows.filter(r=>r.status==='not_covered').length},rows,
     interpretation:'Potential exact identifier matches require review of network, listing status and applicable restrictions. They do not establish ownership or an AML/FT conclusion. This evidence does not change Red or Blue.'};

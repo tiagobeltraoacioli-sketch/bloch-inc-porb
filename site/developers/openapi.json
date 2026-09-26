@@ -896,7 +896,7 @@
           "Enrichment"
         ],
         "summary": "Read the latest retained official identifier evidence",
-        "description": "Does not fetch sources. Returns source_expired when the snapshot is past its 6-hour freshness window. report_digest is SHA-256 of JSON.stringify(report) in returned property order before adding report_digest and source_expired. File digests cover downloaded source bytes. Reports are tenant-scoped and removed with the analysis.",
+        "description": "Does not fetch sources. Returns source_expired when the snapshot is past its 6-hour freshness window and policy_outdated when the report requires refresh after a parser/policy update. report_digest is SHA-256 of JSON.stringify(report) in returned property order before adding report_digest, source_expired and policy_outdated. File digests cover downloaded source bytes. Reports are tenant-scoped and removed with the analysis.",
         "x-required-scopes": [
           "analyses:read",
           "scores:read",
