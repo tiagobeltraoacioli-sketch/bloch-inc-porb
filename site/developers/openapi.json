@@ -3,7 +3,7 @@
   "info": {
     "title": "Bloch Inc Unified Intelligence — Partner API",
     "version": "1.2.0",
-    "description": "Private BI-PoRB, investigations, observation watchlists and Graphus source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal."
+    "description": "Private BI-PoRB, investigations, observation watchlists and Graphus/Bloch Space source modules. Real bounded public-chain facts. Red describes sample-relative structural deviation; Blue describes recorded-evidence completeness. Neither is a validated AML/credit assessment. No owner identity is inferred. Invitations and key administration use the browser portal."
   },
   "servers": [
     {
@@ -32,6 +32,9 @@
     },
     {
       "name": "Graphus"
+    },
+    {
+      "name": "Bloch Space"
     },
     {
       "name": "Atlas"
@@ -1185,7 +1188,7 @@
           "Atlas"
         ],
         "summary": "Save a verified timeline, path, pattern or comparison calculation",
-        "description": "Recomputes the calculation from tenant-owned, digest-verified saved analyses and requires expected_report_sha256 to match the preview. Client report content is not accepted. Six new save attempts/minute/organization; up to 20 retained reports, 6 MB each, with 1–365 day retention. Complete serialized reports only: oversize fails 422 without removing events, even when the query endpoint permits a larger response. Timeline reports preserve all queried bins, exact events, exclusions and unknown coverage, including empty or untimed results. Range/search selection affects only the browser view, not the saved calculation. Empty, unavailable, not-applicable and search-truncated reports retain their original state and limits; saving does not turn them into complete-chain findings. No new collection or rescoring. Required purpose, lawful basis and source rights are user declarations. Atomic metadata, payload chunks and audit; request_id UUID retries with identical normalized content return the existing report with duplicate=true (200), even after source analyses leave history. Reusing an extant request_id with different content or an expired report returns 409. After deletion or purge the request_id can be reused. Saved payloads survive analysis retention. Immutable; reviews/corrections are separate Atlas records using returned review_subject, and reports may be linked to dossiers. No score access is granted.",
+        "description": "Recomputes the calculation from tenant-owned, digest-verified saved analyses and requires expected_report_sha256 to match the preview. Client report content is not accepted. Six new save attempts/minute/organization; up to 20 retained reports, 6 MB each, with 1–365 day retention. Complete serialized reports only: oversize fails 422 without removing events, even when the query endpoint permits a larger response. Timeline reports preserve all queried bins, exact events, exclusions and unknown coverage, including empty or untimed results. For kind=timeline, range/search selection affects only the browser view. For kind=window_comparison, submit disjoint chronological baseline/comparison bucket ranges with the same normalized search and exactly one source: analysis plus timeline query, or timeline_report. The server recomputes both windows from the verified source. A graphus-atlas-window-comparison-record-1.0.0 wrapper hashes the canonical parameters and unchanged child comparison, including its original comparison_sha256 and parent timeline SHA-256. expected_report_sha256 is the wrapper hash. Source timelines must remain active and unchanged through commit; the child then survives either ancestor deletion. No recalculation is needed when viewing a retained child. Counts, exact concentration fractions and complete selected events are descriptive, with unknown coverage preserved. Empty, unavailable, not-applicable and search-truncated reports retain their original state and limits; saving does not turn them into complete-chain findings. No new collection or rescoring. Required purpose, lawful basis and source rights are user declarations. Atomic metadata, payload chunks and audit; request_id UUID retries with identical normalized content return the existing report with duplicate=true (200), even after source analyses or parent timelines leave history. Reusing an extant request_id with different content or an expired report returns 409. After deletion or purge the request_id can be reused. Saved payloads survive analysis retention. Immutable; reviews/corrections are separate Atlas records using returned review_subject, and reports may be linked to dossiers. No score access is granted.",
         "x-required-scopes": [
           "cases:read",
           "analyses:read",
@@ -1271,6 +1274,246 @@
             "application/json": {
               "schema": {
                 "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 120
+                      },
+                      "purpose": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "lawful_basis": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "source_licence": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "retention_days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365
+                      },
+                      "expected_report_sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "kind": {
+                        "const": "window_comparison"
+                      },
+                      "parameters": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "analysis": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "timeline": {
+                                "type": "object",
+                                "properties": {
+                                  "reference": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": [
+                                      "all",
+                                      "incoming",
+                                      "outgoing",
+                                      "self"
+                                    ]
+                                  },
+                                  "kind": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 80
+                                  },
+                                  "interval": {
+                                    "type": "string",
+                                    "enum": [
+                                      "auto",
+                                      "minute",
+                                      "hour",
+                                      "day"
+                                    ]
+                                  },
+                                  "minimum": {
+                                    "type": "string",
+                                    "pattern": "^(0|[1-9][0-9]{0,77})$"
+                                  },
+                                  "start": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
+                                  },
+                                  "end": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
+                                  }
+                                },
+                                "required": [],
+                                "additionalProperties": false
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "first": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "last": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "query": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "first",
+                                  "last"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "comparison": {
+                                "type": "object",
+                                "properties": {
+                                  "first": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "last": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "query": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "first",
+                                  "last"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "analysis",
+                              "timeline",
+                              "baseline",
+                              "comparison"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "timeline_report": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "baseline": {
+                                "type": "object",
+                                "properties": {
+                                  "first": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "last": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "query": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "first",
+                                  "last"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "comparison": {
+                                "type": "object",
+                                "properties": {
+                                  "first": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "last": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 365
+                                  },
+                                  "query": {
+                                    "type": "string",
+                                    "maxLength": 200
+                                  }
+                                },
+                                "required": [
+                                  "first",
+                                  "last"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "timeline_report",
+                              "baseline",
+                              "comparison"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "title",
+                      "purpose",
+                      "lawful_basis",
+                      "source_licence",
+                      "retention_days",
+                      "expected_report_sha256",
+                      "kind",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -6700,6 +6943,1126 @@
             "name": "addresses",
             "in": "query",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/overview": {
+      "get": {
+        "operationId": "get_v1_space_overview",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · overview",
+        "description": "Current bounded network overview. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/series": {
+      "get": {
+        "operationId": "get_v1_space_series",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · series",
+        "description": "Recorded time series: Bitcoin 10/30 blocks, Ethereum 12/48 blocks, Bloch 6h/24h/7d peer windows. These windows are not interchangeable. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/intelligence": {
+      "get": {
+        "operationId": "get_v1_space_intelligence",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · intelligence",
+        "description": "Bitcoin mining, fee, mempool and forecast inputs; source-reported and bounded. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/validators": {
+      "get": {
+        "operationId": "get_v1_space_validators",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · validators",
+        "description": "Bloch validator pages, offset 0–4096 in steps of 32. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/graphus": {
+      "get": {
+        "operationId": "get_v1_space_graphus",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · graphus",
+        "description": "Public Graphus capability and holder context; partial source availability remains explicit. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/graph": {
+      "get": {
+        "operationId": "get_v1_space_graph",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · graph",
+        "description": "Typed evidence graph: network, matching asset, kind=recent|address|tx, optional public query and cursor. Exact amounts and provenance; no ownership labels. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BTC",
+                "ETH",
+                "BLCH",
+                "USDT",
+                "USDC"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/research": {
+      "get": {
+        "operationId": "get_v1_space_research",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · research",
+        "description": "Unified address research: Graphus balance and source records, typed Graph Lab evidence, exact reference flows, graph topology and descriptive k-means on comparable references (minimum 9). Partial module failures remain explicit. Native ETH address history and address forecasts are unavailable. Versioned full JSON report with SHA-256; no private labels or scores. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BTC",
+                "ETH",
+                "BLCH",
+                "USDT",
+                "USDC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/address": {
+      "get": {
+        "operationId": "get_v1_space_address",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · address",
+        "description": "A public address or script hash, with optional supported asset. Bounded source observations. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BTC",
+                "ETH",
+                "BLCH",
+                "USDT",
+                "USDC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/block": {
+      "get": {
+        "operationId": "get_v1_space_block",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · block",
+        "description": "Block hash/height; offset where supported. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/tx": {
+      "get": {
+        "operationId": "get_v1_space_tx",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · tx",
+        "description": "Exact transaction reference. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/v1/space/history": {
+      "get": {
+        "operationId": "get_v1_space_history",
+        "tags": [
+          "Bloch Space"
+        ],
+        "summary": "Bloch Space · history",
+        "description": "Bloch indexed script-hash history; pass the returned cursor unchanged. Fixed public read-only source gateway at bloch.space. No account, score, write or arbitrary URL passthrough. Credentials, cookies and tenant data are never forwarded. Shared 60 module reads/minute/organization; upstream errors remain errors. Public tools remain available on the source site without a portal login.",
+        "x-required-scopes": [
+          "data:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "network",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bitcoin",
+                "ethereum",
+                "bloch"
+              ]
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }

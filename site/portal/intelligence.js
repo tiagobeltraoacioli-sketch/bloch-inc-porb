@@ -1,4 +1,7 @@
 import {atlasLink} from './atlas-context.js';
+import {MODULES,moduleUrl} from './module-catalog.js';
+import {researchScope,verifyResearch} from '/space/assets/address-research-core.js';
+import {renderResearch} from '/space/assets/address-research-ui.js';
 const $=id=>document.getElementById(id);
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 const date=v=>new Date(v).toLocaleString(),short=v=>v.length>30?v.slice(0,14)+'…'+v.slice(-10):v;
@@ -7,7 +10,7 @@ function download(value,name){const url=URL.createObjectURL(new Blob([JSON.strin
 export class Intelligence {
   constructor({api,perform,message,openRun,showView,runs,role}){
     Object.assign(this,{api,perform,message,openRun,showView,runs,role});this.reset();
-    for(const button of document.querySelectorAll('[data-module]'))button.onclick=()=>this.module(button.dataset.module);
+    const tabs=$('module-tabs');tabs.replaceChildren();for(const item of MODULES){const button=el('button',item.name);button.dataset.module=item.id;button.title=item.description;button.setAttribute('aria-pressed','false');button.onclick=()=>this.module(item.id);tabs.append(button);}
     $('reference-form').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,()=>this.search(false));};
     $('reference-more').onclick=()=>this.perform($('reference-more'),()=>this.search(true));
     $('index-retained').onclick=()=>this.perform($('index-retained'),async()=>{for(const run of this.runs())await this.api(`/v1/analyses/${run.id}`);$('reference-coverage').textContent=`Indexed ${this.runs().length} retained analyses. Run the reference search again.`;});
@@ -23,7 +26,8 @@ export class Intelligence {
     $('watch-evaluate').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,async()=>{const result=await this.api('/v1/watchlists/evaluate','POST',{analysis_id:e.target.elements.analysis.value});$('watch-evaluation').textContent=`${result.observations_created} new observation(s) recorded. Re-evaluation of the same sample does not duplicate matches.`;await this.observations();});};
   }
   reset(){this.currentCase=null;this.referenceCursor=null;this.caseCursor=null;this.watchCursor=null;this.observationCursor=null;this.pendingEvidence=null;this.referenceQuery=null;
-    for(const id of ['reference-results','reference-launchers','case-list','evidence-list','watch-list','observation-list'])$(id).replaceChildren();
+    this.referenceEpoch=(this.referenceEpoch||0)+1;
+    for(const id of ['reference-results','reference-research','reference-launchers','case-list','evidence-list','watch-list','observation-list'])$(id).replaceChildren();
     $('case-detail').hidden=true;$('module-frame').removeAttribute('src');this.currentModule=null;
     for(const id of ['reference-more','case-more','watch-more','observation-more'])$(id).hidden=true;
     for(const id of ['reference-form','watch-form','case-form','watch-evaluate','evidence-form'])$(id).reset();
@@ -32,27 +36,38 @@ export class Intelligence {
   async view(name){
     const readOnly=this.role()==='viewer';
     for(const id of ['case-form','watch-form','watch-evaluate'])$(id).querySelector('button').disabled=readOnly;
-    if(name==='modules'&&!this.currentModule)this.module('map');
+    if(name==='modules'&&!this.currentModule)this.module(new URLSearchParams(location.search).get('module')||'map');
     if(name==='cases'){await this.cases();if(this.pendingEvidence&&!this.currentCase)$('case-list').prepend(el('p','Create or open an investigation to attach the selected reference.'));}
     if(name==='watchlists'){this.analysisOptions($('watch-evaluate').elements.analysis);await Promise.all([this.watches(),this.observations()]);}
   }
   module(name,asset,address){
-    const titles={map:'System Map',constellation:'Constellation',oculum:'Oculum',analytics:'Analytics',app:'Research app',catalog:'Data catalog'};if(!Object.hasOwn(titles,name))return;
-    const url=new URL(`/graphus/${name}.html`,location.origin);if(asset)url.searchParams.set('asset',asset.toLowerCase());if(address)url.searchParams.set('address',address);
-    $('module-frame').src=url.pathname+url.search;$('module-frame').title=`Graphus ${titles[name]}`;$('module-full').href=url.pathname+url.search;this.currentModule=name;
+    const item=MODULES.find(item=>item.id===name)||MODULES[0],url=moduleUrl(item.id,location.origin,asset,address);name=item.id;
+    $('module-frame').src=url.pathname+url.search;$('module-frame').title=`${item.group} ${item.name}`;$('module-full').href=url.pathname+url.search;$('module-description').textContent=item.description;this.currentModule=name;
+    const locationUrl=new URL(location.href);locationUrl.searchParams.set('view','modules');locationUrl.searchParams.set('module',name);history.replaceState(null,'',locationUrl.pathname+locationUrl.search);
     for(const button of document.querySelectorAll('[data-module]'))button.setAttribute('aria-pressed',String(button.dataset.module===name));
   }
   action(label,fn){const b=el('button',label,'secondary');b.onclick=()=>this.perform(b,fn);return b;}
-  launchers(asset,reference){const box=$('reference-launchers');box.replaceChildren();for(const [name,label] of [['constellation','Open Constellation'],['oculum','Open Oculum'],['analytics','Open Analytics']])box.append(this.action(label,async()=>{this.module(name,asset,reference);this.showView('modules');}));}
+  launchers(asset,reference){const box=$('reference-launchers');box.replaceChildren();for(const [name,label] of [['constellation','Open Constellation'],['oculum','Open Oculum'],['analytics','Open Analytics'],['graph','Open Graph Lab'],['explorer','Inspect source record']])box.append(this.action(label,async()=>{this.module(name,asset,reference);this.showView('modules');}));}
   async search(more){
-    const form=$('reference-form');if(!more){this.referenceQuery={asset:form.elements.asset.value,reference:form.elements.reference.value.trim()};this.referenceCursor=null;}
+    const form=$('reference-form');let scope;
+    if(!more){
+      const asset=form.elements.asset.value,network={BTC:'bitcoin',ETH:'ethereum',BLCH:'bloch',USDT:'ethereum',USDC:'ethereum'}[asset];
+      scope=researchScope(new URL('/api/research?'+new URLSearchParams({network,asset,query:form.elements.reference.value}),location.origin));
+      this.referenceQuery={asset,reference:scope.reference};this.referenceCursor=null;this.referenceEpoch++;
+      $('reference-results').replaceChildren(el('p','Searching retained organization observations…'));$('reference-research').replaceChildren(el('p','Collecting public source records, graph analyses and machine learning…'));$('reference-more').hidden=true;this.launchers(asset,scope.reference);
+    }
+    const epoch=this.referenceEpoch;
     const query=new URLSearchParams({...this.referenceQuery,limit:'10'});if(more&&this.referenceCursor)query.set('cursor',this.referenceCursor);
-    const result=await this.api('/v1/references?'+query);this.referenceCursor=result.next_cursor;const box=$('reference-results');if(!more)box.replaceChildren();
+    const publicResult=more?Promise.resolve():this.api('/v1/space/research?'+new URLSearchParams({network:scope.network,asset:scope.asset,query:scope.reference})).then(verifyResearch).then(report=>{if(epoch===this.referenceEpoch)renderResearch($('reference-research'),report,{mounted:true});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
+    const retained=this.api('/v1/references?'+query).then(result=>{
+    if(epoch!==this.referenceEpoch)return;this.referenceCursor=result.next_cursor;const box=$('reference-results');if(!more)box.replaceChildren();
     $('reference-coverage').textContent=`${result.index.indexed}/${result.index.retained} retained ${result.asset} analyses indexed. ${result.coverage}`;
     this.launchers(result.asset,result.reference);
-    if(!result.items.length&&!more)box.append(el('p','No match in indexed samples. Open the live source modules above to query this public reference.'));
+    if(!result.items.length&&!more)box.append(el('p','No match in retained organization samples. Public research is shown separately above.'));
     for(const item of result.items){const row=el('div',undefined,'list-row'),info=el('div',`${item.asset} · ${date(item.created_at)}`);info.append(el('small',`Red ${item.score.red??'unavailable'} · Blue ${item.score.blue} · ${item.score.incoming_events} in / ${item.score.outgoing_events} out`),el('small',`Dataset SHA-256: ${item.digest}`));const actions=el('div',undefined,'graph-actions');actions.append(this.action('Inspect graph',()=>this.openRun(item.id,item.node_id)),this.action('Attach to investigation',async()=>this.attach(item.id,item.node_id)));row.append(info,actions);box.append(row);}
     $('reference-more').hidden=!result.next_cursor;
+    }).catch(error=>{if(epoch===this.referenceEpoch)$('reference-results').replaceChildren(el('p','Retained observations unavailable: '+error.message));});
+    await Promise.all([publicResult,retained]);
   }
   analysisOptions(select){const old=select.value;select.replaceChildren(el('option','Select a saved analysis'));select.firstChild.value='';for(const run of this.runs()){const option=el('option',`${run.asset} · ${date(run.created_at)}`);option.value=run.id;select.append(option);}select.value=old;}
   async cases(more=false){const result=await this.api('/v1/cases?limit=20'+(more&&this.caseCursor?'&cursor='+encodeURIComponent(this.caseCursor):''));this.caseCursor=result.next_cursor;const box=$('case-list');if(!more)box.replaceChildren();if(!result.items.length&&!more)box.append(el('p','No investigations yet. Create one to retain evidence.'));for(const item of result.items){const row=el('div',undefined,'list-row'),text=el('div',item.title);text.append(el('small',`${item.status} · ${item.evidence_count} snapshots`));row.append(text,this.action('Open',()=>this.openCase(item.id)));box.append(row);}$('case-more').hidden=!this.caseCursor;}

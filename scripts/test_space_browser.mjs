@@ -35,7 +35,7 @@ try{
  const email=`space-test-${Date.now()}@example.test`,password='Research test password 2026!';
  await page.getByRole('button',{name:'Create account',exact:true}).click();await page.locator('#email').fill(email);await page.locator('#password').fill(password);await page.locator('#auth-submit').click();
  await page.locator('#private-panel').waitFor({state:'visible'});createdAccount={email,password};assert.equal(await page.locator('#recovery-code').textContent().then(s=>s.length),64);
- await page.locator('.porb-svg').waitFor();await page.screenshot({path:'/tmp/bloch-space-review/account-mobile.png',fullPage:true});
+ await page.locator('#private-panel a[href^="https://rednblue.space/portal/"]').waitFor();await page.screenshot({path:'/tmp/bloch-space-review/account-mobile.png',fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'account mobile overflow');
  await page.locator('#saved-network').selectOption('ethereum');await page.locator('#workspace-form button').click();await page.waitForFunction(()=>document.querySelector('#account-status').textContent.includes('saved'));
  await page.locator('#logout').click();await page.locator('#auth-panel').waitFor({state:'visible'});

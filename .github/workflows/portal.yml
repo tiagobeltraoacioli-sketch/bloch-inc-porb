@@ -1,9 +1,9 @@
 name: Private portal checks
 on:
   push:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/**', 'site/explore/**', 'site/aml/**', 'scripts/check_portal_modules_browser.mjs', 'tests/space_portal_fixture.js', 'tests/address_research_fixture.js', 'tests/test_address_research.mjs', 'scripts/check_address_research_browser.mjs', 'tests/portal_browser_server.js', '.github/workflows/portal.yml']
   pull_request:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/**', 'site/explore/**', 'site/aml/**', 'scripts/check_portal_modules_browser.mjs', 'tests/space_portal_fixture.js', 'tests/address_research_fixture.js', 'tests/test_address_research.mjs', 'scripts/check_address_research_browser.mjs', 'tests/portal_browser_server.js', '.github/workflows/portal.yml']
 permissions:
   contents: read
 jobs:
@@ -16,7 +16,7 @@ jobs:
           node-version: '24'
       - run: node scripts/build_partner_docs.mjs && git diff --exit-code -- site/developers/openapi.json
       - run: python3 scripts/build_portal_modules.py
-      - run: node --test tests/test_porb_research.mjs tests/test_porb_enrichment.mjs tests/test_porb_neighbors.mjs tests/test_evidence_profile.mjs tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_porb_access_help.mjs tests/test_porb_intelligence.mjs tests/test_space_science.mjs tests/test_system_map.mjs tests/test_system_map_api.mjs
+      - run: node --test tests/test_porb_research.mjs tests/test_porb_enrichment.mjs tests/test_porb_neighbors.mjs tests/test_evidence_profile.mjs tests/test_porb_model.mjs tests/test_porb_portal.mjs tests/test_porb_explorer.mjs tests/test_porb_access_help.mjs tests/test_porb_intelligence.mjs tests/test_porb_module_access.mjs tests/test_space_accounts.mjs tests/test_address_research.mjs tests/test_space_science.mjs tests/test_system_map.mjs tests/test_system_map_api.mjs
       - run: node --check site/portal/portal.js
       - run: node --check site/portal/explorer.js
       - run: node --check site/portal/intelligence.js
@@ -24,4 +24,6 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.58.2
       - run: npx playwright install --with-deps webkit
       - run: node scripts/test_porb_browser.mjs
+      - run: node scripts/check_portal_modules_browser.mjs
+      - run: node scripts/check_address_research_browser.mjs
       - run: node scripts/check_enrichment_browser.mjs

@@ -1,4 +1,4 @@
-# Unified intelligence and partner API v1.1
+# Unified intelligence and partner API v1.2
 
 Canonical portal: **https://rednblue.space/portal/**. The user confirmed this
 spelling on 2026-09-25. Other spellings mentioned during planning are not deployment
@@ -8,7 +8,7 @@ same D1 database; no owner bootstrap or credential rotation is part of this rele
 ## Implemented workflows
 
 - **Graphus modules** mounts System Map, Constellation, Oculum, Analytics, the
-  research app and field catalog under the same portal host and browser session.
+  research app, field catalog and DaaS under the same portal host and browser session.
   Module HTML is session-gated. Public read adapters pass through the scoped
   `/api/porb/v1/graphus/*` gateway. Its fixed upstream is Graphus; credentials and
   private evidence are never forwarded. Original public Graphus remains available.
@@ -30,10 +30,85 @@ same D1 database; no owner bootstrap or credential rotation is part of this rele
   Different analyses can overlap; matches are not counts of unique transactions.
   Deleting an entry removes its observations. Continuous indexing/scheduling,
   webhooks, email delivery and validated AML detection are not deployed.
-- **Partner documentation** at `/developers/` describes 31 implemented operations,
+- **Partner documentation** at `/developers/` describes 73 implemented operations,
   scopes, limits, pagination, errors, provenance and examples. `/developers/openapi.json`
   is OpenAPI 3.1, generated reproducibly from `scripts/build_partner_docs.mjs`.
   Documentation is public and contains no keys, private scores or customer evidence.
+
+## Public data and central private access
+
+`https://rednblue.space/explore/` provides anonymous address research and a directory of ten existing public
+tools. Graphus keeps its seven public modules; Bloch Space keeps the complete
+multichain workspace, Graph Lab and record explorer. The directory also links
+science, ML, forecast evaluation, validators, network comparisons and the existing
+Bloch L1 explorer. A single catalog drives public cards and private module tabs.
+Public chain facts and descriptive analytics carry their existing source and
+coverage limitations; publication does not establish ownership, identity or risk.
+
+The private portal mounts the full Space workspace and nine source pages, including
+legacy network/analytics views, under `/space/`. Navigation, workers, record links,
+raw response links and exports remain on the portal origin. The fixed read-only
+`/api/porb/v1/space/*` gateway exposes eleven allowed public adapters with `data:read`.
+It cannot proxy Space account APIs, scores, writes or arbitrary URLs. Credentials,
+organization IDs and private annotations are never forwarded to source sites.
+Mounted pages share the portal session; the public originals remain anonymous.
+PWA installation and offline caching are omitted from the private mount.
+
+Actual organization scores, investigations, watchlists and governance records keep
+their existing role/scope checks and non-cacheable responses. The old synthetic
+score preview is retained only at `/aml/`; both its HTML and every fixture/code
+asset require a current portal browser session. API keys and Space sessions do not
+unlock these browser assets. The static root/index and public directory contain no
+score values. Legacy `/assets/demo.json` redirects to the protected fixture; the
+`aml-blochinc` build now contains redirects only. Space `/api/porb/*` returns 410
+with the canonical portal link, even for a logged-in Space user or unconfigured
+account database. Space preferences, recovery and account deletion remain intact.
+
+Mounted tabs clear on logout/organization-change broadcasts and recheck their
+session on visibility/pageshow and every 30 seconds. Source pages remain private
+and non-cacheable even on redirect. Same-origin workers and local Blob exports are
+allowed; script origins remain self-only. Reports retain independent checksums,
+source scope, retention and review declarations; this architecture does not itself
+establish a lawful basis for a customer's processing or GDPR/LGPD compliance.
+
+## Unified address research
+
+An address query now returns module results directly in the Bloch Space explorer,
+the public `/explore/` page at rednblue.space and the authenticated Address research
+view. The private view additionally searches the organization’s retained analyses;
+those scores and links remain subject to their original scopes and tenant checks.
+
+`GET https://bloch.space/api/research?network=ethereum&asset=USDT&query=<address>`
+combines the existing Graphus wallet adapter, a typed Graph Lab address page,
+reference incident counts and exact typed amounts, neighborhood topology, and
+Space’s descriptive k-means. Assets are BTC, ETH, BLCH, USDT and USDC. Each response
+carries module availability, independent source observations/anchors, model version,
+features, cohort membership and coverage. The `bloch-address-research/1` report’s
+`report_sha256` hashes `JSON.stringify(report without report_sha256)` in returned
+property order. The complete verified report can be downloaded from every UI.
+
+K-means uses degree, incoming/outgoing event counts and core membership for at least
+nine comparable address/script references; transaction nodes and amounts are not
+model inputs. Features are standardized with deterministic initialization. Labels
+are unordered sample groups, never risk classes, owner identities or predictions.
+Per-reference PageRank/Red/Blue values are absent from the public research report.
+UTXO inputs/outputs stay separate; incident amounts are not summed into an invented
+transfer volume. Block observations do not fill unobserved intervals with zeroes.
+Native ETH address history requires an unavailable index; balance/nonce can still
+be shown. Sparse address evidence does not qualify for time-series forecasts.
+
+Failures remain per module when another source is usable; wholly failed requests
+return 502. Complete reports above 2.8 MB return 422 rather than losing evidence.
+Public reads retain Space’s 30 requests/minute/visitor and 300/minute/isolate budget.
+The anonymous rednblue `/api/research` proxy has the same best-effort isolate limits,
+accepts only a validated network/asset/reference and a fixed Space endpoint, and
+forwards no cookies, tokens, organization IDs or private headers. It verifies report
+integrity/scope and never follows redirects. Public responses are non-cacheable.
+The authenticated `/api/porb/v1/space/research` route uses `data:read` and the existing
+shared module budget. Public and retained results never merge their snapshots.
+
+New searches clear prior output; superseded replies cannot replace the latest
+query. Logout/organization changes invalidate pending private research results.
 
 ## Authorization and capacity
 
@@ -42,12 +117,11 @@ Old API keys gain no scopes automatically. Reading case evidence and observation
 scores also requires `analyses:read` and `scores:read`. Session viewers cannot
 mutate cases or watchlists. Every query binds the organization obtained from the
 session/key. Foreign IDs return 404. Browser writes retain origin/action checks.
-All private responses are non-cacheable, carry `X-Request-Id` and API version 1.1.
+All private responses are non-cacheable, carry `X-Request-Id` and API version 1.2.
 
 Capacity per organization: latest 50 analyses; 100 cases; 50 snapshots per case;
 100 watched references; latest 500 observations. Existing collection limits remain
-6/minute and 100/day, with 1–4 pages / 1,200 references / 4,000 records. The Graphus
-gateway adds a shared 60/minute budget. Authentication remains 120 requests/minute
+6/minute and 100/day, with 1–8 pages / 1,200 references / 4,000 records. The Graphus and Space gateways share a 60/minute budget. Authentication remains 120 requests/minute
 per user/key. `Retry-After` reports the remaining limiting window, including daily
 collection limits. D1 writes use bounded batches and atomic insert predicates for
 capacity checks; watch observations use a unique constraint to prevent duplicates.
@@ -63,7 +137,7 @@ node --test tests/test_porb_*.mjs tests/test_space_science.mjs tests/test_system
 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/test_porb_browser.mjs
 ```
 
-`site/graphus/` is generated and ignored. The builder copies only selected public
+`site/graphus/` and `site/space/` are generated and ignored. The builder copies only selected public
 HTML and public assets, adapts source routes and adds the portal module bar. Never
 copy Graphus account databases, deployment configuration, Functions or private
 operator files into this mount. Portal and Graphus account systems stay separate.
@@ -81,7 +155,7 @@ wrangler pages deploy . --project-name rednblue-space --branch main
 Deploy public Graphus from `graphus/` with project `bloch-graphus` so its source
 Functions are included. Stage AML via `python3 scripts/build_aml_landing.py`, then
 deploy the staged `public/` with project `aml-blochinc`. The public AML build never
-contains the private database or gateway. It links to the unified portal and docs.
+contains scores, fixtures, the private database or gateway. All legacy preview paths redirect to the authenticated rednblue.space portal.
 
 Rollback may redeploy the preceding portal build while leaving the additive tables
 in place; do not drop evidence tables as a rollback step. The new workflow tables

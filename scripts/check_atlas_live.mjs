@@ -13,6 +13,7 @@ const publicOnly = portalOnly || process.argv.includes('--public-only');
 const owner = publicOnly ? null : JSON.parse(await readFile(process.env.PORB_CREDENTIALS_FILE || new URL('.data/porb-portal/bootstrap.json', root), 'utf8'));
 const summary = {checked_at: new Date().toISOString(), scope: portalOnly ? 'portal-artifacts-and-authentication-boundaries' : publicOnly ? 'public-and-authentication-boundaries' : 'public-and-authenticated-private', public_origin: publicOrigin, private_origin: privateOrigin, checks: [], sources: [], assets: []};
 const errors = [], cleanup = new Map();
+const addressQueries=new Map();
 let grant = null, key = null, authenticated = false;
 const browser = await webkit.launch();
 const anonymous = await browser.newContext({viewport: {width: 1440, height: 1000}});
@@ -48,7 +49,25 @@ async function publicChecks() {
   await api(anonymous, '/v1/atlas/motifs?analysis=00000000-0000-4000-8000-000000000001&reference=ETH:address:source', {status:401});
   await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
-  note('Anonymous access to private Atlas APIs is denied.');
+  await api(anonymous, '/v1/atlas/reports', {method:'POST',body:{kind:'window_comparison'},status:401});
+  await api(anonymous, '/v1/space/overview?network=bitcoin', {status:401});
+  await api(anonymous, '/v1/space/graph?network=bloch&asset=BLCH', {status:401});
+  await api(anonymous, '/v1/space/research?network=ethereum&asset=ETH&query=0x'+'1'.repeat(40), {status:401});
+  for(const path of ['/aml','/aml/','/aml/index.html','/aml/assets/demo.json','/aml/assets/site.js','/assets/demo.json','/space/app/','/space/graph/']){
+    let url=new URL(path,privateOrigin),gated=false;
+    for(let hop=0;hop<5;hop++){
+      const response=await anonymous.request.get(url.href,{maxRedirects:0});assert.ok([301,302,307,308].includes(response.status()),path+' must not expose its content anonymously');
+      const next=new URL(response.headers().location,url);assert.equal(next.origin,privateOrigin);if(next.pathname==='/portal/'){gated=true;break;}url=next;
+    }
+    assert.ok(gated,path+' must reach the portal login');
+  }
+  note('Anonymous private Atlas/Space APIs and direct AML pages/fixtures are gated.');
+  if(!portalOnly){
+    for(const path of ['preview','score']){const response=await anonymous.request.get('https://bloch.space/api/porb/'+path);assert.equal(response.status(),410);const body=await response.json();assert.equal(body.error,'scores_require_rednblue_portal');assert.equal(body.red,undefined);assert.equal(body.trend,undefined);assert.match(response.headers()['cache-control'],/no-store/);}
+    for(const path of ['/','/assets/demo.json']){const response=await anonymous.request.get('https://aml-blochinc.pages.dev'+path,{maxRedirects:0});assert.equal(response.status(),302);assert.ok(response.headers().location.startsWith(privateOrigin+'/portal/'));}
+    note('Legacy AML preview redirects to rednblue.space; Space score endpoints return 410 without score data.');
+  }
+
   if (!portalOnly) {
   const schemaResponse = await anonymous.request.get(publicOrigin + '/api/atlas/schema');
   assert.equal(schemaResponse.status(), 200);
@@ -86,6 +105,7 @@ async function publicChecks() {
     if (asset === 'BTC') assert.ok(report.fields.confirmations.value.minimum_at_capture >= 3, 'BTC captured confirmation depth');
     const item = {asset, attempts, records: report.records.length, timed_records: report.observation.records_with_timestamp, fields: 84, dataset_sha256: report.provenance.dataset_sha256};
     summary.assets.push(item);
+    const reference=report.references.find(row=>row.kind!=='transaction');assert.ok(reference?.reference,asset+' public reference');addressQueries.set(asset,new URLSearchParams({network:{BTC:'bitcoin',ETH:'ethereum',USDT:'ethereum',USDC:'ethereum',BLCH:'bloch'}[asset],asset,query:reference.reference}));
     console.log(JSON.stringify({asset, records: item.records, timed_records: item.timed_records, status: 'passed'}));
   }));
   const failed = results.find(r => r.status === 'rejected');
@@ -99,8 +119,14 @@ async function publicChecks() {
     ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css'].map(name => [privateOrigin, '/graphus/assets/' + name, 'site/graphus/assets/' + name]),
     ...['atlas_motifs.js','atlas_motifs_ui.js','atlas_motifs.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
-    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css','atlas_timeline_graph.js','atlas_timeline_graph_ui.js','atlas_timeline_compare.js','atlas_timeline_compare_ui.js'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
+    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css','atlas_timeline_graph.js','atlas_timeline_graph_ui.js','atlas_timeline_compare.js','atlas_timeline_compare_ui.js','atlas_window_record.js'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
+    ...['index.html','explore.css','explore.js'].map(name=>[privateOrigin,name==='index.html'?'/explore/':'/explore/'+name,'site/explore/'+name]),
+    ...['module-catalog.js','module-shell.js'].map(name=>[privateOrigin,'/portal/'+name,'site/portal/'+name]),
+    ...['app.js','workspace.js','research.js','graph-lab.js','graph-core.js','graph-worker.js','address-research-core.js','address-research-ui.js','address-research.css'].map(name=>[privateOrigin,'/space/assets/'+name,'site/space/assets/'+name]),
+    ...['account.js','app.js','workspace.js','research.js','graph-lab.js','address-research-core.js','address-research-ui.js','address-research.css'].map(name=>['https://bloch.space','/assets/'+name,'space/public/assets/'+name]),
+    ['https://bloch.space','/account/','space/public/account/index.html'],
+    ['https://bloch.space','/sw.js','space/public/sw.js'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
     [privateOrigin, '/portal/atlas-comparison.js', 'site/portal/atlas-comparison.js'],
@@ -122,6 +148,19 @@ async function publicChecks() {
     assert.equal(hash(await response.body()), hash(await readFile(new URL(local, root))), remote + ' deployed bytes');
   }
   note('Custom domains serve the deployed Atlas assets byte-for-byte.');
+  if(!portalOnly){
+    summary.address_research=[];
+    for(const [asset,query] of addressQueries){
+      const response=await anonymous.request.get('https://bloch.space/api/research?'+query,{timeout:65000});assert.equal(response.status(),200,asset+' address research');
+      const report=await response.json(),{report_sha256,...body}=report;assert.equal(hash(Buffer.from(JSON.stringify(body))),report_sha256);assert.equal(report.scope.reference,query.get('query'));assert.equal(report.scope.asset,asset);assert.ok(report.modules.ledger.status==='available'||report.modules.graph.status==='available');assert.equal(report.modules.forecast.status,'unavailable');
+      assert.ok(!(report.modules.analytics.data?.rows||[]).some(row=>'rank' in row||'red' in row||'blue' in row||'score' in row));
+      if(asset==='ETH')assert.equal(report.modules.graph.status,'unsupported');
+      const result={asset,ledger:report.modules.ledger.status,graph:report.modules.graph.status,machine_learning:report.modules.machine_learning.status,cohort:report.modules.machine_learning.data?.cohort_size??null,events:report.modules.graph.data?.edges.length??null,report_sha256};summary.address_research.push(result);console.log(JSON.stringify({address_research:result}));
+    }
+    const proxy=await anonymous.request.get(privateOrigin+'/api/research?'+addressQueries.get('ETH'),{timeout:65000});assert.equal(proxy.status(),200);const report=await proxy.json(),{report_sha256,...body}=report;assert.equal(hash(Buffer.from(JSON.stringify(body))),report_sha256);assert.equal(report.modules.graph.status,'unsupported');assert.match(proxy.headers()['cache-control'],/no-store/);
+    assert.equal((await anonymous.request.post(privateOrigin+'/api/research?'+addressQueries.get('ETH'))).status(),405);
+    note('Address research returns public module data across five assets, verified report hashes and explicit native ETH/forecast boundaries. Anonymous rednblue proxy is read-only.');
+  }
 }
 
 async function privateChecks() {
@@ -296,6 +335,7 @@ try {
   await publicChecks();
   if (!publicOnly) await privateChecks();
   await browserChecks();
+  const directory=await anonymous.newPage();directory.on('pageerror',error=>errors.push(error.message));await directory.goto(privateOrigin+'/explore/');await directory.locator('#tools > a').nth(9).waitFor();assert.equal(await directory.locator('#tools > a').count(),10);assert.equal(await directory.locator('#trend-chart,#metrics').count(),0);if(addressQueries.has('BTC')){await directory.selectOption('#public-address-form [name=asset]','BTC');await directory.fill('#public-address-form [name=query]',addressQueries.get('BTC').get('query'));await directory.click('#public-address-form button');await directory.locator('.address-research[data-asset=BTC]').waitFor({timeout:65000});assert.ok(await directory.locator('[data-module=machine-learning]').count());}await directory.setViewportSize({width:390,height:844});assert.ok(await directory.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await directory.close();assert.deepEqual(errors,[]);note('Public tool directory renders ten open tools without a login and fits mobile.');
   summary.status = 'passed';
 } catch (error) {
   summary.status = 'failed';

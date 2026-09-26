@@ -17,7 +17,7 @@ function setup(){
 }
 const credentials={email:'researcher@example.test',password:'a very long test password 123'};
 test('account lifecycle protects private data, scopes preferences, revokes sessions and recovers securely',async()=>{
-  const {call,db}=setup();assert.equal((await call('porb/preview')).status,401);
+  const {call,db}=setup();assert.equal((await call('account/workspace')).status,401);
   assert.equal((await call('account/register','POST',credentials,'','https://evil.example')).status,403);
   const registration=await call('account/register','POST',credentials);assert.equal(registration.status,200);
   const cookie=registration.headers.get('set-cookie').split(';')[0],registered=await registration.json();assert.match(registration.headers.get('set-cookie'),/HttpOnly/);assert.match(registration.headers.get('set-cookie'),/Secure/);assert.equal(registered.recovery_code.length,64);assert.equal(registered.live_score_access,false);
@@ -26,7 +26,7 @@ test('account lifecycle protects private data, scopes preferences, revokes sessi
   const workspace={network:'ethereum',view:'ml',range:'48'};assert.equal((await call('account/workspace','POST',workspace,cookie)).status,200);
   assert.deepEqual((await (await call('account/workspace','GET',null,cookie)).json()).workspace,workspace);
   const other=await call('account/register','POST',{...credentials,email:'other@example.test'}),otherCookie=other.headers.get('set-cookie').split(';')[0];assert.equal((await (await call('account/workspace','GET',null,otherCookie)).json()).workspace,null);
-  const preview=await (await call('porb/preview','GET',null,cookie)).json();assert.equal(preview.mode,'synthetic_demo');assert.equal(preview.live_scores,false);assert.equal((await call('porb/score','GET',null,cookie)).status,403);
+  for(const path of ['porb/preview','porb/score']){const retired=await call(path,'GET',null,cookie);assert.equal(retired.status,410);const body=await retired.json();assert.equal(body.error,'scores_require_rednblue_portal');assert.equal(body.portal,'https://rednblue.space/portal/');assert.equal(body.red,undefined);assert.equal(body.trend,undefined);}
   const recovered=await call('account/recover','POST',{...credentials,password:'my replacement password 456',recovery:registered.recovery_code});assert.equal(recovered.status,200);
   assert.equal((await (await call('account/session','GET',null,cookie)).json()).authenticated,false);
   assert.equal((await call('account/recover','POST',{...credentials,recovery:registered.recovery_code})).status,401);
@@ -37,13 +37,13 @@ test('account lifecycle protects private data, scopes preferences, revokes sessi
 test('expired and forged sessions fail closed; logout revokes the server token',async()=>{
   const {call,db}=setup(),registration=await call('account/register','POST',credentials),cookie=registration.headers.get('set-cookie').split(';')[0];
   assert.equal((await (await call('account/session','GET',null,'__Host-space_session='+'a'.repeat(64))).json()).authenticated,false);
-  await call('account/logout','POST',null,cookie);assert.equal((await call('porb/preview','GET',null,cookie)).status,401);
-  const login=await call('account/login','POST',credentials),newCookie=login.headers.get('set-cookie').split(';')[0];db.exec('UPDATE space_sessions SET expires_at=0');assert.equal((await call('porb/preview','GET',null,newCookie)).status,401);db.close();
+  await call('account/logout','POST',null,cookie);assert.equal((await call('account/workspace','GET',null,cookie)).status,401);
+  const login=await call('account/login','POST',credentials),newCookie=login.headers.get('set-cookie').split(';')[0];db.exec('UPDATE space_sessions SET expires_at=0');assert.equal((await call('account/workspace','GET',null,newCookie)).status,401);db.close();
 });
 test('durable auth budgets and input bounds reject excess attempts',async()=>{
   const {call,db}=setup();for(let i=0;i<20;i++)assert.equal((await call('account/login','POST',{email:'bad',password:'x'})).status,400);
   const limited=await call('account/login','POST',credentials);assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'3600');db.close();
 });
 test('unconfigured authentication reports unavailable without exposing private previews',async()=>{
-  const response=await handleAccount({request:new Request('https://bloch.space/api/porb/preview'),env:{}});assert.equal(response.status,503);assert.match(response.headers.get('cache-control'),/no-store/);
+  const response=await handleAccount({request:new Request('https://bloch.space/api/porb/preview'),env:{}});assert.equal(response.status,410);assert.match(response.headers.get('cache-control'),/no-store/);
 });

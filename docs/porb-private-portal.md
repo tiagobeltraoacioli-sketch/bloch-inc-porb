@@ -59,7 +59,7 @@ Collection body: `{"asset":"BTC","pages":2}`. The authenticated principal suppli
 
 ## Deployment
 
-Backend, model and migrations: `portal/`. Browser: `site/portal/`. Pages route: `site/functions/`. `site/wrangler.toml` targets the new portal project. Deploy from **site/** so Pages discovers Functions. The root redirects to `/portal/`. Existing AML preview assets remain separate from authenticated data; these commands do not redeploy `aml-blochinc`.
+Backend, model and migrations: `portal/`. Browser: `site/portal/`. Pages route: `site/functions/`. `site/wrangler.toml` targets the new portal project. Deploy from **site/** so Pages discovers Functions. The root redirects to `/portal/`. Synthetic AML preview HTML and fixtures are now under the authenticated `/aml/` route. Public data tools are discoverable at `/explore/`; these commands do not redeploy the separate legacy `aml-blochinc` redirect project.
 
 ```sh
 cd site
@@ -109,7 +109,7 @@ The graph update passed 21 model, graph search, source, authorization and time-s
 
 Production WebKit verified the master login on the custom domain, address/script and transaction search across saved BTC, ETH, BLCH, USDT and USDC datasets, exact record inspection, mobile layout for each asset, touch selection and logout. The public AML site's primary access action reached the custom-domain login successfully; its mobile layout also passed. Published releases: portal `8780b082.rednblue-space.pages.dev`, public landing `8dbd3e26.aml-blochinc.pages.dev`.
 
-Deploy the public AML landing independently: `python3 scripts/build_aml_landing.py` creates a temporary directory containing only the public landing assets and its own `wrangler.toml`. In that directory, run `wrangler pages deploy public --project-name aml-blochinc --branch main`. Its `/portal` paths redirect to the custom BI-PoRB domain. The private portal continues to deploy from `site/`; its Functions and D1 bindings are not included in the public landing bundle.
+Deploy the public AML landing independently: `python3 scripts/build_aml_landing.py` creates a temporary redirect-only bundle and its own `wrangler.toml`, without any score fixtures. In that directory, run `wrangler pages deploy public --project-name aml-blochinc --branch main`. All old preview and asset paths redirect to authenticated access on the custom BI-PoRB domain. The private portal continues to deploy from `site/`; its Functions and D1 bindings are not included in the public landing bundle.
 
 ## Invitation delivery and password confirmation
 

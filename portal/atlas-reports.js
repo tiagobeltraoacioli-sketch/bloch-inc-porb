@@ -4,11 +4,13 @@ import {compareAnalyses,COMPARISON_VERSION} from './atlas-comparison.js';
 import {traceAtlasPaths,pathParameters,PathError,PATH_VERSION} from '../graphus/assets/atlas_paths.js';
 import {scanAtlasMotifs,motifParameters,MOTIF_VERSION} from '../graphus/assets/atlas_motifs.js';
 import {exploreAtlasTimeline,timelineParameters,TIMELINE_VERSION} from '../graphus/assets/atlas_timeline.js';
+import {compareTimelineWindows} from '../graphus/assets/atlas_timeline_compare.js';
+import {WINDOW_RECORD_VERSION,windowReportParameters,retainWindowComparison} from '../graphus/assets/atlas_window_record.js';
 
 export const REPORT_LIMITS = Object.freeze({capacity:20,bytes:6000000,maximum_days:365});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HASH=/^[a-f0-9]{64}$/;
-const VERSIONS={paths:PATH_VERSION,comparison:COMPARISON_VERSION,motifs:MOTIF_VERSION,timeline:TIMELINE_VERSION};
+const VERSIONS={paths:PATH_VERSION,comparison:COMPARISON_VERSION,motifs:MOTIF_VERSION,timeline:TIMELINE_VERSION,window_comparison:WINDOW_RECORD_VERSION};
 // Keep UTF-16 surrogate pairs together so each SQL text part is valid UTF-8.
 function chunks(payload){
   const parts=[];for(let start=0;start<payload.length;){let end=Math.min(start+200000,payload.length);const code=payload.charCodeAt(end-1);if(code>=0xd800&&code<=0xdbff)end--;parts.push(payload.slice(start,end));start=end;}return parts;
@@ -37,6 +39,8 @@ function normalize(body){
     keys(body.parameters,['analysis','reference','direction','kind','minimum','interval','start','end']);
     const {analysis,...input}=body.parameters;requireValue(UUID.test(analysis||''),'invalid_report_analysis');
     parameters={analysis,...timelineParameters(input)};
+  }else if(body.kind==='window_comparison'){
+    parameters=windowReportParameters(body.parameters);
   }else{
     keys(body.parameters,['baseline','current','reference']);const {baseline,current,reference=null}=body.parameters;
     requireValue(UUID.test(baseline||'')&&UUID.test(current||''),'invalid_report_analysis');
@@ -54,13 +58,20 @@ async function computed(db,tenant,input){
   const {baseline,current,reference}=input.parameters,a=await readVerifiedAnalysis(db,tenant,baseline),b=current===baseline?a:await readVerifiedAnalysis(db,tenant,current);
   return compareAnalyses(a,b,reference);
 }
+async function computedWindows(db,tenant,input){
+  const parameters=input.parameters;let timeline,guard=null;
+  if(parameters.analysis){const run=await readVerifiedAnalysis(db,tenant,parameters.analysis);timeline=await exploreAtlasTimeline(run.graph,parameters.timeline,{dataset_sha256:run.digest,analysis_id:run.id});}
+  else{const source=await readVerifiedReport(db,tenant,parameters.timeline_report);requireValue(source.kind==='timeline','window_report_source_not_timeline',422);timeline=source.report;guard={id:source.id,payload_sha256:source.payload_sha256};}
+  const comparison=await compareTimelineWindows(timeline,parameters.baseline,parameters.comparison);return {report:await retainWindowComparison(comparison,parameters),guard};
+}
 function summarize(kind,report){
+  if(kind==='window_comparison'){const value=report.comparison;return {baseline_events:value.baseline.observed_events,comparison_events:value.comparison.observed_events,groups:value.groups.length,baseline:value.baseline.selection,comparison:value.comparison.selection,equal_durations:value.equal_durations,reference:value.parent_query.reference,comparison_sha256:value.comparison_sha256,timeline_report_sha256:value.provenance.timeline_report_sha256};}
   if(kind==='timeline')return {events:report.events.length,buckets:report.buckets.length,interval:report.window.interval,reference:report.parameters.reference,records:report.coverage.records,timed_candidates:report.coverage.timed_candidates,start:report.window.start,end_inclusive:report.window.end_inclusive,state:report.state};
   if(kind==='motifs')return {motifs:report.motifs.length,type:report.parameters.type,reference:report.parameters.reference,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,complete_within_query:report.search.complete_within_query,state:report.state};
   return kind==='paths'?{paths:report.paths.length,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,state:report.state}
     :{events:report.events.length,counts:report.counts,block_conflicts:report.blocks.conflicts.length,truncated:report.limits.truncated};
 }
-function reportParameters(kind,report){return kind==='comparison'?{baseline:report.baseline.id,current:report.current.id,reference:report.reference}:{analysis:report.provenance.analysis_id,...report.parameters};}
+function reportParameters(kind,report){return kind==='window_comparison'?windowReportParameters(report.parameters):kind==='comparison'?{baseline:report.baseline.id,current:report.current.id,reference:report.reference}:{analysis:report.provenance.analysis_id,...report.parameters};}
 const existing=(db,tenant,requestId)=>statement(db,`SELECT ${COLUMNS},request_digest FROM atlas_reports WHERE tenant_id=? AND request_id=?`,tenant,requestId).first();
 function replay(row,requestDigest){
   requireValue(row.request_digest===requestDigest,'report_request_conflict',409);
@@ -81,7 +92,9 @@ export async function readVerifiedReport(db,tenant,id){
   requireValue(report_sha256===row.report_sha256&&report.asset===row.asset&&report.version===row.report_version&&await digest(JSON.stringify(content))===report_sha256,'report_integrity_failed',409);
   // Manifest kind, query and summary must describe the verified calculation.
   // Keep prior versions here when adding a new transform version.
-  try{requireValue(Object.hasOwn(VERSIONS,row.kind)&&report.version===VERSIONS[row.kind]&&JSON.stringify(summarize(row.kind,report))===row.summary_json&&JSON.stringify(reportParameters(row.kind,report))===row.parameters_json,'report_integrity_failed',409);}
+  try{requireValue(Object.hasOwn(VERSIONS,row.kind)&&report.version===VERSIONS[row.kind]&&JSON.stringify(summarize(row.kind,report))===row.summary_json&&JSON.stringify(reportParameters(row.kind,report))===row.parameters_json,'report_integrity_failed',409);
+    if(row.kind==='window_comparison')requireValue(JSON.stringify(await retainWindowComparison(report.comparison,report.parameters))===payload,'report_integrity_failed',409);
+  }
   catch{throw new PortalError('report_integrity_failed',409);}
   requireValue(row.expires_at>Date.now(),'report_unavailable',404);
   return {...metadata(row),integrity:{verified:true,payload_sha256:row.payload_sha256,report_sha256},report};
@@ -115,17 +128,18 @@ export async function atlasReportsRoute(path,request,env,principal){
     if(prior){const response=replay(prior,requestDigest);await audit(db,principal,'atlas.report.retry',prior.id).run();return response;}
     await budget(env,`atlas-report-create:${tenant}`,6,60);
     const count=await statement(db,'SELECT count(*) AS n FROM atlas_reports WHERE tenant_id=?',tenant).first();requireValue(count.n<20,'report_capacity_purge_expired',409);
-    const report=await computed(db,tenant,input);
+    const {report,guard}=input.kind==='window_comparison'?await computedWindows(db,tenant,input):{report:await computed(db,tenant,input),guard:null};
     requireValue(report.report_sha256===input.expected_report_sha256,'report_preview_changed',409);
     const payload=JSON.stringify(report),bytes=new TextEncoder().encode(payload).length;
     requireValue(bytes<=REPORT_LIMITS.bytes,'report_storage_capacity',422);
     const hash=await digest(payload),reportId=crypto.randomUUID(),now=Date.now(),parts=chunks(payload),summary=summarize(input.kind,report);
     const writes=[statement(db,`INSERT OR IGNORE INTO atlas_reports(id,tenant_id,request_id,request_digest,kind,title,purpose,lawful_basis,source_licence,asset,report_version,report_sha256,payload_sha256,parameters_json,summary_json,payload_bytes,part_count,created_by,created_at,expires_at)
-      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM atlas_reports WHERE tenant_id=?)<20`,reportId,tenant,body.request_id,requestDigest,input.kind,input.title,input.purpose,input.lawful_basis,input.source_licence,report.asset,report.version,report.report_sha256,hash,JSON.stringify(input.parameters),JSON.stringify(summary),bytes,parts.length,principal.key_id||principal.id,now,now+input.retention_days*86400000,tenant)];
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM atlas_reports WHERE tenant_id=?)<20
+      AND (? IS NULL OR EXISTS(SELECT 1 FROM atlas_reports WHERE id=? AND tenant_id=? AND expires_at>? AND payload_sha256=?))`,reportId,tenant,body.request_id,requestDigest,input.kind,input.title,input.purpose,input.lawful_basis,input.source_licence,report.asset,report.version,report.report_sha256,hash,JSON.stringify(input.parameters),JSON.stringify(summary),bytes,parts.length,principal.key_id||principal.id,now,now+input.retention_days*86400000,tenant,guard?.id??null,guard?.id??null,tenant,now,guard?.payload_sha256??null)];
     for(let part=0;part<parts.length;part++)writes.push(statement(db,'INSERT INTO atlas_report_parts(report_id,part,payload) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM atlas_reports WHERE id=? AND tenant_id=?)',reportId,part,parts[part],reportId,tenant));
     writes.push(statement(db,'INSERT INTO audit(id,tenant_id,actor_id,action,resource_id,created_at) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM atlas_reports WHERE id=? AND tenant_id=?)',crypto.randomUUID(),tenant,principal.key_id||principal.id,'atlas.report.create',reportId,now,reportId,tenant));
     const [inserted]=await db.batch(writes),stored=await existing(db,tenant,body.request_id);
-    requireValue(stored,'report_capacity_purge_expired',409);
+    requireValue(stored,guard?'window_source_changed_or_capacity':'report_capacity_purge_expired',409);
     return inserted.meta.changes===1?json({...metadata(stored),duplicate:false},201):replay(stored,requestDigest);
   }catch(error){if(error instanceof PathError)throw new PortalError(error.message,error.status);throw error;}
 }

@@ -1,1 +1,1 @@
-{"version":1,"include":["/api/*","/graphus/*"],"exclude":[]}
+{"version":1,"include":["/api/*","/graphus/*","/space/*","/aml/*","/aml","/space"],"exclude":[]}

@@ -70,12 +70,13 @@ recovery-code password reset, and password-confirmed account deletion.
 `GET|POST /api/account/workspace` reads/writes one private network/view/range.
 `DELETE /api/account/delete` requires the current password.
 
-`GET /api/porb/preview` requires a live session and returns a marked synthetic
-Red/Blue fixture. `GET /api/porb/score` remains denied: no live score backend is
-deployed. Accounts do not constitute verified identity or delegated score
-access. Existing BI-PoRB purpose, scope, identity, revocation and audit requirements
-remain prerequisites for any future live score service. No chain consensus,
-transaction acceptance or on-chain labels are modified by this release.
+`/api/porb/*`, including the old preview and score routes, now returns 410 with
+`https://rednblue.space/portal/`. No score values are served by Space, even with a
+Space session. The synthetic preview is retained behind the central portal's
+browser authentication. Existing Space account preferences, recovery and deletion
+remain available; a Space account does not grant private intelligence access.
+Public chain observations and descriptive research remain open. No chain consensus,
+transaction acceptance or on-chain labels are modified.
 
 ## PWA
 
@@ -83,7 +84,7 @@ The manifest provides a standalone application, 192/512 pixel icons and research
 shortcuts. `sw.js` precaches only the public application shell and code. Offline
 navigation opens that shell, labels the connection state, and refuses API reads
 with a 503 JSON response. No live-data availability is implied while offline.
-Updates are offered with an explicit reload action. Bump the cache version when
+Updates are offered with an explicit reload action. The current shell cache is v4. Bump the cache version when
 shipping changed precached assets. Cache contents are restricted to the app's
 own cache-name prefix; APIs, POSTs and third-party requests are not persisted.
 
@@ -146,3 +147,12 @@ notarization were not performed. At inspection, Bloch's latest uninterrupted
 monitoring segment was too short for AR(1), so that panel correctly withheld an
 evaluation while descriptive clustering remained available. Bitcoin and Ethereum
 had evaluated models; these results change as source windows change.
+
+## Integrated address lookup
+
+Address searches in the record explorer automatically call `/api/research` and
+render source records, typed graph evidence, exact incident amounts, topology and
+descriptive k-means when at least nine comparable references are available. The
+same report is available at `https://rednblue.space/explore/` and in its private
+Address research view. See [the unified research contract](unified-intelligence.md#unified-address-research)
+for source coverage, native ETH limits, digest/export semantics and access controls.

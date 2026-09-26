@@ -30,7 +30,7 @@ export function mountAtlasTimeline(root,query,onReport=()=>{},options={}){
     </div><div class="atlas-actions"><button data-time="json" disabled>Download complete timeline JSON</button><button data-time="csv" disabled>Export selected events CSV</button></div>`;
   const $=name=>root.querySelector(`[data-time="${name}"]`),optionId='atlas-timeline-options-'+crypto.randomUUID();$('options').id=optionId;$('reference').setAttribute('list',optionId);
   const network=mountTimelineGraph($('graph'));
-  const comparison=mountTimelineComparison($('compare'));
+  const comparison=mountTimelineComparison($('compare'),options.onWindowComparison);
   let source=null,report=null,version=0,busy=false,loading=false,first=0,last=-1,page=0;
   const selection=()=>({first,last,query:$('search').value}),available=()=>!options.readOnly&&source&&!loading;
   function controls(){for(const control of $('form').elements)control.disabled=!available();$('run').disabled=!available()||busy;for(const name of ['json','csv'])$(name).disabled=!report||busy||loading;root.setAttribute('aria-busy',String(busy||loading));}

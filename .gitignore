@@ -6,6 +6,7 @@ __pycache__/
 *.sqlite3
 .data/
 site/graphus/
+site/space/
 
 # Local desktop build products and test artifacts
 desktop/dist/

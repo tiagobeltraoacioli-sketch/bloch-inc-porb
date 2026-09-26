@@ -1,3 +1,5 @@
+import {verifyResearch} from './address-research-core.js';
+import {renderResearch} from './address-research-ui.js';
 const $ = selector => document.querySelector(selector);
 const themeStorageKey='bloch-space-theme';
 try{if(localStorage.getItem(themeStorageKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
@@ -29,14 +31,14 @@ const note = text => element('p','result-copy',text);
 function apiParams(route,network,query,asset,offset=0,cursor=null){
   const params=new URLSearchParams({network});
   if(query)params.set('query',query);
-  if(asset && route==='address')params.set('asset',asset);
+  if(asset && ['address','research'].includes(route))params.set('asset',asset);
   if(route==='block'&&offset>0)params.set('offset',String(offset));
   if(route==='history'&&cursor)params.set('cursor',cursor);
   return params;
 }
 async function api(route, network, query, asset, offset=0, cursor=null) {
   const params=apiParams(route,network,query,asset,offset,cursor);
-  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),route==='research'?60000:15000);
   try{
     const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
     const body=await response.json();
@@ -442,6 +444,11 @@ function renderTransaction(data,query) {
 
 function showResult(kind,data,query,asset) {
   const section=$('#result-section'),root=$('#result');clear(root);const grid=element('div','result-grid');
+  if(kind==='address'&&data.version==='bloch-address-research/1'){
+    const report=element('div');renderResearch(report,data,{mounted:location.pathname.startsWith('/space/')});root.append(report);
+    if(data.modules.ledger.status==='available'){grid.append(...renderAddress(data.modules.ledger.data,query,asset));root.append(grid);}
+    root.append(rawResponse(data,'research',state.network,query,asset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
   grid.append(...(kind==='address'?renderAddress(data,query,asset):kind==='block'?renderBlock(data,query):renderTransaction(data,query)));
   root.append(grid,rawResponse(data,kind,state.network,query,asset,state.result?.offset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -457,14 +464,16 @@ function setHistory(params,mode){
 async function search(kind,query,asset,offset=0,historyMode='push') {
   if(historyMode==='push')state.navigation++;
   const network=state.network;asset=network==='bitcoin'?'BTC':network==='bloch'?'BLCH':['ETH','USDT','USDC'].includes(asset)?asset:'ETH';const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
-  message('Looking up the source record…');
+  $('#result').replaceChildren();$('#result-section').hidden=true;state.result=null;
+  message('Looking up source records and module analyses…');
+  const lookup=async route=>route==='address'?verifyResearch(await api('research',network,query,asset)):api(route,network,query,asset,offset);
   try{
     let resolved=requested;let data;
-    try{data=await api(resolved,network,query,asset,offset);}catch(error){
+    try{data=await lookup(resolved);}catch(error){
       if(kind==='auto'&&/^(?:0x)?[0-9a-f]{64}$/i.test(query)&&resolved==='tx'&&error.message==='not_found'){
         resolved='block';
         try{data=await api(resolved,network,query,asset,offset);}catch(blockError){
-          if(network==='bloch'&&blockError.message==='not_found'){resolved='address';data=await api(resolved,network,query,'BLCH');asset='BLCH';}
+          if(network==='bloch'&&blockError.message==='not_found'){resolved='address';asset='BLCH';data=await lookup(resolved);}
           else throw blockError;
         }
       }else throw error;

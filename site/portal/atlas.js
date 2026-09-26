@@ -67,7 +67,7 @@ const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossier
 const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const accessAudit = auditWorkspace(request);
-const timelineWorkspace = mountAtlasTimeline($('atlas-timeline-workspace'), (parameters, source) => request('/v1/atlas/timeline?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('timeline',report));
+const timelineWorkspace = mountAtlasTimeline($('atlas-timeline-workspace'), (parameters, source) => request('/v1/atlas/timeline?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('timeline',report),{onWindowComparison:report=>reports.setWindowCandidate(report,report?{analysis:report.provenance.analysis_id}:null,'live')});
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('motifs',report));
 function download(name, value) {

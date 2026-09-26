@@ -30,7 +30,7 @@ function lineChart(points) {
 }
 
 function barRows(rows, label, max, kind) {
-  return rows.map((row) => `<div class="bar-row ${kind}"><span>${escapeHtml(label(row))}</span><span class="track"><span class="fill" style="width:${Math.round(row.count / max * 100)}%"></span></span><strong>${format.format(row.count)}</strong></div>`).join('');
+  return rows.map((row) => `<div class="bar-row ${kind}"><span>${escapeHtml(label(row))}</span><span class="track"><span class="fill" data-width="${Math.round(row.count / max * 100)}"></span></span><strong>${format.format(row.count)}</strong></div>`).join('');
 }
 
 function renderTables(data) {
@@ -43,7 +43,7 @@ function renderTables(data) {
 
 async function main() {
   try {
-    const response = await fetch('assets/demo.json', {cache:'no-store'});
+    const response = await fetch('/aml/assets/demo.json', {cache:'no-store'});
     if (!response.ok) throw new Error('fixture unavailable');
     const data = await response.json();
     if (data.mode !== 'synthetic_demo') throw new Error('unexpected data mode');
@@ -51,6 +51,7 @@ async function main() {
     $('#trend-chart').innerHTML = lineChart(data.trend);
     $('#risk-chart').innerHTML = barRows(data.risk_distribution, (r) => r.label, Math.max(...data.risk_distribution.map((r) => r.count)), 'red');
     $('#typology-chart').innerHTML = barRows(data.typologies, (r) => r.code + ' ' + r.name, Math.max(...data.typologies.map((r) => r.count)), 'blue');
+    for(const fill of document.querySelectorAll('.fill[data-width]'))fill.style.width=fill.dataset.width+'%';
     renderTables(data);
   } catch (error) {
     $('#overview-source').textContent = 'Synthetic fixture unavailable. Please reload the preview.';
@@ -61,7 +62,7 @@ main();
 
 async function renderOfficialSource() {
   try {
-    const response = await fetch('assets/ofac-status.json', {cache:'no-store'});
+    const response = await fetch('/assets/ofac-status.json', {cache:'no-store'});
     if (!response.ok) throw new Error('source unavailable');
     const data = await response.json();
     const ageHours = (Date.now() - Date.parse(data.retrieved_at)) / 3600000;
@@ -76,7 +77,7 @@ renderOfficialSource();
 
 async function renderBlochSource() {
   try {
-    const response = await fetch('assets/bloch-status.json', {cache:'no-store'});
+    const response = await fetch('/assets/bloch-status.json', {cache:'no-store'});
     if (!response.ok) throw new Error('source unavailable');
     const data = await response.json();
     const ageHours = (Date.now() - Date.parse(data.retrieved_at)) / 3600000;

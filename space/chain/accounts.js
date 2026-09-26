@@ -31,7 +31,8 @@ async function budget(request,env){
 }
 export async function handleAccount({request,env,waitUntil}){
   const url=new URL(request.url),path=url.pathname,secure=url.protocol==='https:',db=env.SPACE_DB;
-  if(path==='/api/account/config'&&request.method==='GET')return json({enabled:Boolean(db&&env.SPACE_AUTH_PEPPER),method:'email-password',live_scores:false,preview:'authenticated-synthetic',email_verified:false});
+  if(path.startsWith('/api/porb/'))return json({error:'scores_require_rednblue_portal',portal:'https://rednblue.space/portal/',live_score_access:false},410);
+  if(path==='/api/account/config'&&request.method==='GET')return json({enabled:Boolean(db&&env.SPACE_AUTH_PEPPER),method:'email-password',live_scores:false,preview:'rednblue-portal',portal:'https://rednblue.space/portal/',email_verified:false});
   if(!db||!env.SPACE_AUTH_PEPPER)return json({error:'account_service_unavailable'},503);
   if(!['GET','POST','DELETE'].includes(request.method))return json({error:'method_not_allowed'},405,{allow:'GET, POST, DELETE'});
   if(url.searchParams.size)return json({error:'unexpected_parameters'},400);
@@ -77,10 +78,6 @@ export async function handleAccount({request,env,waitUntil}){
       await db.batch([db.prepare('DELETE FROM space_sessions WHERE account_id=?').bind(user.id),db.prepare('DELETE FROM space_workspace WHERE account_id=?').bind(user.id),db.prepare('DELETE FROM space_accounts WHERE id=?').bind(user.id)]);
       return json({deleted:true},200,{'set-cookie':cookie('',secure,0)});
     }
-    if(path==='/api/porb/preview'&&request.method==='GET')return json({mode:'synthetic_demo',live_scores:false,method:'Hand-authored BI-PoRB fixture; no model trained on customer data',red:{label:'Transaction signals',median:182},blue:{label:'Wallet context',median:684},
-      trend:[{day:'D1',red:248,blue:638},{day:'D2',red:231,blue:646},{day:'D3',red:262,blue:641},{day:'D4',red:220,blue:658},{day:'D5',red:213,blue:665},{day:'D6',red:242,blue:659},{day:'D7',red:205,blue:676}],
-      boundary:'Synthetic product preview. No real address scores, ownership labels or sanctions determinations. Live score serving is not deployed. Registration is not a score delegation.'});
-    if(path==='/api/porb/score')return json({error:'live_score_service_not_deployed',delegation_required:true},403);
     return json({error:'not_found'},404);
   }catch(error){return json({error:error.message==='invalid_body'||error instanceof SyntaxError?'invalid_request':'account_request_failed'},error.message==='invalid_body'||error instanceof SyntaxError?400:503);}
 }

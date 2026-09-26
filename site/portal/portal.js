@@ -4,6 +4,7 @@ import {Intelligence} from './intelligence.js';
 import {Enrichment} from './enrichment.js';
 import {atlasLink,atlasSelection} from './atlas-context.js';
 const $=id=>document.getElementById(id),state={session:null,analysis:null,science:null,runs:[],view:'overview'};
+const accessChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('porb-access'):null;
 const requestedView=new URLSearchParams(location.search).get('view');
 let pendingReference=new URLSearchParams(location.search);
 let pendingAtlas=atlasSelection(new URLSearchParams(location.search)),returnToAtlas=requestedView==='atlas';
@@ -56,8 +57,8 @@ async function session(){
   await Promise.allSettled([loadOverview(),loadRuns()]);if(['cases','watchlists'].includes(state.view))await intelligence.view(state.view);
   if(state.view==='analyses'&&pendingAtlas.analysis){const selected=pendingAtlas;pendingAtlas={analysis:null,node:null};try{await openRun(selected.analysis,selected.node);}catch(error){message(error.message);}}
 }
-$('logout').onclick=()=>perform($('logout'),async()=>{await api('/auth/logout','POST',{});showGate();});
-$('organization').onchange=()=>perform($('organization'),async()=>{await api('/auth/organization','POST',{id:$('organization').value});contextVersion++;intelligence.reset();enrichment.reset();state.analysis=null;state.science=null;state.selected=null;explorer.clear();$('analysis-result').hidden=true;$('analysis-empty').hidden=false;$('science-result').hidden=true;$('science-empty').hidden=false;showView('overview');await session();});
+$('logout').onclick=()=>perform($('logout'),async()=>{await api('/auth/logout','POST',{});accessChannel?.postMessage('logout');showGate();});
+$('organization').onchange=()=>perform($('organization'),async()=>{await api('/auth/organization','POST',{id:$('organization').value});accessChannel?.postMessage('organization');contextVersion++;intelligence.reset();enrichment.reset();state.analysis=null;state.science=null;state.selected=null;explorer.clear();$('analysis-result').hidden=true;$('analysis-empty').hidden=false;$('science-result').hidden=true;$('science-empty').hidden=false;showView('overview');await session();});
 function showView(view){state.view=view;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!==`view-${view}`);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));if(view==='access')loadAccess().catch(e=>message(e.message));intelligence.view(view).catch(e=>message(e.message));requestAnimationFrame(redraw);}
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>showView(b.dataset.go));
 async function loadOverview(){

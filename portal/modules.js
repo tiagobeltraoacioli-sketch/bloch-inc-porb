@@ -15,14 +15,23 @@ export const MODULE_ROUTES={
   'chain/holders':['asset'],
   'chain/balances':['asset','addresses'],
 };
-export function moduleQuery(path){const route=path.replace('/v1/graphus/','');return Object.hasOwn(MODULE_ROUTES,route)?MODULE_ROUTES[route]:undefined;}
+export const SPACE_ROUTES={
+  overview:['network'],series:['network','range'],intelligence:['network'],validators:['network','offset'],
+  graphus:['network'],graph:['network','asset','kind','query','cursor'],
+  research:['network','query','asset'],address:['network','query','asset'],block:['network','query','offset'],tx:['network','query'],history:['network','query','cursor'],
+};
+function target(path){
+  for(const [prefix,origin,routes] of [['/v1/graphus/','https://bloch-graphus.xyz',MODULE_ROUTES],['/v1/space/','https://bloch.space',SPACE_ROUTES]])if(path.startsWith(prefix))return {route:path.slice(prefix.length),origin,routes};
+  return null;
+}
+export function moduleQuery(path){const value=target(path);return value&&Object.hasOwn(value.routes,value.route)?value.routes[value.route]:undefined;}
 export async function moduleRoute(path,request,env,principal,fetcher){
-  if(!path.startsWith('/v1/graphus/'))return null;
+  const value=target(path);if(!value)return null;
   authorize(principal,'data:read');requireValue(request.method==='GET','read_only',405);
-  const route=path.slice('/v1/graphus/'.length);requireValue(Object.hasOwn(MODULE_ROUTES,route),'module_unavailable',404);
-  const url=new URL(request.url);requireValue(url.search.length<=2200&&[...url.searchParams].every(([k,v])=>MODULE_ROUTES[route].includes(k)&&v.length<=1700&&url.searchParams.getAll(k).length===1),'invalid_module_query');
+  const {route,origin,routes}=value;requireValue(Object.hasOwn(routes,route),'module_unavailable',404);
+  const url=new URL(request.url);requireValue(url.search.length<=2200&&[...url.searchParams].every(([k,v])=>routes[route].includes(k)&&v.length<=1700&&url.searchParams.getAll(k).length===1),'invalid_module_query');
   await budget(env,`modules:${principal.tenant_id}`,60,60);
-  const upstream=new URL(`/api/${route}`,'https://bloch-graphus.xyz');upstream.search=url.search;
+  const upstream=new URL(`/api/${route}`,origin);upstream.search=url.search;
   let status=200,retryAfter='60';
   try{
     const content=await readPublicJson(async(u,options)=>{
