@@ -63,7 +63,15 @@ async function publicChecks() {
       console.log(asset + ': retrying one transient source response.');
       await new Promise(resolve => setTimeout(resolve, 2000));
     } while (attempts < 2);
-    assert.equal(response.status(), 200, asset + ' analysis HTTP status');
+    if (response.status() !== 200) {
+      const raw = await response.text();
+      let error = 'non_json_response';
+      try { const code = JSON.parse(raw).error; if (typeof code === 'string' && /^[a-z0-9_.-]{1,80}$/i.test(code)) error = code; }
+      catch { const code = raw.match(/(?:Error code|error-code[^>]*>)\s*(\d{3,5})/i); if (code) error = 'edge_error_' + code[1]; }
+      const failure = {asset, attempts, status: response.status(), error, content_type: response.headers()['content-type'] || null};
+      (summary.source_failures ||= []).push(failure); console.log(JSON.stringify(failure));
+      throw new Error(`${asset} analysis HTTP ${failure.status}: ${error}`);
+    }
     const report = await response.json();
     assert.equal(report.asset, asset);
     assert.equal(Object.keys(report.fields).length, 84);
@@ -91,6 +99,7 @@ async function publicChecks() {
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
     [privateOrigin, '/portal/atlas-comparison.js', 'site/portal/atlas-comparison.js'],
+    [privateOrigin, '/portal/atlas-comparison-view.js', 'site/portal/atlas-comparison-view.js'],
     [privateOrigin, '/portal/atlas-reports.js', 'site/portal/atlas-reports.js'],
     [privateOrigin, '/portal/atlas-cases.js', 'site/portal/atlas-cases.js'],
     [privateOrigin, '/portal/atlas-reviews.js', 'site/portal/atlas-reviews.js'],

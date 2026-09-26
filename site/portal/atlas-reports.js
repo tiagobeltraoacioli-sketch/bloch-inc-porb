@@ -1,4 +1,6 @@
 import {mountAtlasMotifs} from '/graphus/assets/atlas_motifs_ui.js';
+import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
+import {mountAtlasComparison} from './atlas-comparison-view.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const date = value => new Date(value).toLocaleString();
@@ -6,7 +8,7 @@ const labels = {paths:'Temporal paths',comparison:'Sample comparison',motifs:'Ob
 const patternLabels={cycles:'Return cycles',pass_through:'In/out sequences',fan_in:'Fan-in windows',fan_out:'Fan-out windows',repeated_pair:'Repeated directed pairs'};
 const messages = {report_preview_changed:'The calculation changed. Run it again before saving.',report_capacity_purge_expired:'The library is full. Delete a report or ask an administrator to purge expired reports.',report_storage_capacity:'This complete report exceeds the 6 MB storage limit. Narrow the calculation and try again.',report_integrity_failed:'The saved report failed its integrity check. Export is blocked.',report_request_expired:'This save request already created an expired report. Start a new save.',report_unavailable:'This report expired or is no longer available.',rate_limit:'Too many save requests. Wait a minute before retrying.'};
 const message = error => messages[error.message] || error.message.replaceAll('_',' ');
-const summary = row => row.kind==='motifs' ? `${row.summary.motifs} observed patterns · ${patternLabels[row.summary.type]} · ${row.summary.eligible_records} eligible events${row.summary.state==='not_applicable'?' · not applicable':row.summary.truncated?' · search limit reached':row.summary.complete_within_query?' · complete within query':''}` : row.kind==='paths' ? `${row.summary.paths} ordered paths · ${row.summary.eligible_records} eligible events${row.summary.truncated?' · search limit reached':''}` : `${row.summary.events} compared events · ${row.summary.counts.changed} changed · ${row.summary.block_conflicts} block hash disagreements`;
+const summary = row => row.kind==='motifs' ? `${row.summary.motifs} observed patterns · ${patternLabels[row.summary.type]} · ${row.summary.eligible_records} eligible events${row.summary.state==='not_applicable'?' · not applicable':row.summary.truncated?' · search limit reached':row.summary.complete_within_query?' · complete within query':''}` : row.kind==='paths' ? `${row.summary.paths} ordered paths · ${row.summary.eligible_records} eligible events${row.summary.state==='not_applicable'?' · not applicable':row.summary.truncated?' · search limit reached':''}` : `${row.summary.events} compared events · ${row.summary.counts.changed} changed · ${row.summary.block_conflicts} block hash disagreements`;
 
 export function reportWorkspace(request, startReview, onReports = () => {}) {
   let context=null, rows=[], retention=null, candidates={paths:null,comparison:null,motifs:null}, draft=null, pending=null, detail=null;
@@ -72,9 +74,10 @@ export function reportWorkspace(request, startReview, onReports = () => {}) {
     const provenance=value.kind==='comparison'?{baseline:value.report.baseline,current:value.report.current}:value.report.provenance;
     const source=el('details');source.append(el('summary','Parameters and source coverage'),el('pre',JSON.stringify({parameters:value.parameters,provenance},null,2)));box.append(source);
     if(value.kind==='motifs'){const viewer=el('div');viewer.dataset.savedMotifs='';box.append(viewer);mountAtlasMotifs(viewer,null,()=>{},{readOnly:true}).showReport(value.report);}
+    if(value.kind==='paths'){const viewer=el('div');viewer.dataset.savedPaths='';box.append(viewer);mountAtlasPaths(viewer,null,()=>{},{readOnly:true}).showReport(value.report);}
+    if(value.kind==='comparison'){const viewer=el('div');viewer.dataset.savedComparison='';box.append(viewer);mountAtlasComparison(viewer).showReport(value.report);}
     const report=el('details');report.append(el('summary','Complete saved calculation'));
     report.addEventListener('toggle',()=>{if(report.open&&report.childElementCount===1)report.append(el('pre',JSON.stringify(value.report,null,2)));});box.append(report);
-    if(value.kind!=='motifs')for(const text of value.report.notes||[])box.append(el('p',text,'atlas-note'));
   }
   async function inspect(row){
     clearDetail();const version=detailVersion,run=epoch;note('report-list-status','Verifying the complete saved report…');

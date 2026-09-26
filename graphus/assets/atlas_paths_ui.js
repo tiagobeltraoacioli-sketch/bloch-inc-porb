@@ -3,7 +3,7 @@ const short = value => value.length>24 ? value.slice(0,14)+'…'+value.slice(-8)
 const save = (name,value) => {const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const messages = {distinct_path_references_required:'Choose two different references from the current sample.',path_reference_unobserved:'Both references must be present in this sample.',invalid_path_duration:'The maximum gap must not exceed the total duration, and both must be between one second and seven days.',invalid_path_utc_range:'Use a valid UTC range with the start no later than the end.',invalid_path_minimum:'Minimum value must be an unsigned base-unit integer.',analysis_integrity_failed:'The retained sample failed its integrity check.',inconsistent_path_block:'The sample contains conflicting block hashes or timestamps.',rate_limit:'Too many path searches. Wait a minute before retrying.'};
 
-export function mountAtlasPaths(root, query, onReport = () => {}) {
+export function mountAtlasPaths(root, query, onReport = () => {}, options = {}) {
   root.classList.add('atlas-path-workspace');
   root.innerHTML=`<p class="section-index">TEMPORAL EVIDENCE / DIRECTED PATHS</p><h2>Between two references.</h2>
     <p>Inspect ordered events in one asset. A sequence does not prove that the same value passed through its references.</p><p data-path="context" class="atlas-note"></p>
@@ -24,6 +24,9 @@ export function mountAtlasPaths(root, query, onReport = () => {}) {
       <details><summary>Coverage, exclusions and reproducibility</summary><div data-path="notes"></div><pre data-path="provenance"></pre></details>
     </div><div class="atlas-actions"><button data-path="export" disabled>Download path report JSON</button></div>`;
   const $=name=>root.querySelector(`[data-path="${name}"]`);
+  const optionId='atlas-path-options-'+crypto.randomUUID();root.querySelector('datalist').id=optionId;
+  for(const name of ['from','to'])$(name).setAttribute('list',optionId);
+  if(options.readOnly){$('form').hidden=true;root.querySelector('h2').textContent='Inspect the retained paths.';}
   let source=null,report=null,version=0,busy=false,loading=false;
   const available=()=>source&&!['BTC','BLCH'].includes(source.asset)&&!loading;
   function controls(){for(const control of $('form').elements)control.disabled=!available();$('run').disabled=!available()||busy;$('export').disabled=!report||loading||busy;}
@@ -71,7 +74,7 @@ export function mountAtlasPaths(root, query, onReport = () => {}) {
   function render(){
     $('result').hidden=false;
     for(const [label,value]of [['Returned paths',report.paths.length],['Eligible events',report.coverage.eligible_records],['Examined candidates',report.search.expansions],['Excluded events',Object.values(report.coverage.excluded).reduce((a,b)=>a+b,0)]]){const card=el('div');card.append(el('strong',String(value)),el('span',label));$('metrics').append(card);}
-    $('limits').textContent=report.search.truncated?`Search stopped at the ${report.search.stop_reason==='path_limit'?'result':'20,000-candidate'} limit. More paths may exist; narrow the window, raise the minimum or reduce steps.`:'Search completed within this query and sample. Missing source history remains unknown.';
+    $('limits').textContent=report.state==='not_applicable'?report.reason:report.search.truncated?`Search stopped at the ${report.search.stop_reason==='path_limit'?'result':'20,000-candidate'} limit. More paths may exist; narrow the window, raise the minimum or reduce steps.`:'Search completed within this query and sample. Missing source history remains unknown.';
     $('limits').classList.toggle('atlas-path-warning',report.search.truncated);
     for(const [i,path]of report.paths.entries()){const button=el('button',`Path ${i+1} · ${path.hops} steps · ${path.duration_seconds} s`);button.onclick=()=>selectPath(i);button.setAttribute('aria-pressed','false');$('routes').append(button);}
     if(report.paths.length)selectPath(0);else $('steps').append(el('p',report.reason||'No ordered path was found under these limits. This does not establish absence on the chain.'));
@@ -92,5 +95,9 @@ export function mountAtlasPaths(root, query, onReport = () => {}) {
   $('reset').onclick=()=>{$('form').reset();clear('Choose endpoints and run a new path search.');};
   $('export').onclick=()=>{if(report)save(`atlas-paths-${report.report_sha256.slice(0,12)}.json`,report);};
   setSource(null);
-  return {setSource,setLoading(value){if(loading===value)return;loading=value;if(value)clear('Waiting for the source capture…');controls();},reset(){setSource(null);}};
+  return {setSource,setLoading(value){if(loading===value)return;loading=value;if(value)clear('Waiting for the source capture…');controls();},reset(){setSource(null);},showReport(value){
+    if(!options.readOnly)return;clear();report=value;render();controls();
+    $('context').textContent='Verified saved calculation. Inspect its original ordered events, source and search limits. No new source collection is started.';
+    $('status').textContent=`${report.paths.length} retained path(s) in ${report.asset}. The original query limits and coverage apply.`;
+  }};
 }
