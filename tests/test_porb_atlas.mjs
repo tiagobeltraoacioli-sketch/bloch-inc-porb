@@ -17,6 +17,15 @@ test('official snapshots digest exact bytes, cache within expiry, reject invalid
   await assert.rejects(officialReferences('uk-sanctions',async()=>new Response(document('uk-sanctions'),{headers:{'content-length':'999999999'}})),/capacity/);
 });
 const record=()=>({kind:'annotation',subject:'ETH source snapshot',body:'Private test observation',purpose:'Bounded descriptive research',lawful_basis:'Documented test basis',source_licence:'Review publisher terms before reuse',status:'open',retention_days:30});
+test('pinned Atlas organization context rejects stale reads and writes after a session organization switch',async()=>{
+  const h=await setup(),cookie=await h.login(),headers={'x-porb-tenant':crypto.randomUUID()};
+  assert.equal((await h.call('/v1/atlas/private','GET',undefined,cookie,{headers})).status,409);
+  const response=await h.call('/v1/atlas/records','POST',record(),cookie,{headers});
+  assert.equal(response.status,409);assert.equal((await response.json()).error,'organization_changed_reload');
+  assert.equal(h.sqlite.prepare('SELECT count(*) AS n FROM atlas_records').get().n,0);
+  assert.equal((await h.call('/v1/atlas/records','POST',record(),cookie,{headers:{'x-porb-tenant':h.tenant}})).status,201);
+  h.sqlite.close();
+});
 test('private Atlas records enforce authentication, tenant isolation, expiry, revision conflicts, audit and purge',async()=>{
   const h=await setup(),cookie=await h.login();
   assert.equal((await h.call('/v1/atlas/private')).status,401);

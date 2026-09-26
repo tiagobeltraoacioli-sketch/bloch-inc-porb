@@ -8,9 +8,10 @@ const {webkit} = await import(process.env.PLAYWRIGHT_MODULE || process.argv.slic
 const publicOrigin = 'https://bloch-graphus.xyz';
 const privateOrigin = 'https://rednblue.space';
 const root = new URL('../', import.meta.url);
-const publicOnly = process.argv.includes('--public-only');
+const portalOnly = process.argv.includes('--portal-only');
+const publicOnly = portalOnly || process.argv.includes('--public-only');
 const owner = publicOnly ? null : JSON.parse(await readFile(process.env.PORB_CREDENTIALS_FILE || new URL('.data/porb-portal/bootstrap.json', root), 'utf8'));
-const summary = {checked_at: new Date().toISOString(), scope: publicOnly ? 'public-and-authentication-boundaries' : 'public-and-authenticated-private', public_origin: publicOrigin, private_origin: privateOrigin, checks: [], sources: [], assets: []};
+const summary = {checked_at: new Date().toISOString(), scope: portalOnly ? 'portal-artifacts-and-authentication-boundaries' : publicOnly ? 'public-and-authentication-boundaries' : 'public-and-authenticated-private', public_origin: publicOrigin, private_origin: privateOrigin, checks: [], sources: [], assets: []};
 const errors = [], cleanup = new Map();
 let grant = null, key = null, authenticated = false;
 const browser = await webkit.launch();
@@ -34,6 +35,7 @@ async function publicChecks() {
   await api(anonymous, '/v1/atlas/sources', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
   note('Anonymous access to private Atlas APIs is denied.');
+  if (!portalOnly) {
   const schemaResponse = await anonymous.request.get(publicOrigin + '/api/atlas/schema');
   assert.equal(schemaResponse.status(), 200);
   const schema = await schemaResponse.json();
@@ -67,13 +69,20 @@ async function publicChecks() {
   const failed = results.find(r => r.status === 'rejected');
   if (failed) throw failed.reason;
   note('All five production asset analyses passed.');
+  }
   for (const [origin, remote, local] of [
     [publicOrigin, '/catalog.html', 'graphus/catalog.html'],
     [publicOrigin, '/assets/atlas_engine.js', 'graphus/assets/atlas_engine.js'],
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
+    [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
+    [privateOrigin, '/portal/atlas.css', 'site/portal/atlas.css'],
+    [privateOrigin, '/portal/', 'site/portal/index.html'],
+    [privateOrigin, '/portal/portal.js', 'site/portal/portal.js'],
+    [privateOrigin, '/portal/portal.css', 'site/portal/portal.css'],
     [privateOrigin, '/graphus/assets/catalog.js', 'site/graphus/assets/catalog.js'],
   ]) {
+    if (portalOnly && origin !== privateOrigin) continue;
     const response = await anonymous.request.get(origin + remote);
     assert.equal(response.status(), 200, remote);
     assert.equal(hash(await response.body()), hash(await readFile(new URL(local, root))), remote + ' deployed bytes');
@@ -152,6 +161,7 @@ async function privateChecks() {
 }
 
 async function browserChecks() {
+  if (!portalOnly) {
   const page = await anonymous.newPage();
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(publicOrigin + '/catalog.html?asset=ETH');
@@ -171,19 +181,29 @@ async function browserChecks() {
   await page.setViewportSize({width: 390, height: 844});
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Public mobile layout');
   await page.screenshot({path: new URL('.data/atlas-live-mobile.png', root).pathname});
+  }
   const privatePage = await (publicOnly ? anonymous : member).newPage();
   privatePage.on('pageerror', error => errors.push(error.message));
   await privatePage.goto(privateOrigin + '/atlas.html');
   await privatePage.locator(publicOnly ? '#private-login:visible' : '#private-workspace:visible').waitFor({timeout: 60000});
   await privatePage.setViewportSize({width: 390, height: 844});
   assert.ok(await privatePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Private mobile layout');
+  if (publicOnly) {
+    await privatePage.click('#private-login');
+    await privatePage.locator('#gate:visible').waitFor();
+    assert.equal(new URL(privatePage.url()).searchParams.get('view'), 'atlas');
+    assert.equal(await privatePage.locator('#atlas-nav svg').count(), 1);
+    assert.equal(await privatePage.locator('#atlas-overview svg').count(), 1);
+    assert.equal(await privatePage.locator('#atlas-nav').getAttribute('href'), '/atlas.html');
+    assert.ok(await privatePage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Portal login mobile layout');
+  }
   if (!publicOnly) {
     await privatePage.goto(privateOrigin + '/graphus/catalog.html?asset=ETH');
     await privatePage.waitForFunction(() => !document.querySelector('#atlas-export').disabled, {}, {timeout: 120000});
     assert.equal(await privatePage.locator('#field-rows tr').count(), 84);
   }
   assert.deepEqual(errors, [], 'Browser JavaScript errors');
-  note(publicOnly ? 'Live browser: public Atlas, inspector, evidence export, mobile and private login gate passed.' : 'Live browser: public/private Atlas, inspector, evidence export, mobile and authenticated mounted module passed.');
+  note(portalOnly ? 'Portal release: Atlas icon markup, sign-in destination, login gate and mobile layout passed; authenticated workflows require a session.' : publicOnly ? 'Live browser: public Atlas, inspector, evidence export, mobile and private login gate passed.' : 'Live browser: public/private Atlas, inspector, evidence export, mobile and authenticated mounted module passed.');
 }
 
 await mkdir(new URL('.data/porb-portal/', root), {recursive: true, mode: 0o700});
@@ -210,6 +230,6 @@ try {
   if (authenticated) await safely('session logout', () => api(member, '/auth/logout', {method: 'POST', body: {}}));
   summary.cleanup_errors = cleanupErrors;
   if (cleanupErrors.length) {summary.status = 'failed'; process.exitCode = 1; console.error('Cleanup needs attention:', cleanupErrors.join(', '));}
-  await writeFile(new URL('.data/porb-portal/atlas-live-verification.json', root), JSON.stringify(summary, null, 2), {mode: 0o600});
+  await writeFile(new URL(portalOnly ? '.data/porb-portal/atlas-portal-release.json' : '.data/porb-portal/atlas-live-verification.json', root), JSON.stringify(summary, null, 2), {mode: 0o600});
   await browser.close();
 }

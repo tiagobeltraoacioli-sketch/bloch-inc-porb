@@ -2,9 +2,11 @@ import {GraphExplorer} from './explorer.js';
 import {invitationToken,accessFailure} from './access-help.js';
 import {Intelligence} from './intelligence.js';
 import {Enrichment} from './enrichment.js';
+import {atlasLink,atlasSelection} from './atlas-context.js';
 const $=id=>document.getElementById(id),state={session:null,analysis:null,science:null,runs:[],view:'overview'};
 const requestedView=new URLSearchParams(location.search).get('view');
 let pendingReference=new URLSearchParams(location.search);
+let pendingAtlas=atlasSelection(new URLSearchParams(location.search)),returnToAtlas=requestedView==='atlas';
 if(['overview','analyses','science','access','modules','references','cases','watchlists'].includes(requestedView))state.view=requestedView;
 const explorer=new GraphExplorer($('network-explorer'),row=>{state.selected=row?.id||null;if(row)walletDetail(row);else $('wallet-detail').hidden=true;renderRows();redraw();});
 let scorePoints=[];
@@ -45,12 +47,14 @@ async function session(){
   if(invitation){showGate();return;}
   const result=await api('/auth/session');if(!result.authenticated){showGate();return;}
   state.session=result;$('gate').hidden=true;$('workspace').hidden=false;
+  if(returnToAtlas){returnToAtlas=false;location.replace(atlasLink(pendingAtlas.analysis,pendingAtlas.node));return;}
   $('organization').replaceChildren(...result.organizations.map(org=>{const option=element('option',org.name);option.value=org.id;return option;}));$('organization').value=result.organization.id;
   const isAdmin=['owner','admin'].includes(result.organization.role);$('admin-controls').hidden=!isAdmin;$('org-controls').hidden=result.organization.role!=='owner';$('collect-form').querySelector('button').disabled=result.organization.role==='viewer';
   $('access-description').textContent=`${result.user.email} · ${result.organization.role} · ${result.organization.name}`;
   showView(state.view);
   if(state.view==='references'&&pendingReference){const asset=pendingReference.get('asset'),reference=pendingReference.get('reference');if(['BTC','ETH','USDT','USDC','BLCH'].includes(asset)&&reference&&/^[a-zA-Z0-9]{14,100}$/.test(reference)){$('reference-form').elements.asset.value=asset;$('reference-form').elements.reference.value=reference;intelligence.launchers(asset,reference);}pendingReference=null;}
   await Promise.allSettled([loadOverview(),loadRuns()]);if(['cases','watchlists'].includes(state.view))await intelligence.view(state.view);
+  if(state.view==='analyses'&&pendingAtlas.analysis){const selected=pendingAtlas;pendingAtlas={analysis:null,node:null};try{await openRun(selected.analysis,selected.node);}catch(error){message(error.message);}}
 }
 $('logout').onclick=()=>perform($('logout'),async()=>{await api('/auth/logout','POST',{});showGate();});
 $('organization').onchange=()=>perform($('organization'),async()=>{await api('/auth/organization','POST',{id:$('organization').value});contextVersion++;intelligence.reset();enrichment.reset();state.analysis=null;state.science=null;state.selected=null;explorer.clear();$('analysis-result').hidden=true;$('analysis-empty').hidden=false;$('science-result').hidden=true;$('science-empty').hidden=false;showView('overview');await session();});
@@ -73,6 +77,7 @@ $('collect-form').onsubmit=e=>{e.preventDefault();const form=e.currentTarget,val
 function metrics(target,items){$(target).replaceChildren(...items.map(([label,value])=>{const e=element('div',undefined,'metric');e.append(element('span',label),element('strong',value));return e;}));}
 function renderAnalysis(){
   const r=state.analysis;enrichment.open(r);$('analysis-empty').hidden=true;$('analysis-result').hidden=false;
+  $('analysis-atlas').href=atlasLink(r.id);
   metrics('analysis-metrics',[['Observed references',number(r.wallets,0)],['Connection records',number(r.records,0)],['Red median',number(r.red_median)],['Blue median',number(r.blue_median)]]);
   $('analysis-provenance').textContent=`${r.asset} · ${r.graph.returned_pages}/${r.graph.requested_pages} pages · ${r.graph.source} · ${date(r.created_at)} · ${r.graph.coverage}${r.graph.stopped?' Collection stopped at capacity.':''} ${r.scores.ml.available?'':r.scores.ml.reason}`;
   $('model-details').textContent=JSON.stringify({id:r.id,dataset_sha256:r.digest,model:r.scores.model,ml:r.scores.ml,clusters:r.scores.clusters,neighborhood:r.scores.neighborhood,evidence_profile:r.scores.evidence_profile,source_snapshots:r.graph.snapshots,feature_statistics_note:r.scores.factor_note},null,2);
@@ -84,6 +89,7 @@ function renderAnalysis(){
 function renderRows(){if(!state.analysis)return;const filter=$('wallet-filter').value.trim().toLowerCase(),rows=state.analysis.scores.rows.filter(r=>r.address.toLowerCase().includes(filter));$('wallet-rows').replaceChildren(...rows.slice(0,200).map(r=>{const tr=element('tr'),ref=element('td'),button=element('button',short(r.address));button.title=r.address;button.onclick=()=>{explorer.selectNode(r.id);$('network-explorer').scrollIntoView({block:'start'});};button.setAttribute('aria-pressed',String(state.selected===r.id));ref.append(button);tr.append(ref);for(const [i,v] of [number(r.red),number(r.blue),r.cluster===null?'—':String(r.cluster+1),`${r.incoming_events} / ${r.outgoing_events}`,number(r.neighbors,0),number(r.ensemble_spread),number(r.neighborhood?.percentile)].entries())tr.append(element('td',v,i===0?'red':i===1?'blue':''));return tr;}));$('wallet-count').textContent=`Showing ${Math.min(rows.length,200)} of ${rows.length} matching references. Full dataset available in export.`;}
 $('wallet-filter').oninput=renderRows;
 function walletDetail(row){const box=$('wallet-detail');box.hidden=false;box.replaceChildren(element('h3',row.address),element('p',`${row.kind} · ${row.active_blocks} observed blocks · Group ${row.cluster===null?'unavailable':row.cluster+1}`),element('p',`Incoming: ${row.incoming_base_units} base units · Outgoing: ${row.outgoing_base_units} base units`),element('p',`Blue components: ${row.blue_components.map((v,i)=>`${['block anchors','transaction references','exact amounts','timestamps'][i]} ${number(v*100)}%`).join(' · ')}`),element('h3','Largest standardized feature differences'));
+  const atlas=element('a','Review in Data Atlas ↗');atlas.href=atlasLink(state.analysis.id,row.id);box.append(atlas);
   if(row.neighborhood){box.append(element('h3','Feature neighborhood'),element('p',`Mean distance ${number(row.neighborhood.mean_distance,4)} · cohort percentile ${number(row.neighborhood.percentile)}. Nearest references share observed features; they need not be transaction counterparties.`));for(const neighbor of row.neighborhood.nearest){const button=element('button',`${short(neighbor.id.split(':').at(-1))} · distance ${number(neighbor.distance,4)}`,'secondary');button.onclick=()=>explorer.selectNode(neighbor.id);box.append(button);}}
   for(const f of row.factors)box.append(element('p',`${f.feature}: ${number(f.value,4)} · cohort mean ${number(f.cohort_mean,4)} · z ${number(f.z,3)}`));box.append(element('p',state.analysis.scores.factor_note,'subtle'));if(state.session?.organization.role!=='viewer'){const button=element('button','Attach to investigation','secondary');button.onclick=()=>perform(button,()=>intelligence.attach(state.analysis.id,row.id));box.append(button);}}
 $('export-analysis').onclick=()=>perform($('export-analysis'),async()=>{const r=await api(`/v1/analyses/${state.analysis.id}/export`),url=URL.createObjectURL(new Blob([JSON.stringify(r,null,2)],{type:'application/json'})),a=element('a');a.href=url;a.download=`porb-${r.asset}-${r.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});

@@ -4,6 +4,14 @@ The Atlas executes the 84-field contract against bounded public evidence, rather
 
 ## Capture, inspect and reproduce
 
+The private portal provides a map icon in its main navigation and an Atlas card on its overview. Saved analyses and individual reference inspectors link directly to `/atlas.html?analysis=…&node=…`; sign-in preserves this destination. The private Atlas can return to the same retained graph and selected reference without collecting new source data.
+
+The private reference workspace lists retained analyses and searches their scored references. Its evidence card shows the exact stored digest, source, coverage and descriptive Red/Blue values. Self-directed events count once in the incident-record total. **Review selected reference** fills its precise subject and starts at `open`; completing the review remains an explicit user action. The grant picker only offers reviewed/resolved records for that exact analysis/reference whose retention covers the requested lifetime. The server repeats these checks at issuance and every delegated read. Reopening a review denies delegated access immediately.
+
+Private records support text, kind, state and selected-reference filters; ten-record pages; matching-record JSON export; and active/open/completed-review/seven-day-expiry counts. The visible record and grant eligibility lists refresh their expiry calculations every 30 seconds and when the tab becomes visible. Expired official results are removed from view, and a failed or superseded lookup cannot leave an earlier snapshot presented as current. Token responses remain available to copy if refreshing the list fails after successful issuance; dismissing or revoking clears their displayed secret.
+
+The private UI pins requests to its loaded organization using the optional `X-Porb-Tenant` header. Authenticated requests with a different current organization return `409 organization_changed_reload` before reads or writes. This does not replace ordinary authentication or scope checks. A context rejection clears the UI's retained data, selection and displayed secret and asks the user to reload. Delayed saved-analysis responses cannot restore a cleared or superseded selection. Failed revision writes preserve the draft for comparison with the latest record.
+
 Choose BTC, ETH, Ethereum USDT/USDC or BLCH. Capture one to eight source pages, extend a capture using its cursor, or open a System Map evidence packet. Limits remain 1,200 references, 4,000 records, 3 MB of dataset bytes and 6 MB of imported packet bytes. Sources are fixed by the existing adapters. Errors retain the last successfully calculated capture; source failures never introduce synthetic observations. Importing while a query is pending cancels that query and prevents a late response from replacing the import.
 
 Reference, event type, exact minimum base units, inclusive UTC start/end and path depth select the calculation. Timestamp-free records are excluded only when a time filter is active; their excluded count remains visible. Filter errors preserve the prior report and its applied parameters. The event ledger has 25-record pages and clickable references. Search, layer, access, result-state and field-inspector links are bookmarkable. The full capture opens in Constellation or Analytics through a consumed, browser-local handoff. The System Map can open its exact evidence packet in Atlas without another chain request.
@@ -83,6 +91,8 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_browser
 node scripts/check_atlas_sources.mjs
 ```
 
+The reference-workspace update passes 216 Node tests and both the Atlas and portal WebKit workflows. Added checks cover exact review scope/lifetime, filtering/export, open-review defaults, review reopening, token display after a failed refresh, delayed selection responses, private graph deep links, viewer restrictions, organization changes and desktop/mobile portal launchers. These browser checks use isolated test accounts and explicitly synthetic source fixtures.
+
 The browser check covers all five assets, exact values, field inspection, comparison, filters, JSON/CSV/evidence export, local evaluation, tampered imports, stale-response cancellation, consumed module handoffs, desktop/mobile layout, private CRUD, official reference lookup and scoped grant issuance/revocation. Source validation is an explicit read-only network check; fixtures are used only in automated local tests.
 
 Live adapter validation returned BTC 92, ETH 24, USDT 193, USDC 198 and BLCH 844 records in separate samples. Official XML parsing retained 1,011 UN, 6,339 UK and 6,241 EU references, without names. These are point-in-time checks, not promised coverage or synchronized network totals. The local check artifact records its actual timestamp in ignored `.data/atlas-source-check.json`. Both Pages Functions bundles compile. Local source parsing does not by itself verify deployed Worker execution quotas.
@@ -107,4 +117,14 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_live.mj
 
 # Full check, including authenticated CRUD, delegation and official Worker reads.
 PORB_CREDENTIALS_FILE=/private/path/owner.json PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_live.mjs
+```
+
+### Portal reference-workspace release — 2026-09-26 UTC
+
+Deployment `5149d209` publishes the Atlas navigation icon, overview card, saved-reference review workspace and organization-context guard to `rednblue.space`. It succeeds portal deployment `53bf16c5`; no additional migration or public Graphus deployment is required.
+
+The custom domain served byte-identical portal HTML, portal JavaScript/CSS, Atlas HTML/JavaScript/CSS, selection helpers and the mounted catalog asset. The production WebKit check verified both icon elements in the delivered portal markup, Atlas-to-login destination preservation, mobile login layout, zero JavaScript errors and HTTP 401 on unauthenticated private endpoints. The authenticated launchers and complete workflows were exercised locally with test accounts; production authenticated checks still require an existing owner session or credential file. The scoped release report is ignored at `.data/porb-portal/atlas-portal-release.json`.
+
+```sh
+PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node scripts/check_atlas_live.mjs --portal-only
 ```

@@ -36,6 +36,8 @@ async function route({request,env,waitUntil,fetcher}){
       }
     }
     requireValue(principal,'authentication_required',401);
+    const expectedTenant=request.headers.get('x-porb-tenant');
+    requireValue(!expectedTenant||expectedTenant===principal.tenant_id,'organization_changed_reload',409);
     await budget(env,`requests:${principal.key_id||principal.id}`,120,60);
     if(principal.type==='key')await statement(env.PORB_DB,'UPDATE api_keys SET last_used_at=? WHERE id=?',Date.now(),principal.key_id).run();
     const administration=await adminRoute(path,request,env,principal);if(administration)return administration;
