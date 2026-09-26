@@ -102,3 +102,12 @@ Independent review identified that the first parser treated supplementary remark
 Retained reports from policy 1.0.0 are returned unchanged with `policy_outdated: true`, and the portal asks for an explicit refresh. File hashes and original report digests stay intact. The persistence transaction now writes the audit entry only while its analysis exists and verifies that one report was stored before returning HTTP 201; retention during source fetching returns `analysis_unavailable` instead of a false success.
 
 Regression coverage includes identifiers and labels split at four positions for BTC/Ethereum, duplicate entry IDs, stale-policy reports and deletion during a source fetch. The developer page also includes read-only batch/profile/ML examples and explicit enrichment refresh/read examples, with the current eight-page limit.
+
+
+The parser/persistence correction is published in portal deployment `e48a0632` from commit `5bb361c`. Its 62-test portal/API regression selection and full portal WebKit workflow passed, including display and refresh of outdated reports. Graphus remains on deployment `058d9da8`.
+
+### Embedded Graphus repair
+
+A subsequent user report identified blank Graphus iframes while **Full window** worked. The Pages routing manifest included only `/api/*`, so module requests skipped the middleware and received the global `X-Frame-Options: DENY` and `frame-ancestors 'none'` policy. Routing now also includes `/graphus/*`. The middleware wraps the upstream response using its body and response options, preserving the HTML, content type and canonical-path redirects before setting same-origin framing headers. HTML module pages still require a portal session.
+
+The browser harness now reads the deployed routing/header files, invokes the actual module middleware, and exercises `.html` to extensionless redirects. All six embedded modules render within the portal without using **Full window**. Middleware regressions verify HTML preservation, framing headers and redirect status/Location. CI now also runs when routing or static header rules change.

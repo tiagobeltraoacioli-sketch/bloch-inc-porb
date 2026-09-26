@@ -74,7 +74,12 @@ test('module gateway uses fixed sources, requires permission, preserves failures
   const failure=await s.call(path,'GET',undefined,dataKey,{fetcher:async()=>Response.json({error:'unsupported_source'}, {status:422})});assert.equal(failure.status,422);assert.equal((await failure.json()).error,'unsupported_source');
   assert.equal((await s.call(path,'GET',undefined,dataKey,{fetcher:async()=>new Response(null,{status:302,headers:{location:'https://attacker.test'}})})).status,502);
   const anonymous=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html'),env:s.env,next:async()=>new Response('private module')});assert.equal(anonymous.status,302);
-  const page=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html',{headers:{cookie}}),env:s.env,next:async()=>new Response('module')});assert.equal(page.status,200);assert.equal(page.headers.get('x-frame-options'),'SAMEORIGIN');
+  const page=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html',{headers:{cookie}}),env:s.env,next:async()=>new Response('<main>Module body</main>',{headers:{'content-type':'text/html; charset=utf-8','x-frame-options':'DENY','content-security-policy':"frame-ancestors 'none'"}})});
+  assert.equal(page.status,200);assert.equal(page.headers.get('x-frame-options'),'SAMEORIGIN');assert.match(page.headers.get('content-security-policy'),/frame-ancestors 'self'/);assert.match(page.headers.get('content-type'),/text\/html/);assert.equal(await page.text(),'<main>Module body</main>');
+  const redirected=await moduleMiddleware({request:new Request('https://rednblue.space/graphus/map.html',{headers:{cookie}}),env:s.env,next:async()=>new Response(null,{status:308,headers:{location:'/graphus/map'}})});
+  assert.equal(redirected.status,308);assert.equal(redirected.headers.get('location'),'/graphus/map');assert.equal(redirected.headers.get('x-frame-options'),'SAMEORIGIN');
+  const routes=JSON.parse(readFileSync(new URL('../site/_routes.json',import.meta.url)));
+  assert.ok(routes.include.includes('/graphus/*'),'Deployed module requests must invoke the authentication and framing middleware');assert.deepEqual(routes.exclude,[]);
 });
 
 test('OpenAPI exposes each mounted Graphus route and requires authentication on every documented operation',async t=>{

@@ -1,9 +1,9 @@
 name: Private portal checks
 on:
   push:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
   pull_request:
-    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
+    paths: ['portal/**', 'site/portal/**', 'site/functions/**', 'site/_routes.json', 'site/_headers', 'site/developers/**', 'graphus/**', 'scripts/build_*', 'scripts/test_porb_browser.mjs', 'tests/*porb*', 'space/public/assets/science.js', '.github/workflows/portal.yml']
 permissions:
   contents: read
 jobs:
