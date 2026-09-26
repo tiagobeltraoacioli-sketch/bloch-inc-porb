@@ -34,6 +34,7 @@ async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/audit', {status: 401});
   await api(anonymous, '/v1/atlas/audit/export', {status: 401});
+  await api(anonymous, '/v1/atlas/timeline?analysis=00000000-0000-4000-8000-000000000001', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {method:'POST',body:{kind:'motifs'},status:401});
   await api(anonymous, '/v1/atlas/reviews', {status: 401});
@@ -97,6 +98,7 @@ async function publicChecks() {
     ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css'].map(name => [privateOrigin, '/graphus/assets/' + name, 'site/graphus/assets/' + name]),
     ...['atlas_motifs.js','atlas_motifs_ui.js','atlas_motifs.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
+    ...['atlas_timeline.js','atlas_timeline_ui.js','atlas_timeline.css'].flatMap(name => [[publicOrigin,'/assets/'+name,'graphus/assets/'+name],[privateOrigin,'/graphus/assets/'+name,'site/graphus/assets/'+name]]),
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
@@ -213,6 +215,14 @@ async function browserChecks() {
   const download = await pending;
   const packet = JSON.parse(await readFile(await download.path(), 'utf8'));
   assert.ok(packet.dataset.edges.length > 0);
+  await page.click('[data-time=run]');await page.locator('[data-time=result]:visible').waitFor();
+  const timelineDownload=page.waitForEvent('download');await page.click('[data-time=json]');
+  const timeline=JSON.parse(await readFile(await(await timelineDownload).path(),'utf8'));
+  assert.equal(timeline.provenance.dataset_sha256,packet.dataset_sha256);assert.equal(timeline.asset,'ETH');assert.ok(timeline.events.length>0);
+  const {report_sha256:timelineHash,...timelineBody}=timeline;assert.equal(hash(Buffer.from(JSON.stringify(timelineBody))),timelineHash);
+  assert.equal(new Set(timeline.events.map(event=>event.event_id)).size,timeline.events.length);
+  const timelineCsv=page.waitForEvent('download');await page.click('[data-time=csv]');const csv=await readFile(await(await timelineCsv).path(),'utf8');assert.ok(csv.includes(timelineHash));assert.equal(csv.split('\r\n').length,timeline.events.length+1);
+  note(`Production activity timeline reused the ETH capture and exported ${timeline.events.length} exact events with matching report and dataset hashes.`);
   const event = packet.dataset.edges.find(e => e.kind === 'native_value' && e.from !== e.to && e.block_time);
   assert.ok(event, 'A timed direct ETH event is available for the path check');
   await page.fill('[data-path=from]', event.from); await page.fill('[data-path=to]', event.to);

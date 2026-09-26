@@ -10,6 +10,7 @@ import {atlasPrivateRoute} from './atlas.js';
 import {PATH_QUERY} from './atlas-paths.js';
 import {MOTIF_QUERY} from './atlas-motifs.js';
 import {AUDIT_QUERY} from './atlas-audit.js';
+import {TIMELINE_QUERY} from './atlas-timeline.js';
 import {atlasGrantRoute,atlasDelegatedRoute} from './atlas-grants.js';
 
 export async function handlePortal({request,env={},waitUntil,fetcher=fetch}){
@@ -24,7 +25,7 @@ async function route({request,env,waitUntil,fetcher}){
   try{
     requireValue(url.pathname.startsWith('/api/porb/'),'not_found',404);
     requireValue(['GET','POST','DELETE'].includes(method),'method_not_allowed',405);
-    const allowed=moduleQuery(path)||(['/v1/atlas/audit','/v1/atlas/audit/export'].includes(path)?AUDIT_QUERY:path==='/v1/atlas/motifs'?MOTIF_QUERY:path==='/v1/atlas/paths'?PATH_QUERY:path==='/v1/atlas/compare'?['baseline','current','reference']:/^\/v1\/analyses\/[0-9a-f-]{36}\/neighbors$/.test(path)?['reference']:path==='/v1/science'?['network']:path==='/v1/references'?['asset','reference','limit','cursor']:['/v1/cases','/v1/watchlists','/v1/observations'].includes(path)?['limit','cursor']:[]);
+    const allowed=moduleQuery(path)||(path==='/v1/atlas/timeline'?TIMELINE_QUERY:['/v1/atlas/audit','/v1/atlas/audit/export'].includes(path)?AUDIT_QUERY:path==='/v1/atlas/motifs'?MOTIF_QUERY:path==='/v1/atlas/paths'?PATH_QUERY:path==='/v1/atlas/compare'?['baseline','current','reference']:/^\/v1\/analyses\/[0-9a-f-]{36}\/neighbors$/.test(path)?['reference']:path==='/v1/science'?['network']:path==='/v1/references'?['asset','reference','limit','cursor']:['/v1/cases','/v1/watchlists','/v1/observations'].includes(path)?['limit','cursor']:[]);
     requireValue([...url.searchParams.keys()].every(k=>allowed.includes(k)&&url.searchParams.getAll(k).length===1),'unexpected_parameters');
     if(method!=='GET'&&!request.headers.has('authorization'))requireValue(request.headers.get('origin')===url.origin&&request.headers.get('x-porb-action')==='1','same_origin_action_required',403);
     if(path==='/auth/config'&&method==='GET')return json({enabled:Boolean(env.PORB_DB&&env.PORB_AUTH_PEPPER),access:'invitation-only',networks:['Bitcoin','Ethereum','Bloch'],model:VERSION});

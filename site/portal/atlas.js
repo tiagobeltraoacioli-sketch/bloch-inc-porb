@@ -4,6 +4,7 @@ import {reportWorkspace} from './atlas-reports.js';
 import {caseWorkspace} from './atlas-cases.js';
 import {reviewWorkspace} from './atlas-reviews.js';
 import {auditWorkspace} from './atlas-audit.js';
+import {mountAtlasTimeline} from '/graphus/assets/atlas_timeline_ui.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
 import {mountAtlasMotifs} from '/graphus/assets/atlas_motifs_ui.js';
 const $ = id => document.getElementById(id);
@@ -27,6 +28,7 @@ function lock(message, login = false) {
   comparison.reset();
   pathWorkspace.reset();
   motifWorkspace.reset();
+  timelineWorkspace.reset();
   reports.reset(); dossiers.reset(); reviews.reset(); accessAudit.reset(); selectedCase = null;
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
@@ -65,6 +67,7 @@ const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossier
 const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const accessAudit = auditWorkspace(request);
+const timelineWorkspace = mountAtlasTimeline($('atlas-timeline-workspace'), (parameters, source) => request('/v1/atlas/timeline?' + new URLSearchParams({analysis:source.analysisId,...parameters})));
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('motifs',report));
 function download(name, value) {
@@ -133,6 +136,8 @@ function renderSelection() {
     const query = new URLSearchParams({view: 'analyses', analysis: analysis.id, node: row.id}); $('atlas-open-graph').href = '/portal/?' + query;
   }
   renderReviews(); renderRecords(); comparison.sync(runs, analysis, selectedNode);
+  timelineWorkspace.setSource(analysis ? {key:analysis.id+':'+analysis.digest+':'+selectedNode,analysisId:analysis.id,datasetHash:analysis.digest,asset:analysis.asset,nodes:analysis.graph.nodes,selectedNode,
+    description:`${analysis.asset} · saved ${date(analysis.created_at)} · ${analysis.graph.edges.length} retained events. Timeline queries verify this saved dataset and start no collection or rescoring.`} : null);
   pathWorkspace.setSource(analysis ? {key:analysis.id+':'+selectedNode, analysisId:analysis.id, asset:analysis.asset, nodes:analysis.graph.nodes, selectedNode,
     description:`${analysis.asset} · saved ${date(analysis.created_at)} · ${analysis.graph.edges.length} retained events. The saved dataset is verified before each path search; no collection or rescoring is started.`} : null);
   motifWorkspace.setSource(analysis ? {key:analysis.id+':'+selectedNode, analysisId:analysis.id, asset:analysis.asset, nodes:analysis.graph.nodes, selectedNode,

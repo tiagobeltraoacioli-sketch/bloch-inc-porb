@@ -9,12 +9,14 @@ import {atlasCasesRoute} from './atlas-cases.js';
 import {atlasReviewsRoute,RECORD_COLUMNS,RECORD_HISTORY_LIMIT} from './atlas-reviews.js';
 import {atlasMotifsRoute} from './atlas-motifs.js';
 import {atlasAuditRoute} from './atlas-audit.js';
+import {atlasTimelineRoute} from './atlas-timeline.js';
 
 const keys=(body,allowed)=>requireValue(Object.keys(body).every(k=>allowed.includes(k)),'unexpected_fields');
 const text=(value,min,max)=>typeof value==='string'&&value.trim().length>=min&&value.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
 export async function atlasPrivateRoute(path,request,env,principal,fetcher){
   if(!path.startsWith('/v1/atlas/'))return null;
   const accessAudit=await atlasAuditRoute(path,request,env,principal);if(accessAudit)return accessAudit;
+  if(path==='/v1/atlas/timeline')return atlasTimelineRoute(request,env,principal);
   if(path==='/v1/atlas/compare')return atlasComparisonRoute(request,env,principal);
   if(path==='/v1/atlas/paths')return atlasPathsRoute(request,env,principal);
   if(path==='/v1/atlas/motifs')return atlasMotifsRoute(request,env,principal);

@@ -38,6 +38,170 @@
     }
   ],
   "paths": {
+    "/v1/atlas/timeline": {
+      "get": {
+        "operationId": "get_v1_atlas_timeline",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Explore timed activity in a retained source sample",
+        "description": "Reuses one tenant-owned analysis after verifying its payload, manifest and dataset SHA-256. Exact optional reference, relative direction, event kind and minimum integer value. Incoming/outgoing/self filters require a reference. Inclusive UTC query dates, half-open minute/hour/day bins aligned to the Unix epoch; automatic resolution chooses the finest interval with at most 366 bins. Empty bins keep null counts and unknown coverage, never inferred zero chain activity. Every returned event is included once with exact amounts and bucket index; sums remain separate by event kind and relative direction, including UTXO inputs/outputs and self events. Missing/invalid times and other exclusions are counted. Duplicate movement identities and inconsistent transaction/block claims fail closed. Up to 4,000 events, 1,200 nodes, eight source pages and 8 MB complete response; no silent truncation. report_sha256 hashes JSON.stringify(report without report_sha256) in returned property order. Twenty requests/minute/organization; no source collection, rescoring or persistence. Private, no-store and audited.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "incoming",
+                "outgoing",
+                "self"
+              ],
+              "default": "all"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all",
+              "description": "An event type supported by the selected asset, or all."
+            }
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "minute",
+                "hour",
+                "day"
+              ],
+              "default": "auto"
+            }
+          },
+          {
+            "name": "minimum",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,77})$",
+              "default": "0"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/atlas/motifs": {
       "get": {
         "operationId": "get_v1_atlas_motifs",

@@ -3,6 +3,14 @@
 export function registerAtlasEndpoints(endpoint){
   const string={type:'string'},object=(properties,required=Object.keys(properties))=>({type:'object',properties,required,additionalProperties:false});
   const uuid={type:'string',format:'uuid'},hash={type:'string',pattern:'^[a-f0-9]{64}$'},reportReading=['cases:read','analyses:read','scores:read'];
+  endpoint('/v1/atlas/timeline','get','Explore timed activity in a retained source sample',['analyses:read','scores:read'],{tag:'Atlas',parameters:[
+    {name:'analysis',in:'query',required:true,schema:uuid},{name:'reference',in:'query',required:false,schema:{type:'string',minLength:1,maxLength:200}},
+    {name:'direction',in:'query',required:false,schema:{type:'string',enum:['all','incoming','outgoing','self'],default:'all'}},
+    {name:'kind',in:'query',required:false,schema:{type:'string',default:'all',description:'An event type supported by the selected asset, or all.'}},
+    {name:'interval',in:'query',required:false,schema:{type:'string',enum:['auto','minute','hour','day'],default:'auto'}},
+    {name:'minimum',in:'query',required:false,schema:{type:'string',pattern:'^(0|[1-9][0-9]{0,77})$',default:'0'}},
+    ...['start','end'].map(name=>({name,in:'query',required:false,schema:{type:'string',format:'date-time'}}))
+  ],description:'Reuses one tenant-owned analysis after verifying its payload, manifest and dataset SHA-256. Exact optional reference, relative direction, event kind and minimum integer value. Incoming/outgoing/self filters require a reference. Inclusive UTC query dates, half-open minute/hour/day bins aligned to the Unix epoch; automatic resolution chooses the finest interval with at most 366 bins. Empty bins keep null counts and unknown coverage, never inferred zero chain activity. Every returned event is included once with exact amounts and bucket index; sums remain separate by event kind and relative direction, including UTXO inputs/outputs and self events. Missing/invalid times and other exclusions are counted. Duplicate movement identities and inconsistent transaction/block claims fail closed. Up to 4,000 events, 1,200 nodes, eight source pages and 8 MB complete response; no silent truncation. report_sha256 hashes JSON.stringify(report without report_sha256) in returned property order. Twenty requests/minute/organization; no source collection, rescoring or persistence. Private, no-store and audited.'});
   endpoint('/v1/atlas/motifs','get','Inspect observed temporal patterns in a retained sample',['analyses:read','scores:read'],{tag:'Atlas',parameters:[
     {name:'analysis',in:'query',required:true,schema:uuid},{name:'reference',in:'query',required:true,schema:{type:'string',minLength:1,maxLength:200}},
     {name:'type',in:'query',required:false,schema:{type:'string',enum:['cycles','pass_through','fan_in','fan_out','repeated_pair'],default:'cycles'}},
