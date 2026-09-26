@@ -38,6 +38,201 @@
     }
   ],
   "paths": {
+    "/v1/atlas/motifs": {
+      "get": {
+        "operationId": "get_v1_atlas_motifs",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Inspect observed temporal patterns in a retained sample",
+        "description": "Digest-verified retained dataset, one asset and exact node ID. Native ETH and USDT/USDC Transfer events only; BTC/BLCH and a zero-address root return not_applicable. Cycles use 2–6 steps with distinct intermediaries; pass-through uses every qualifying distinct-source/destination in/out pair. Both require strictly increasing UTC block times and heights within window_seconds. Fan and repeated directed-pair groups use non-overlapping half-open UTC bins of that width, aligned to the Unix epoch; groups do not imply ordering and do not search across bin boundaries. Fan threshold counts distinct counterparties; repeated threshold counts events in one direction. Same events may support multiple sequences; no conserved-funds, intent, ownership or risk claim. Exact per-event amounts; directional sums only for unordered groups. Self/zero-address events and unsupported/missing metadata are excluded with counts. Token events require log position; duplicate native transaction identities, duplicate token transaction/log positions and inconsistent transaction blocks fail closed. At most 20 results and 20,000 examined candidates, with explicit truncation; complete_within_query is never full-chain coverage. Complete event lists and source provenance, 8 MB maximum serialized response. report_sha256 hashes JSON.stringify(report without report_sha256) in returned property order. 20 searches/minute/organization; no source collection, rescoring or persistence. Private, no-store and audited.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "reference",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cycles",
+                "pass_through",
+                "fan_in",
+                "fan_out",
+                "repeated_pair"
+              ],
+              "default": "cycles"
+            }
+          },
+          {
+            "name": "max_hops",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 6,
+              "default": 4
+            }
+          },
+          {
+            "name": "max_results",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 10
+            }
+          },
+          {
+            "name": "window_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800,
+              "default": 3600
+            }
+          },
+          {
+            "name": "min_counterparties",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 20,
+              "default": 3
+            }
+          },
+          {
+            "name": "min_events",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 100,
+              "default": 2
+            }
+          },
+          {
+            "name": "minimum",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,77})$",
+              "default": "0"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/atlas/reviews": {
       "get": {
         "operationId": "get_v1_atlas_reviews",

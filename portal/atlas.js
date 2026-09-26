@@ -7,6 +7,7 @@ import {atlasPathsRoute} from './atlas-paths.js';
 import {atlasReportsRoute} from './atlas-reports.js';
 import {atlasCasesRoute} from './atlas-cases.js';
 import {atlasReviewsRoute,RECORD_COLUMNS,RECORD_HISTORY_LIMIT} from './atlas-reviews.js';
+import {atlasMotifsRoute} from './atlas-motifs.js';
 
 const keys=(body,allowed)=>requireValue(Object.keys(body).every(k=>allowed.includes(k)),'unexpected_fields');
 const text=(value,min,max)=>typeof value==='string'&&value.trim().length>=min&&value.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
@@ -14,6 +15,7 @@ export async function atlasPrivateRoute(path,request,env,principal,fetcher){
   if(!path.startsWith('/v1/atlas/'))return null;
   if(path==='/v1/atlas/compare')return atlasComparisonRoute(request,env,principal);
   if(path==='/v1/atlas/paths')return atlasPathsRoute(request,env,principal);
+  if(path==='/v1/atlas/motifs')return atlasMotifsRoute(request,env,principal);
   const savedReport=await atlasReportsRoute(path,request,env,principal);if(savedReport)return savedReport;
   const dossier=await atlasCasesRoute(path,request,env,principal);if(dossier)return dossier;
   const reviews=await atlasReviewsRoute(path,request,env,principal);if(reviews)return reviews;

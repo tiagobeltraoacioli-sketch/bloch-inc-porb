@@ -29,8 +29,9 @@ export function pathParameters(input) {
   return p;
 }
 
-export async function traceAtlasPaths(graph, input, context = {}) {
-  const p = pathParameters(input), asset = graph && Object.hasOwn(ASSETS,graph.asset) ? ASSETS[graph.asset] : null;
+// Shared validation keeps temporal explorers bound to the same exact capture.
+export async function prepareTemporalEvidence(graph, p, context = {}) {
+  const asset = graph && Object.hasOwn(ASSETS,graph.asset) ? ASSETS[graph.asset] : null;
   check(asset && graph.network === asset.network && text(graph.source,300) && Array.isArray(graph.nodes) && graph.nodes.length <= 1200
     && Array.isArray(graph.edges) && graph.edges.length <= 4000 && Array.isArray(graph.snapshots) && graph.snapshots.length >= 1 && graph.snapshots.length <= 8, 'invalid_path_dataset', 422);
   const bytes = JSON.stringify(graph); check(new TextEncoder().encode(bytes).length <= 6000000,'path_dataset_capacity',422);
@@ -41,8 +42,6 @@ export async function traceAtlasPaths(graph, input, context = {}) {
     check(n && text(n.id,200) && ['address','script_hash','transaction'].includes(n.kind) && n.id === `${graph.asset}:${n.kind}:${n.kind === 'transaction' ? n.txid : n.address}` && !nodes.has(n.id),'invalid_path_node',422);
     nodes.set(n.id,n);
   }
-  check(nodes.has(p.from) && nodes.has(p.to),'path_reference_unobserved',404);
-  if(asset.standard !== 'UTXO')check([p.from,p.to].every(id => nodes.get(id).kind === 'address' && /^0x[a-f0-9]{40}$/i.test(nodes.get(id).address)), 'path_address_reference_required',422);
   const block = (height, blockHash, time = null) => {
     check(Number.isSafeInteger(height) && height >= 0 && hash(blockHash),'invalid_path_block',422);
     const previous = blocks.get(height);
@@ -66,6 +65,13 @@ export async function traceAtlasPaths(graph, input, context = {}) {
       : BigInt(e.amount_base_units) < BigInt(p.minimum) ? 'below_minimum' : e.from === e.to ? 'self_event' : null;
     if (reason) {excluded[reason]++; continue;} eligible.push({edge:e,time});
   }
+  return {asset,datasetHash,nodes,eligible,excluded};
+}
+
+export async function traceAtlasPaths(graph, input, context = {}) {
+  const p = pathParameters(input), {asset,datasetHash,nodes,eligible,excluded}=await prepareTemporalEvidence(graph,p,context);
+  check(nodes.has(p.from) && nodes.has(p.to),'path_reference_unobserved',404);
+  if(asset.standard !== 'UTXO')check([p.from,p.to].every(id => nodes.get(id).kind === 'address' && /^0x[a-f0-9]{40}$/i.test(nodes.get(id).address)), 'path_address_reference_required',422);
   const applicable = asset.standard !== 'UTXO';
   const adjacency = new Map(), neighbors = new Map();
   for (const item of eligible) {

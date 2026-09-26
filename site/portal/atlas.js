@@ -4,6 +4,7 @@ import {reportWorkspace} from './atlas-reports.js';
 import {caseWorkspace} from './atlas-cases.js';
 import {reviewWorkspace} from './atlas-reviews.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
+import {mountAtlasMotifs} from '/graphus/assets/atlas_motifs_ui.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node;};
 const date = value => new Date(value).toLocaleString();
@@ -24,6 +25,7 @@ function lock(message, login = false) {
   contextVersion++; selectionVersion++; sourceVersion++; sourceExpiry = null; data = null; analysis = null; selectedNode = ''; runs = []; editing = null;
   comparison.reset();
   pathWorkspace.reset();
+  motifWorkspace.reset();
   reports.reset(); dossiers.reset(); reviews.reset(); selectedCase = null;
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
@@ -62,6 +64,7 @@ const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossier
 const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
+const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})));
 function download(name, value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'})), link = el('a');
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -130,6 +133,8 @@ function renderSelection() {
   renderReviews(); renderRecords(); comparison.sync(runs, analysis, selectedNode);
   pathWorkspace.setSource(analysis ? {key:analysis.id+':'+selectedNode, analysisId:analysis.id, asset:analysis.asset, nodes:analysis.graph.nodes, selectedNode,
     description:`${analysis.asset} · saved ${date(analysis.created_at)} · ${analysis.graph.edges.length} retained events. The saved dataset is verified before each path search; no collection or rescoring is started.`} : null);
+  motifWorkspace.setSource(analysis ? {key:analysis.id+':'+selectedNode, analysisId:analysis.id, asset:analysis.asset, nodes:analysis.graph.nodes, selectedNode,
+    description:`${analysis.asset} · saved ${date(analysis.created_at)} · ${analysis.graph.edges.length} retained events. Pattern queries verify this saved dataset and do not collect new source data.`} : null);
 }
 function referenceOptions() {
   const query = $('atlas-reference-search').value.trim().toLowerCase(), rows = (analysis?.scores.rows || []).filter(row => !query || row.address.toLowerCase().includes(query));

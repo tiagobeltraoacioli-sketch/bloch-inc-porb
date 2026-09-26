@@ -3,10 +3,13 @@ import {analyzeAtlas,atlasCsv} from './atlas_engine.js';
 import {evaluateHoldout} from './atlas_statistics.js';
 import {traceAtlasPaths} from './atlas_paths.js';
 import {mountAtlasPaths} from './atlas_paths_ui.js';
+import {scanAtlasMotifs} from './atlas_motifs.js';
+import {mountAtlasMotifs} from './atlas_motifs_ui.js';
 import {fetchEvidence,mergeEvidence,validateEvidenceCollection,COLLECTION_LIMITS} from './system_evidence.js';
 const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 let packet=null,report=null,baseline=null,evaluation=null,imported=false,controller=null,epoch=0,calculation=0,page=0;
 const pathWorkspace=mountAtlasPaths($('atlas-path-workspace'),(parameters,source)=>traceAtlasPaths(source.packet.dataset,parameters,{dataset_sha256:source.packet.dataset_sha256,imported:source.imported,selection:source.packet.selection}));
+const motifWorkspace=mountAtlasMotifs($('atlas-motif-workspace'),(parameters,source)=>scanAtlasMotifs(source.packet.dataset,parameters,{dataset_sha256:source.packet.dataset_sha256,imported:source.imported,selection:source.packet.selection}));
 const query=new URLSearchParams(location.search);
 if(Object.hasOwn(ASSETS,query.get('asset'))) $('atlas-asset').value=query.get('asset');
 for(const layer of new Set(FIELDS.map(f=>f.layer)))$('group-filter').append(new Option(layer,layer));
@@ -18,6 +21,7 @@ function download(name,value,type='application/json'){
 }
 function controls(busy=false){
   pathWorkspace.setLoading(busy);
+  motifWorkspace.setLoading(busy);
   $('atlas-load').disabled=busy;$('atlas-asset').disabled=busy;$('atlas-pages').disabled=busy;
   $('atlas-more').disabled=busy||!packet||imported||!packet.pagination?.next_cursor||packet.dataset.snapshots.length>=COLLECTION_LIMITS.pages;
   for(const id of ['atlas-apply','atlas-pin','atlas-export','atlas-csv','atlas-evidence','atlas-graph','atlas-analytics'])$(id).disabled=!report||busy;
@@ -114,6 +118,8 @@ function ledger(){
   $('ledger-page').textContent=`Page ${page+1} of ${pages} · ${total} records`;$('ledger-previous').disabled=page===0;$('ledger-next').disabled=page+1>=pages;
 }
 function render(){
+  motifWorkspace.setSource({key:packet.dataset_sha256+':'+imported+':'+JSON.stringify(packet.selection??null),asset:packet.dataset.asset,nodes:packet.dataset.nodes,packet,imported,
+    description:`${packet.dataset.asset} · ${packet.dataset.edges.length} captured events · ${packet.dataset.snapshots.length} source pages. Patterns use this capture and their own filters. ${imported?'Imported source claims remain unverified.':''}`});
   pathWorkspace.setSource({key:packet.dataset_sha256+':'+imported+':'+JSON.stringify(packet.selection??null),asset:packet.dataset.asset,nodes:packet.dataset.nodes,packet,imported,
     description:`${packet.dataset.asset} · ${packet.dataset.edges.length} captured events · ${packet.dataset.snapshots.length} source pages. Paths use this complete capture and their own filters; field selection does not restrict the search. ${imported?'Imported source claims remain unverified.':''}`});
   if(evaluation){
