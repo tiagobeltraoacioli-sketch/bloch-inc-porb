@@ -33,6 +33,7 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
+  await api(anonymous, '/v1/atlas/paths?analysis=00000000-0000-4000-8000-000000000001&from=ETH:address:source&to=ETH:address:target', {status: 401});
   await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
   note('Anonymous access to private Atlas APIs is denied.');
@@ -74,6 +75,8 @@ async function publicChecks() {
   for (const [origin, remote, local] of [
     [publicOrigin, '/catalog.html', 'graphus/catalog.html'],
     [publicOrigin, '/assets/atlas_engine.js', 'graphus/assets/atlas_engine.js'],
+    ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css','catalog.js'].map(name => [publicOrigin, '/assets/' + name, 'graphus/assets/' + name]),
+    ...['atlas_paths.js','atlas_paths_ui.js','atlas_paths.css'].map(name => [privateOrigin, '/graphus/assets/' + name, 'site/graphus/assets/' + name]),
     [privateOrigin, '/atlas.html', 'site/atlas.html'],
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
@@ -96,6 +99,7 @@ async function publicChecks() {
 async function privateChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
+  await api(anonymous, '/v1/atlas/paths?analysis=00000000-0000-4000-8000-000000000001&from=ETH:address:source&to=ETH:address:target', {status: 401});
   await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
   await api(anonymous, '/v1/graphus/atlas/schema', {status: 401});
   await api(member, '/auth/login', {method: 'POST', body: {email: owner.email, password: owner.password}});
@@ -181,6 +185,17 @@ async function browserChecks() {
   const download = await pending;
   const packet = JSON.parse(await readFile(await download.path(), 'utf8'));
   assert.ok(packet.dataset.edges.length > 0);
+  const event = packet.dataset.edges.find(e => e.kind === 'native_value' && e.from !== e.to && e.block_time);
+  assert.ok(event, 'A timed direct ETH event is available for the path check');
+  await page.fill('[data-path=from]', event.from); await page.fill('[data-path=to]', event.to);
+  await page.click('[data-path=run]'); await page.locator('[data-path=result]:visible').waitFor();
+  const pathDownload = page.waitForEvent('download'); await page.click('[data-path=export]');
+  const paths = JSON.parse(await readFile(await (await pathDownload).path(), 'utf8'));
+  assert.equal(paths.provenance.dataset_sha256, packet.dataset_sha256);
+  assert.ok(paths.paths.some(path => path.hops === 1), 'Direct captured event is represented');
+  const {report_sha256, ...pathBody} = paths;
+  assert.equal(hash(Buffer.from(JSON.stringify(pathBody))), report_sha256);
+  note('Production temporal paths reuse the captured dataset, retain direct event evidence and export a matching report hash.');
   await page.screenshot({path: new URL('.data/atlas-live-desktop.png', root).pathname});
   await page.setViewportSize({width: 390, height: 844});
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Public mobile layout');

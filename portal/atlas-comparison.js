@@ -1,5 +1,5 @@
-import {authorize, audit, budget, digest, json, requireValue, statement} from './security.js';
-import {readAnalysis} from './intelligence.js';
+import {authorize, audit, budget, digest, json, requireValue} from './security.js';
+import {readVerifiedAnalysis} from './atlas-evidence.js';
 
 export const COMPARISON_VERSION = 'porb-atlas-comparison-1.0.0';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -128,13 +128,7 @@ export async function atlasComparisonRoute(request, env, principal) {
   const reference = query.has('reference') ? query.get('reference') : null;
   requireValue(reference === null || validText(reference, 200), 'invalid_comparison_reference');
   await budget(env, `atlas-compare:${principal.tenant_id}`, 20, 60);
-  const read = async id => {
-    const manifest = await statement(env.PORB_DB, 'SELECT digest,asset,created_at,model_version FROM analyses WHERE id=? AND tenant_id=?', id, principal.tenant_id).first();
-    requireValue(manifest, 'analysis_unavailable', 404);
-    const run = await readAnalysis(env.PORB_DB, principal.tenant_id, id);
-    requireValue(run.id === id && Object.keys(manifest).every(key => manifest[key] === run[key]), 'analysis_integrity_failed', 409);
-    return run;
-  };
+  const read = id => readVerifiedAnalysis(env.PORB_DB, principal.tenant_id, id);
   const before = await read(baseline), after = baseline === current ? before : await read(current);
   const report = await compareAnalyses(before, after, reference);
   await audit(env.PORB_DB, principal, 'atlas.compare.read', `${baseline}:${current}:${report.report_sha256}`).run();

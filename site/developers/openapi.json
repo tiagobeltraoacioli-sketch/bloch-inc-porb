@@ -113,6 +113,184 @@
         }
       }
     },
+    "/v1/atlas/paths": {
+      "get": {
+        "operationId": "get_v1_atlas_paths",
+        "tags": [
+          "Atlas"
+        ],
+        "summary": "Explore ordered event paths in one retained analysis",
+        "description": "Exact distinct node IDs from one tenant-owned saved sample. Dataset SHA-256 must match the stored payload and database manifest. ETH native_value and USDT/USDC erc20_transfer events only; BTC/BLCH return not_applicable. Simple directed paths require strictly increasing UTC block timestamps and heights, gap and total-duration bounds, inclusive UTC start/end and exact integer minimum per event. Missing/invalid time, self events, unsupported kinds and exclusions are counted. Zero-address intermediaries are not traversed. Deterministic breadth-first traversal orders by hop count, then event time/ID; at most 20,000 candidate expansions and 20 returned paths with explicit truncation. Every step retains exact amounts, block and transaction identities, gap, source and dataset lineage. No conserved-value, ownership or AML conclusion. No new collection or rescoring. 20 requests/minute/organization; private, no-store and audited. report_sha256 covers JSON.stringify of the report without report_sha256, preserving field order.",
+        "x-required-scopes": [
+          "analyses:read",
+          "scores:read"
+        ],
+        "security": [
+          {
+            "PartnerKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "analysis",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "max_hops",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6,
+              "default": 4
+            }
+          },
+          {
+            "name": "max_paths",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 10
+            }
+          },
+          {
+            "name": "max_gap_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800,
+              "default": 86400
+            }
+          },
+          {
+            "name": "max_duration_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 604800,
+              "default": 604800
+            }
+          },
+          {
+            "name": "minimum",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,77})$",
+              "default": "0"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Server-generated support correlation ID",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Porb-Api-Version": {
+                "schema": {
+                  "const": "1.2"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "502": {
+            "$ref": "#/components/responses/502"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
     "/v1/atlas/compare": {
       "get": {
         "operationId": "get_v1_atlas_compare",
