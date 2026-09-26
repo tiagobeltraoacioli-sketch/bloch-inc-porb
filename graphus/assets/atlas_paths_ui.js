@@ -3,7 +3,7 @@ const short = value => value.length>24 ? value.slice(0,14)+'…'+value.slice(-8)
 const save = (name,value) => {const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const messages = {distinct_path_references_required:'Choose two different references from the current sample.',path_reference_unobserved:'Both references must be present in this sample.',invalid_path_duration:'The maximum gap must not exceed the total duration, and both must be between one second and seven days.',invalid_path_utc_range:'Use a valid UTC range with the start no later than the end.',invalid_path_minimum:'Minimum value must be an unsigned base-unit integer.',analysis_integrity_failed:'The retained sample failed its integrity check.',inconsistent_path_block:'The sample contains conflicting block hashes or timestamps.',rate_limit:'Too many path searches. Wait a minute before retrying.'};
 
-export function mountAtlasPaths(root, query) {
+export function mountAtlasPaths(root, query, onReport = () => {}) {
   root.classList.add('atlas-path-workspace');
   root.innerHTML=`<p class="section-index">TEMPORAL EVIDENCE / DIRECTED PATHS</p><h2>Between two references.</h2>
     <p>Inspect ordered events in one asset. A sequence does not prove that the same value passed through its references.</p><p data-path="context" class="atlas-note"></p>
@@ -28,7 +28,7 @@ export function mountAtlasPaths(root, query) {
   const available=()=>source&&!['BTC','BLCH'].includes(source.asset)&&!loading;
   function controls(){for(const control of $('form').elements)control.disabled=!available();$('run').disabled=!available()||busy;$('export').disabled=!report||loading||busy;}
   function clear(message='Parameters changed. Run the path search again.'){
-    version++;busy=false;report=null;$('result').hidden=true;
+    version++;busy=false;report=null;onReport(null);$('result').hidden=true;
     for(const name of ['metrics','routes','diagram','steps','notes','provenance','limits'])$(name).replaceChildren();
     $('status').textContent=message;controls();
   }
@@ -83,7 +83,7 @@ export function mountAtlasPaths(root, query) {
     const resolve=value=>{const n=current.nodes.find(n=>n.id===value||n.address===value);return n?.id||value;};
     const input={from:resolve($('from').value.trim()),to:resolve($('to').value.trim()),max_hops:Number($('hops').value),max_paths:Number($('limit').value),max_gap_seconds:Number($('gap').value)*3600,max_duration_seconds:Number($('duration').value)*3600,minimum:$('minimum').value,
       ...($('start').value?{start:$('start').value+'Z'}:{}),...($('end').value?{end:$('end').value+'Z'}:{})};
-    try{const value=await query(input,current);if(run!==version)return;report=value;render();$('status').textContent=`${report.paths.length} ordered path(s) found in ${report.asset}. ${report.search.truncated?'Search limit reached.':'No new source collection was started.'}`;}
+    try{const value=await query(input,current);if(run!==version)return;report=value;render();onReport(report);$('status').textContent=`${report.paths.length} ordered path(s) found in ${report.asset}. ${report.search.truncated?'Search limit reached.':'No new source collection was started.'}`;}
     catch(error){if(run===version)$('status').textContent=`Path search unavailable: ${messages[error.message]||error.message.replaceAll('_',' ')} No previous result is displayed.`;}
     finally{if(run===version){busy=false;controls();}}
   };

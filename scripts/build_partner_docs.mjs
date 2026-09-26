@@ -12,7 +12,7 @@ function endpoint(path,method,summary,scopes,{body,parameters=[],description='',
   const parametersWithPath=[...Array.from(path.matchAll(/\{([^}]+)\}/g),m=>({name:m[1],in:'path',required:true,schema:uuid})),...parameters];
   const operation={operationId:method+path.replace(/[/{}/-]/g,'_'),tags:[tag],summary,description,'x-required-scopes':scopes,security:[{PartnerKey:[]}],parameters:parametersWithPath,
     responses:{[created?'201':'200']:{description:created?'Created':'Success',headers:{'X-Request-Id':{description:'Server-generated support correlation ID',schema:string},'X-Porb-Api-Version':{schema:{const:'1.2'}}},content:{'application/json':{schema}}}}};
-  if(created&&(path==='/v1/watchlists'||path.endsWith('/evidence')))operation.responses['200']={description:'Existing identical item returned; duplicate=true.',content:{'application/json':{schema}}};
+  if(created&&(path==='/v1/watchlists'||path==='/v1/atlas/reports'||path.endsWith('/evidence')))operation.responses['200']={description:'Existing identical item returned; duplicate=true.',content:{'application/json':{schema}}};
   for(const code of [400,401,403,404,409,413,422,429,502,503])operation.responses[code]={$ref:'#/components/responses/'+code};
   if(body)operation.requestBody={required:true,content:{'application/json':{schema:body}}};
   paths[path]??={};paths[path][method]=operation;

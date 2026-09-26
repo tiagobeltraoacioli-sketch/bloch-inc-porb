@@ -4,6 +4,7 @@ import {OFFICIAL_SOURCES,officialReferences} from './atlas-sources.js';
 import {GRANT_COLUMNS} from './atlas-grants.js';
 import {atlasComparisonRoute} from './atlas-comparison.js';
 import {atlasPathsRoute} from './atlas-paths.js';
+import {atlasReportsRoute} from './atlas-reports.js';
 
 const keys=(body,allowed)=>requireValue(Object.keys(body).every(k=>allowed.includes(k)),'unexpected_fields');
 const text=(value,min,max)=>typeof value==='string'&&value.trim().length>=min&&value.length<=max&&!/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value);
@@ -11,6 +12,7 @@ export async function atlasPrivateRoute(path,request,env,principal,fetcher){
   if(!path.startsWith('/v1/atlas/'))return null;
   if(path==='/v1/atlas/compare')return atlasComparisonRoute(request,env,principal);
   if(path==='/v1/atlas/paths')return atlasPathsRoute(request,env,principal);
+  const savedReport=await atlasReportsRoute(path,request,env,principal);if(savedReport)return savedReport;
   const db=env.PORB_DB,tenant=principal.tenant_id,now=Date.now(),method=request.method;
   if(path==='/v1/atlas/sources'){
     authorize(principal,'data:read');
@@ -41,8 +43,8 @@ export async function atlasPrivateRoute(path,request,env,principal,fetcher){
   }
   if(path==='/v1/atlas/purge'&&method==='POST'){
     admin(principal);keys(await bodyOf(request),[]);
-    const [deleted,grants]=await db.batch([statement(db,'DELETE FROM atlas_records WHERE tenant_id=? AND expires_at<=?',tenant,now),statement(db,'DELETE FROM atlas_score_grants WHERE tenant_id=? AND (expires_at<=? OR revoked_at IS NOT NULL)',tenant,now),audit(db,principal,'atlas.expired.purge',null)]);
-    return json({deleted:deleted.meta.changes,deleted_grants:grants.meta.changes});
+    const [deleted,grants,reports]=await db.batch([statement(db,'DELETE FROM atlas_records WHERE tenant_id=? AND expires_at<=?',tenant,now),statement(db,'DELETE FROM atlas_score_grants WHERE tenant_id=? AND (expires_at<=? OR revoked_at IS NOT NULL)',tenant,now),statement(db,'DELETE FROM atlas_reports WHERE tenant_id=? AND expires_at<=?',tenant,now),audit(db,principal,'atlas.expired.purge',null)]);
+    return json({deleted:deleted.meta.changes,deleted_grants:grants.meta.changes,deleted_reports:reports.meta.changes});
   }
   const match=path.match(/^\/v1\/atlas\/records(?:\/([0-9a-f-]{36}))?$/);
   if(!match)return null;

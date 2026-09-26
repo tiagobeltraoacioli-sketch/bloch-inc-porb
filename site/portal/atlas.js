@@ -1,5 +1,6 @@
 import {atlasSelection, atlasSubject, atlasReviews, atlasRecords, atlasRecordSummary, atlasLink} from './atlas-context.js';
 import {comparisonWorkspace} from './atlas-comparison.js';
+import {reportWorkspace} from './atlas-reports.js';
 import {mountAtlasPaths} from '/graphus/assets/atlas_paths_ui.js';
 const $ = id => document.getElementById(id);
 const el = (tag, text, cls) => {const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node;};
@@ -20,6 +21,7 @@ function lock(message, login = false) {
   contextVersion++; selectionVersion++; sourceVersion++; sourceExpiry = null; data = null; analysis = null; selectedNode = ''; runs = []; editing = null;
   comparison.reset();
   pathWorkspace.reset();
+  reports.reset();
   for (const id of ['private-records', 'private-context', 'private-grant-list', 'atlas-selected-evidence', 'private-source-output', 'private-summary']) $(id).replaceChildren();
   for (const id of ['atlas-saved-analysis', 'atlas-saved-reference', 'grant-review']) $(id).replaceChildren();
   for (const id of ['atlas-reference-search', 'record-search']) $(id).value = '';
@@ -44,8 +46,16 @@ async function request(path, method = 'GET', body) {
   return result;
 }
 const api = (path, method, body) => request('/v1/atlas/' + path, method, body);
-const comparison = comparisonWorkspace(request);
-const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})));
+const reports = reportWorkspace(request, row => {
+  if (!canWrite()) return; clearEditor(); $('private-kind').value = 'review'; $('private-subject').value = row.review_subject;
+  for (const [id, key] of [['private-purpose','purpose'],['private-basis','lawful_basis'],['private-licence','source_licence']]) $(id).value = row[key];
+  $('private-retention').value = Math.max(1, Math.min(30, Math.floor((row.expires_at - Date.now()) / 86400000)));
+  $('record-selected-only').checked = false; $('record-search').value = row.review_subject; $('record-kind').value = 'review'; $('record-state').value = 'all'; recordPage = 0; renderRecords();
+  note('private-editor-title', 'Review saved report'); note('private-editor-note', `Reviewing “${row.title}”. This starts open. Review retention is separate from report retention; a report review does not authorize score access.`);
+  $('private-editor-title').scrollIntoView({block:'start'}); $('private-body').focus();
+});
+const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
+const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
 function download(name, value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'})), link = el('a');
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -159,7 +169,7 @@ async function load() {
       const button = el('button', 'Revoke grant'); button.onclick = async () => {button.disabled = true; try {await api(`grants/${grant.id}/revoke`, 'POST', {}); dismissToken(); await load(); note('private-grant-status', 'Grant revoked immediately.');} catch (error) {note('private-grant-status', error.message); button.disabled = false;}};
       card.append(button); $('private-grant-list').append(card);
     }
-    renderSelection();
+    reports.sync(data); renderSelection();
   } catch (error) {if (data) note('private-status', `Refresh failed: ${error.message}. Previously loaded records remain visible.`); else {note('private-status', error.message); if (error.status !== 401) $('private-reload').hidden = false;} throw error;}
 }
 
@@ -173,8 +183,8 @@ $('private-record').addEventListener('submit', async event => {
 });
 $('private-cancel').onclick = clearEditor;
 $('private-reload').onclick = () => location.reload();
-$('private-refresh').onclick = async () => {const button = $('private-refresh'); button.disabled = true; try {await load(); await loadAnalyses();} catch (error) {note('private-write-status', error.message);} finally {button.disabled = false;}};
-$('private-purge').onclick = async () => {try {const result = await api('purge', 'POST', {}); await load(); note('private-write-status', `${result.deleted} expired records and ${result.deleted_grants} expired or revoked grants deleted.`);} catch (error) {note('private-write-status', error.message);}};
+$('private-refresh').onclick = async () => {const button = $('private-refresh'); button.disabled = true; try {await load(); await loadAnalyses(); await reports.load();} catch (error) {note('private-write-status', error.message);} finally {button.disabled = false;}};
+$('private-purge').onclick = async () => {try {const result = await api('purge', 'POST', {}); await load(); await reports.load(); note('private-write-status', `${result.deleted} expired records, ${result.deleted_reports} expired reports and ${result.deleted_grants} expired or revoked grants deleted.`);} catch (error) {note('private-write-status', error.message);}};
 $('private-export').onclick = () => {if (data) download('private-organization-atlas.json', data);};
 $('record-export').onclick = () => {if (data) download('private-atlas-matching-records.json', {kind: 'private_atlas_records', exported_at: new Date().toISOString(), tenant: data.tenant, filters: filters(), records: atlasRecords(data.records, filters())});};
 for (const id of ['record-search', 'record-kind', 'record-state', 'record-selected-only']) $(id).addEventListener(id === 'record-search' ? 'input' : 'change', () => {recordPage = 0; renderRecords();});
@@ -203,10 +213,10 @@ $('private-source-form').addEventListener('submit', async event => {
 });
 function expireVisibleRecords() {
   if (!data || document.hidden) return;
-  renderRecords(); renderReviews();
+  renderRecords(); renderReviews(); reports.expire();
   if (sourceExpiry !== null && Date.now() >= sourceExpiry) {sourceExpiry = null; $('private-source-output').textContent = ''; $('private-source-output').hidden = true; note('private-source-status', 'The displayed snapshot expired. Run the lookup again.');}
 }
 setInterval(expireVisibleRecords, 30000);
 document.addEventListener('visibilitychange', expireVisibleRecords);
 const returnQuery = new URLSearchParams({view: 'atlas'}); if (pendingSelection.analysis) returnQuery.set('analysis', pendingSelection.analysis); if (pendingSelection.node) returnQuery.set('node', pendingSelection.node); $('private-login').href = '/portal/?' + returnQuery;
-try {await load(); await loadAnalyses();} catch (error) {if (data) note('atlas-saved-status', `Saved analysis list unavailable: ${error.message}`);}
+try {await load(); await reports.load(); await loadAnalyses();} catch (error) {if (data) note('atlas-saved-status', `Saved analysis list unavailable: ${error.message}`);}

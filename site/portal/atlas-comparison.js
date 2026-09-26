@@ -8,11 +8,11 @@ const save = (name, value, type) => {const url = URL.createObjectURL(new Blob([v
 const csv = value => '"' + String(value ?? '').replace(/^[\s]*[=+@-]/, match => "'" + match).replaceAll('"', '""') + '"';
 const table = (headers, rows) => {const box = el('div', undefined, 'atlas-compare-table'), table = el('table'), head = el('thead'), tr = el('tr'), body = el('tbody'); for (const header of headers) tr.append(el('th', header)); head.append(tr); for (const row of rows) {const tr = el('tr'); for (const value of row) {const td = el('td'); td.append(value instanceof Node ? value : String(value ?? 'Not observed')); tr.append(td);} body.append(tr);} table.append(head, body); box.append(table); return box;};
 
-export function comparisonWorkspace(request) {
+export function comparisonWorkspace(request, onReport = () => {}) {
   let analysis = null, node = '', report = null, version = 0, busy = false, page = 0, referencePage = 0, key = '';
   const ready = () => Boolean(analysis && $('compare-baseline').value);
   function invalidate(message = 'Choose a baseline and compare the retained samples.') {
-    version++; report = null; busy = false; page = 0; referencePage = 0;
+    version++; report = null; onReport(null); busy = false; page = 0; referencePage = 0;
     $('compare-result').hidden = true; $('compare-result').replaceChildren(); $('compare-ledger').replaceChildren(); $('compare-references').replaceChildren();
     $('compare-browser').hidden = true; $('compare-status').textContent = message;
     $('compare-json').disabled = true; $('compare-csv').disabled = true; $('compare-run').disabled = !ready();
@@ -72,7 +72,7 @@ export function comparisonWorkspace(request) {
     if (!ready() || busy) return;
     invalidate('Comparing retained evidence and verifying dataset hashes…'); const run = version; busy = true; $('compare-run').disabled = true;
     const query = new URLSearchParams({baseline: $('compare-baseline').value, current: analysis.id}), reference = $('compare-reference').value.trim(); if (reference) query.set('reference', reference);
-    try {const result = await request('/v1/atlas/compare?' + query); if (run !== version) return; report = result; render(); $('compare-status').textContent = `Compared ${result.baseline.selected_records} baseline and ${result.current.selected_records} current records. No new collection was started.`;}
+    try {const result = await request('/v1/atlas/compare?' + query); if (run !== version) return; report = result; render(); onReport(report); $('compare-status').textContent = `Compared ${result.baseline.selected_records} baseline and ${result.current.selected_records} current records. No new collection was started.`;}
     catch (error) {if (run === version) $('compare-status').textContent = `Comparison unavailable: ${error.message}. No previous result is displayed.`;}
     finally {if (run === version) {busy = false; $('compare-run').disabled = !ready();}}
   }

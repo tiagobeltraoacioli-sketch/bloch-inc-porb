@@ -32,6 +32,7 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
+  await api(anonymous, '/v1/atlas/reports', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
   await api(anonymous, '/v1/atlas/paths?analysis=00000000-0000-4000-8000-000000000001&from=ETH:address:source&to=ETH:address:target', {status: 401});
   await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
@@ -82,6 +83,7 @@ async function publicChecks() {
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
     [privateOrigin, '/portal/atlas-context.js', 'site/portal/atlas-context.js'],
     [privateOrigin, '/portal/atlas-comparison.js', 'site/portal/atlas-comparison.js'],
+    [privateOrigin, '/portal/atlas-reports.js', 'site/portal/atlas-reports.js'],
     [privateOrigin, '/portal/atlas.css', 'site/portal/atlas.css'],
     [privateOrigin, '/portal/', 'site/portal/index.html'],
     [privateOrigin, '/portal/portal.js', 'site/portal/portal.js'],
@@ -98,6 +100,7 @@ async function publicChecks() {
 
 async function privateChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
+  await api(anonymous, '/v1/atlas/reports', {status: 401});
   await api(anonymous, '/v1/atlas/sources', {status: 401});
   await api(anonymous, '/v1/atlas/paths?analysis=00000000-0000-4000-8000-000000000001&from=ETH:address:source&to=ETH:address:target', {status: 401});
   await api(anonymous, '/v1/atlas/compare?baseline=00000000-0000-4000-8000-000000000001&current=00000000-0000-4000-8000-000000000002', {status: 401});
