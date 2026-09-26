@@ -64,7 +64,7 @@ const reports = reportWorkspace(request, reviewReport, (rows,complete)=>{dossier
 const reviews = reviewWorkspace(request, {edit,inspect:id=>reports.open(id),refreshContext:load});
 const comparison = comparisonWorkspace(request, report => reports.setCandidate('comparison',report));
 const pathWorkspace = mountAtlasPaths($('atlas-path-workspace'), (parameters, source) => request('/v1/atlas/paths?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('paths',report));
-const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})));
+const motifWorkspace = mountAtlasMotifs($('atlas-motif-workspace'), (parameters, source) => request('/v1/atlas/motifs?' + new URLSearchParams({analysis:source.analysisId,...parameters})), report => reports.setCandidate('motifs',report));
 function download(name, value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type: 'application/json'})), link = el('a');
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

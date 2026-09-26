@@ -1020,8 +1020,8 @@
         "tags": [
           "Atlas"
         ],
-        "summary": "Save a verified path or comparison calculation",
-        "description": "Recomputes the calculation from tenant-owned, digest-verified saved analyses and requires expected_report_sha256 to match the preview. Client report content is not accepted. Six new save attempts/minute/organization; up to 20 retained reports, 6 MB each, with 1–365 day retention. Complete reports only: oversize fails 422 without truncation. No new collection or rescoring. Required purpose, lawful basis and source rights are user declarations. Atomic metadata, payload chunks and audit; request_id UUID retries with identical normalized content return the existing report with duplicate=true (200), even after source analyses leave history. Reusing an extant request_id with different content or an expired report returns 409. After deletion or purge the request_id can be reused. Saved payloads survive analysis retention. Immutable; reviews/corrections are separate Atlas records using returned review_subject. No score access is granted.",
+        "summary": "Save a verified path, pattern or comparison calculation",
+        "description": "Recomputes the calculation from tenant-owned, digest-verified saved analyses and requires expected_report_sha256 to match the preview. Client report content is not accepted. Six new save attempts/minute/organization; up to 20 retained reports, 6 MB each, with 1–365 day retention. Complete serialized reports only: oversize fails 422 without removing events, even when the query endpoint permits a larger response. Empty, not-applicable and search-truncated reports retain their original state and search limits; saving does not turn them into complete-chain findings. No new collection or rescoring. Required purpose, lawful basis and source rights are user declarations. Atomic metadata, payload chunks and audit; request_id UUID retries with identical normalized content return the existing report with duplicate=true (200), even after source analyses leave history. Reusing an extant request_id with different content or an expired report returns 409. After deletion or purge the request_id can be reused. Saved payloads survive analysis retention. Immutable; reviews/corrections are separate Atlas records using returned review_subject, and reports may be linked to dossiers. No score access is granted.",
         "x-required-scopes": [
           "cases:read",
           "analyses:read",
@@ -1260,6 +1260,131 @@
                         "pattern": "^[a-f0-9]{64}$"
                       },
                       "kind": {
+                        "const": "motifs"
+                      },
+                      "parameters": {
+                        "type": "object",
+                        "properties": {
+                          "analysis": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "reference": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "cycles",
+                              "pass_through",
+                              "fan_in",
+                              "fan_out",
+                              "repeated_pair"
+                            ]
+                          },
+                          "max_hops": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 6
+                          },
+                          "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 20
+                          },
+                          "window_seconds": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 604800
+                          },
+                          "min_counterparties": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 20
+                          },
+                          "min_events": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 100
+                          },
+                          "minimum": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9][0-9]{0,77})$"
+                          },
+                          "start": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "end": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "analysis",
+                          "reference"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "request_id",
+                      "title",
+                      "purpose",
+                      "lawful_basis",
+                      "source_licence",
+                      "retention_days",
+                      "expected_report_sha256",
+                      "kind",
+                      "parameters"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "request_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "title": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 120
+                      },
+                      "purpose": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "lawful_basis": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "source_licence": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 300
+                      },
+                      "retention_days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365
+                      },
+                      "expected_report_sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      },
+                      "kind": {
                         "const": "comparison"
                       },
                       "parameters": {
@@ -1316,7 +1441,7 @@
           "Atlas"
         ],
         "summary": "Read a complete verified saved Atlas report",
-        "description": "Checks tenant, expiry, complete ordered chunks, byte count, SHA-256 of JSON.stringify(report), and the inner report_sha256 over the calculation without its hash. Returns metadata, integrity and report; corruption fails 409, missing or expired fails 404. The export route adds an attachment filename. No fresh source access. Private, no-store and audited.",
+        "description": "Checks tenant, expiry, complete ordered chunks, byte count, SHA-256 of JSON.stringify(report), the inner report_sha256 over the calculation without its hash, and agreement of manifest kind, version, parameters and summary with that calculation. Returns metadata, integrity and report; corruption fails 409, missing or expired fails 404. The export route adds an attachment filename. No fresh source access. Private, no-store and audited.",
         "x-required-scopes": [
           "cases:read",
           "analyses:read",
@@ -1509,7 +1634,7 @@
           "Atlas"
         ],
         "summary": "Export a complete verified saved Atlas report",
-        "description": "Checks tenant, expiry, complete ordered chunks, byte count, SHA-256 of JSON.stringify(report), and the inner report_sha256 over the calculation without its hash. Returns metadata, integrity and report; corruption fails 409, missing or expired fails 404. The export route adds an attachment filename. No fresh source access. Private, no-store and audited.",
+        "description": "Checks tenant, expiry, complete ordered chunks, byte count, SHA-256 of JSON.stringify(report), the inner report_sha256 over the calculation without its hash, and agreement of manifest kind, version, parameters and summary with that calculation. Returns metadata, integrity and report; corruption fails 409, missing or expired fails 404. The export route adds an attachment filename. No fresh source access. Private, no-store and audited.",
         "x-required-scopes": [
           "cases:read",
           "analyses:read",

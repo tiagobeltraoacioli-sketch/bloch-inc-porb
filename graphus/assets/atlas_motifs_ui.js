@@ -3,7 +3,7 @@ const short=id=>{const value=id.split(':').at(-1);return value.length>20?value.s
 const labels={cycles:'Return cycles',pass_through:'In/out sequences',fan_in:'Fan-in windows',fan_out:'Fan-out windows',repeated_pair:'Repeated directed pairs'};
 const messages={motif_reference_unobserved:'Choose a reference observed in this sample.',motif_address_reference_required:'Choose an account address, not a transaction.',invalid_motif_limits:'Check the window, result count and pattern limits.',invalid_motif_utc_range:'Use a valid UTC range with start no later than end.',invalid_motif_minimum:'Minimum value must be an unsigned base-unit integer.',analysis_integrity_failed:'The retained sample failed its integrity check.',duplicate_motif_transfer:'Two records claim the same transfer identity. Correct the source before searching.',inconsistent_motif_transaction:'One transaction is reported at conflicting heights.',inconsistent_motif_block:'The sample contains conflicting block hashes or timestamps.',motif_report_capacity:'This report exceeds the 8 MB export limit. Narrow the query.',rate_limit:'Too many motif searches. Wait a minute before retrying.'};
 
-export function mountAtlasMotifs(root,query){
+export function mountAtlasMotifs(root,query,onReport=()=>{},options={}){
   root.classList.add('atlas-path-workspace','atlas-motif-workspace');
   root.innerHTML=`<p class="section-index">TEMPORAL EVIDENCE / OBSERVED PATTERNS</p><h2>Inspect the shape behind the events.</h2>
     <p>Explore cycles, in/out sequences, fan-in and fan-out windows, or repeated directed pairs. These observations do not establish ownership, intent or continuity of funds.</p><p data-motif="context" class="atlas-note"></p>
@@ -27,6 +27,8 @@ export function mountAtlasMotifs(root,query){
       <details><summary>Coverage, exclusions and reproducibility</summary><div data-motif="notes"></div><pre data-motif="provenance"></pre></details>
     </div><div class="atlas-actions"><button data-motif="export" disabled>Download pattern report JSON</button></div>`;
   const $=name=>root.querySelector(`[data-motif="${name}"]`);
+  const optionId='atlas-motif-options-'+crypto.randomUUID();root.querySelector('datalist').id=optionId;$('reference').setAttribute('list',optionId);
+  if(options.readOnly){$('form').hidden=true;$('method').hidden=true;root.querySelector('h2').textContent='Inspect the retained patterns.';}
   let source=null,report=null,selected=null,version=0,busy=false,loading=false,eventPage=0;
   const available=()=>source&&!['BTC','BLCH'].includes(source.asset)&&!loading;
   function controls(){
@@ -35,7 +37,7 @@ export function mountAtlasMotifs(root,query){
     $('method').textContent=['cycles','pass_through'].includes($('type').value)?'Duration bounds the entire sequence. Every step must advance both block time and block height.':'Groups use separate half-open UTC bins of this width, aligned to the Unix epoch. Shapes crossing a bin boundary are not searched; same-time records may share a group.';
   }
   function clear(message='Parameters changed. Run the pattern search again.'){
-    version++;busy=false;report=null;selected=null;eventPage=0;$('result').hidden=true;$('search').value='';
+    version++;busy=false;report=null;selected=null;eventPage=0;onReport(null);$('result').hidden=true;$('search').value='';
     for(const name of ['metrics','limits','choices','heading','summary','diagram','diagram-note','ledger','page','notes','provenance'])$(name).replaceChildren();$('status').textContent=message;controls();
   }
   function setSource(next){
@@ -90,7 +92,7 @@ export function mountAtlasMotifs(root,query){
     const value=$('reference').value.trim(),node=current.nodes.find(node=>node.id===value||node.address?.toLowerCase()===value.toLowerCase());
     const parameters={reference:node?.id||value,type:$('type').value,max_hops:Number($('hops').value),max_results:Number($('limit').value),window_seconds:Number($('window').value),min_counterparties:Number($('peers').value),min_events:Number($('events').value),minimum:$('minimum').value,
       ...($('start').value?{start:$('start').value+'Z'}:{}),...($('end').value?{end:$('end').value+'Z'}:{})};
-    try{const result=await query(parameters,current);if(run!==version)return;report=result;render();$('status').textContent=`${report.motifs.length} observed pattern(s) in ${report.asset}. ${report.search.truncated?'Search limit reached.':'No new source collection was started.'}`;}
+    try{const result=await query(parameters,current);if(run!==version)return;report=result;render();onReport(report);$('status').textContent=`${report.motifs.length} observed pattern(s) in ${report.asset}. ${report.search.truncated?'Search limit reached.':'No new source collection was started.'}`;}
     catch(error){if(run===version)$('status').textContent=`Pattern search unavailable: ${messages[error.message]||error.message.replaceAll('_',' ')} No previous result is displayed.`;}
     finally{if(run===version){busy=false;controls();}}
   };
@@ -100,5 +102,9 @@ export function mountAtlasMotifs(root,query){
   setSource(null);return {setSource,setLoading(value){if(loading===value)return;loading=value;if(value)clear('Waiting for the source capture…');else if(!report){
     if(!source)$('status').textContent='Open a sample to explore its patterns.';
     else if(!['BTC','BLCH'].includes(source.asset))$('status').textContent='Choose a reference and search the retained capture. Its source and coverage are shown above.';
-  }controls();},reset(){setSource(null);}};
+  }controls();},reset(){setSource(null);},showReport(value){
+    if(!options.readOnly)return;clear();report=value;render();controls();
+    $('context').textContent='Verified saved calculation. Browse its original events and parameters; source collection and rescoring are not started.';
+    $('status').textContent=`${report.motifs.length} retained pattern(s) in ${report.asset}. The original query limits and coverage apply.`;
+  }};
 }

@@ -33,6 +33,7 @@ async function api(context, path, {method = 'GET', body, token, status = 200} = 
 async function publicChecks() {
   await api(anonymous, '/v1/atlas/private', {status: 401});
   await api(anonymous, '/v1/atlas/reports', {status: 401});
+  await api(anonymous, '/v1/atlas/reports', {method:'POST',body:{kind:'motifs'},status:401});
   await api(anonymous, '/v1/atlas/reviews', {status: 401});
   await api(anonymous, '/v1/atlas/records/00000000-0000-4000-8000-000000000001/history', {status: 401});
   await api(anonymous, '/v1/atlas/records/00000000-0000-4000-8000-000000000001/assignment', {method:'POST',body:{},status:401});

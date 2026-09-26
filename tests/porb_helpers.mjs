@@ -10,8 +10,8 @@ export function sourceGraph(asset='ETH',height=100){
   const edges=Array.from({length:39},(_,i)=>({from:id(i+1),to:id(40),kind:['USDT','USDC'].includes(asset)?'erc20_transfer':'native_value',amount_base_units:String(BigInt(i+1)*1000000000000000000n),event_id:`${height}:${i}`,txid:`0x${(i+1).toString(16).padStart(64,'0')}`,position:i,block_number:height,block_hash:`0x${height.toString(16).padStart(64,'0')}`,block_time:'2026-09-24T12:00:00.000Z'}));
   return {status:'source-reported',asset,network:'ethereum-mainnet',source:'test-public-source',retrieved_at:'2026-09-24T12:00:00.000Z',anchor:{height,hash:edges[0].block_hash},nodes,edges,coverage:'Synthetic test fixture only',scope:{transactions_returned:39},next_cursor:String(height-1)};
 }
-export async function setup(){
-  const sqlite=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../portal/migrations/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort())sqlite.exec(readFileSync(new URL('../portal/migrations/'+name,import.meta.url),'utf8'));
+export async function setup({migrationThrough=null}={}){
+  const sqlite=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../portal/migrations/',import.meta.url)).filter(n=>n.endsWith('.sql')&&(!migrationThrough||n.slice(0,4)<=migrationThrough)).sort())sqlite.exec(readFileSync(new URL('../portal/migrations/'+name,import.meta.url),'utf8'));
   function statement(sql,args=[]){return {bind(...values){return statement(sql,values);},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},_run(){const r=sqlite.prepare(sql).run(...args);return {meta:{changes:Number(r.changes)}};},async run(){return this._run();}};}
   const db={prepare:statement,async batch(statements){sqlite.exec('BEGIN');try{const results=statements.map(s=>s._run());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
   const env={PORB_DB:db,PORB_AUTH_PEPPER:'test-only-pepper-32-characters-1234567890'},tenant=crypto.randomUUID(),owner=crypto.randomUUID(),salt=random();

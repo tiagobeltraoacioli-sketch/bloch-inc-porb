@@ -25,8 +25,8 @@
   </section>
   <section id="report-workspace" class="atlas-lab">
     <div class="atlas-panel-heading"><div><p class="section-index">03 / SAVED CALCULATIONS</p><h2>Keep evidence for later review.</h2></div><button id="report-refresh">Refresh reports</button></div>
-    <p>Save a complete path search or comparison with its source coverage and exact parameters. Reports remain available for their stated retention period even after the source analyses leave the history.</p>
-    <div class="atlas-actions"><button id="report-save-paths" disabled>Save current paths</button><button id="report-save-comparison" disabled>Save current comparison</button></div>
+    <p>Save a complete path, pattern or comparison report with its source coverage, search limits and exact parameters. Reports remain available for their stated retention period even after the source analyses leave the history.</p>
+    <div class="atlas-actions"><button id="report-save-paths" disabled>Save current paths</button><button id="report-save-motifs" disabled>Save current patterns</button><button id="report-save-comparison" disabled>Save current comparison</button></div>
     <form id="report-form" class="atlas-controls" hidden>
       <p id="report-preview" class="atlas-wide atlas-record-meta"></p>
       <label class="atlas-wide">Report title<input id="report-title" required minlength="3" maxlength="120"></label>
@@ -34,7 +34,7 @@
       <label>Retention days<input id="report-retention" type="number" min="1" max="365" value="30" required></label><button id="report-submit" class="button primary">Save verified report</button><button id="report-cancel" type="button">Cancel save</button>
     </form><p id="report-save-status" role="status"></p>
     <p class="atlas-note">Up to 20 reports per organization, 6 MB each and 365 days. Expired reports occupy storage until an administrator purges them. Purpose, lawful basis and source rights are your declarations. Saved calculations are immutable; corrections and review decisions belong in separate records.</p>
-    <div class="atlas-controls"><label>Search reports<input id="report-search" type="search" maxlength="200" placeholder="Title, purpose, asset or digest"></label><label>Report kind<select id="report-kind"><option value="all">All reports</option><option value="paths">Temporal paths</option><option value="comparison">Sample comparisons</option></select></label></div>
+    <div class="atlas-controls"><label>Search reports<input id="report-search" type="search" maxlength="200" placeholder="Title, purpose, reference, asset or digest"></label><label>Report kind<select id="report-kind"><option value="all">All reports</option><option value="paths">Temporal paths</option><option value="motifs">Observed patterns</option><option value="comparison">Sample comparisons</option></select></label></div>
     <p id="report-count" role="status"></p><p id="report-list-status" role="status"></p><div id="report-list"></div><div class="atlas-actions"><button id="report-previous" disabled>Previous reports</button><span id="report-page"></span><button id="report-next" disabled>Next reports</button></div><div id="report-detail" class="atlas-panel" hidden></div>
   </section>
   <section id="case-workspace" class="atlas-lab">
@@ -47,7 +47,7 @@
       <div class="atlas-actions"><button id="dossier-refresh">Refresh dossier</button><button id="dossier-toggle">Close investigation</button><button id="dossier-export">Export dossier JSON</button></div>
       <div class="atlas-controls"><label class="atlas-wide">Saved report<select id="dossier-report"><option value="">Select a saved report</option></select></label><button id="dossier-attach" disabled>Attach verified report</button></div>
       <p class="atlas-note">Up to 20 report links. Each report and review keeps its own expiry. Unavailable reports leave an attachment ID and digest, and are marked missing in exports. Complete exports are limited to 12 MB; oversized dossiers are rejected without truncation. Reference snapshots have a separate export in the portal.</p>
-      <div class="atlas-controls"><label>Find linked reports<input id="dossier-search" type="search" maxlength="200" placeholder="Title, asset or report ID"></label><label>Report kind<select id="dossier-kind"><option value="all">All links</option><option value="paths">Temporal paths</option><option value="comparison">Comparisons</option><option value="unavailable">Unavailable reports</option></select></label></div>
+      <div class="atlas-controls"><label>Find linked reports<input id="dossier-search" type="search" maxlength="200" placeholder="Title, asset or report ID"></label><label>Report kind<select id="dossier-kind"><option value="all">All links</option><option value="paths">Temporal paths</option><option value="motifs">Observed patterns</option><option value="comparison">Comparisons</option><option value="unavailable">Unavailable reports</option></select></label></div>
       <div id="dossier-list"></div><div class="atlas-actions"><button id="dossier-previous" disabled>Previous links</button><span id="dossier-page"></span><button id="dossier-next" disabled>Next links</button></div>
     </div>
   </section>

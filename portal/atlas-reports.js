@@ -1,11 +1,13 @@
 import {authorize,audit,bodyOf,budget,digest,json,PortalError,requireValue,statement} from './security.js';
 import {readVerifiedAnalysis} from './atlas-evidence.js';
-import {compareAnalyses} from './atlas-comparison.js';
-import {traceAtlasPaths,pathParameters,PathError} from '../graphus/assets/atlas_paths.js';
+import {compareAnalyses,COMPARISON_VERSION} from './atlas-comparison.js';
+import {traceAtlasPaths,pathParameters,PathError,PATH_VERSION} from '../graphus/assets/atlas_paths.js';
+import {scanAtlasMotifs,motifParameters,MOTIF_VERSION} from '../graphus/assets/atlas_motifs.js';
 
 export const REPORT_LIMITS = Object.freeze({capacity:20,bytes:6000000,maximum_days:365});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HASH=/^[a-f0-9]{64}$/;
+const VERSIONS={paths:PATH_VERSION,comparison:COMPARISON_VERSION,motifs:MOTIF_VERSION};
 // Keep UTF-16 surrogate pairs together so each SQL text part is valid UTF-8.
 function chunks(payload){
   const parts=[];for(let start=0;start<payload.length;){let end=Math.min(start+200000,payload.length);const code=payload.charCodeAt(end-1);if(code>=0xd800&&code<=0xdbff)end--;parts.push(payload.slice(start,end));start=end;}return parts;
@@ -18,7 +20,7 @@ export const reportMetadata=({parameters_json,summary_json,request_digest,reques
 const metadata=reportMetadata;
 function normalize(body){
   keys(body,['request_id','kind','title','purpose','lawful_basis','source_licence','retention_days','parameters','expected_report_sha256']);
-  requireValue(UUID.test(body.request_id||'')&&['paths','comparison'].includes(body.kind)&&HASH.test(body.expected_report_sha256||''),'invalid_report_identity');
+  requireValue(UUID.test(body.request_id||'')&&Object.hasOwn(VERSIONS,body.kind)&&HASH.test(body.expected_report_sha256||''),'invalid_report_identity');
   requireValue(text(body.title,120)&&['purpose','lawful_basis','source_licence'].every(key=>text(body[key],300)),'invalid_report_governance');
   requireValue(Number.isInteger(body.retention_days)&&body.retention_days>=1&&body.retention_days<=365,'invalid_retention');
   let parameters;
@@ -26,6 +28,10 @@ function normalize(body){
     keys(body.parameters,['analysis','from','to','max_hops','max_paths','max_gap_seconds','max_duration_seconds','minimum','start','end']);
     const {analysis,...input}=body.parameters;requireValue(UUID.test(analysis||''),'invalid_report_analysis');
     parameters={analysis,...pathParameters(input)};
+  }else if(body.kind==='motifs'){
+    keys(body.parameters,['analysis','reference','type','max_hops','max_results','window_seconds','min_counterparties','min_events','minimum','start','end']);
+    const {analysis,...input}=body.parameters;requireValue(UUID.test(analysis||''),'invalid_report_analysis');
+    parameters={analysis,...motifParameters(input)};
   }else{
     keys(body.parameters,['baseline','current','reference']);const {baseline,current,reference=null}=body.parameters;
     requireValue(UUID.test(baseline||'')&&UUID.test(current||''),'invalid_report_analysis');
@@ -36,17 +42,19 @@ function normalize(body){
     retention_days:body.retention_days,parameters,expected_report_sha256:body.expected_report_sha256};
 }
 async function computed(db,tenant,input){
-  if(input.kind==='paths'){
+  if(input.kind==='paths'||input.kind==='motifs'){
     const {analysis,...parameters}=input.parameters,run=await readVerifiedAnalysis(db,tenant,analysis);
-    return traceAtlasPaths(run.graph,parameters,{dataset_sha256:run.digest,analysis_id:run.id});
+    return (input.kind==='paths'?traceAtlasPaths:scanAtlasMotifs)(run.graph,parameters,{dataset_sha256:run.digest,analysis_id:run.id});
   }
   const {baseline,current,reference}=input.parameters,a=await readVerifiedAnalysis(db,tenant,baseline),b=current===baseline?a:await readVerifiedAnalysis(db,tenant,current);
   return compareAnalyses(a,b,reference);
 }
 function summarize(kind,report){
+  if(kind==='motifs')return {motifs:report.motifs.length,type:report.parameters.type,reference:report.parameters.reference,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,complete_within_query:report.search.complete_within_query,state:report.state};
   return kind==='paths'?{paths:report.paths.length,records:report.coverage.records,eligible_records:report.coverage.eligible_records,truncated:report.search.truncated,state:report.state}
     :{events:report.events.length,counts:report.counts,block_conflicts:report.blocks.conflicts.length,truncated:report.limits.truncated};
 }
+function reportParameters(kind,report){return kind==='comparison'?{baseline:report.baseline.id,current:report.current.id,reference:report.reference}:{analysis:report.provenance.analysis_id,...report.parameters};}
 const existing=(db,tenant,requestId)=>statement(db,`SELECT ${COLUMNS},request_digest FROM atlas_reports WHERE tenant_id=? AND request_id=?`,tenant,requestId).first();
 function replay(row,requestDigest){
   requireValue(row.request_digest===requestDigest,'report_request_conflict',409);
@@ -65,6 +73,10 @@ export async function readVerifiedReport(db,tenant,id){
   requireValue(report&&typeof report==='object'&&!Array.isArray(report),'report_integrity_failed',409);
   const {report_sha256,...content}=report;
   requireValue(report_sha256===row.report_sha256&&report.asset===row.asset&&report.version===row.report_version&&await digest(JSON.stringify(content))===report_sha256,'report_integrity_failed',409);
+  // Manifest kind, query and summary must describe the verified calculation.
+  // Keep prior versions here when adding a new transform version.
+  try{requireValue(Object.hasOwn(VERSIONS,row.kind)&&report.version===VERSIONS[row.kind]&&JSON.stringify(summarize(row.kind,report))===row.summary_json&&JSON.stringify(reportParameters(row.kind,report))===row.parameters_json,'report_integrity_failed',409);}
+  catch{throw new PortalError('report_integrity_failed',409);}
   requireValue(row.expires_at>Date.now(),'report_unavailable',404);
   return {...metadata(row),integrity:{verified:true,payload_sha256:row.payload_sha256,report_sha256},report};
 }
