@@ -154,5 +154,8 @@ Address searches in the record explorer automatically call `/api/research` and
 render source records, typed graph evidence, exact incident amounts, topology and
 descriptive k-means when at least nine comparable references are available. The
 same report is available at `https://rednblue.space/explore/` and in its private
-Address research view. See [the unified research contract](unified-intelligence.md#unified-address-research)
+Address research view. The shared [evidence viewer](unified-intelligence.md#address-evidence-inspection)
+adds local direction/type/amount/block filters, typed graph navigation, exact event
+and source inspection, complete filtered CSV and ML-group-to-reference navigation.
+See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

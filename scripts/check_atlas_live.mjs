@@ -3,15 +3,18 @@
 import assert from 'node:assert/strict';
 import {readFile, mkdir, writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {createAddressEvidence} from '../space/public/assets/address-evidence.js';
+import {verifyResearch} from '../space/public/assets/address-research-core.js';
 
 const {webkit} = await import(process.env.PLAYWRIGHT_MODULE || process.argv.slice(2).find(arg => !arg.startsWith('--')) || 'playwright');
 const publicOrigin = 'https://bloch-graphus.xyz';
 const privateOrigin = 'https://rednblue.space';
 const root = new URL('../', import.meta.url);
 const portalOnly = process.argv.includes('--portal-only');
-const publicOnly = portalOnly || process.argv.includes('--public-only');
+const addressOnly = process.argv.includes('--address-only');
+const publicOnly = addressOnly || portalOnly || process.argv.includes('--public-only');
 const owner = publicOnly ? null : JSON.parse(await readFile(process.env.PORB_CREDENTIALS_FILE || new URL('.data/porb-portal/bootstrap.json', root), 'utf8'));
-const summary = {checked_at: new Date().toISOString(), scope: portalOnly ? 'portal-artifacts-and-authentication-boundaries' : publicOnly ? 'public-and-authentication-boundaries' : 'public-and-authenticated-private', public_origin: publicOrigin, private_origin: privateOrigin, checks: [], sources: [], assets: []};
+const summary = {checked_at: new Date().toISOString(), scope: addressOnly ? 'public-address-evidence' : portalOnly ? 'portal-artifacts-and-authentication-boundaries' : publicOnly ? 'public-and-authentication-boundaries' : 'public-and-authenticated-private', public_origin: publicOrigin, private_origin: privateOrigin, checks: [], sources: [], assets: []};
 const errors = [], cleanup = new Map();
 const addressQueries=new Map();
 let grant = null, key = null, authenticated = false;
@@ -123,8 +126,8 @@ async function publicChecks() {
     [privateOrigin, '/developers/openapi.json', 'site/developers/openapi.json'],
     ...['index.html','explore.css','explore.js'].map(name=>[privateOrigin,name==='index.html'?'/explore/':'/explore/'+name,'site/explore/'+name]),
     ...['module-catalog.js','module-shell.js'].map(name=>[privateOrigin,'/portal/'+name,'site/portal/'+name]),
-    ...['app.js','workspace.js','research.js','graph-lab.js','graph-core.js','graph-worker.js','address-research-core.js','address-research-ui.js','address-research.css'].map(name=>[privateOrigin,'/space/assets/'+name,'site/space/assets/'+name]),
-    ...['account.js','app.js','workspace.js','research.js','graph-lab.js','address-research-core.js','address-research-ui.js','address-research.css'].map(name=>['https://bloch.space','/assets/'+name,'space/public/assets/'+name]),
+    ...['app.js','workspace.js','research.js','graph-lab.js','graph-core.js','graph-worker.js','address-research-core.js','address-research-ui.js','address-research.css','address-evidence.js','address-evidence-ui.js'].map(name=>[privateOrigin,'/space/assets/'+name,'site/space/assets/'+name]),
+    ...['account.js','app.js','workspace.js','research.js','graph-lab.js','address-research-core.js','address-research-ui.js','address-research.css','address-evidence.js','address-evidence-ui.js'].map(name=>['https://bloch.space','/assets/'+name,'space/public/assets/'+name]),
     ['https://bloch.space','/account/','space/public/account/index.html'],
     ['https://bloch.space','/sw.js','space/public/sw.js'],
     [privateOrigin, '/portal/atlas.js', 'site/portal/atlas.js'],
@@ -238,6 +241,61 @@ async function privateChecks() {
   note('UN, UK and EU official snapshots parsed successfully inside the deployed Worker.');
 }
 
+async function addressEvidenceChecks(page, asset) {
+  await page.locator(`.address-research[data-asset=${asset}]`).waitFor({timeout:65000});
+  let additionalResearchRequests=0;
+  const count=request=>{if(new URL(request.url()).pathname.endsWith('/research'))additionalResearchRequests++;};
+  page.on('request',count);
+  const downloadText=async selector=>{
+    const pending=page.waitForEvent('download');await page.click(selector);
+    return readFile(await(await pending).path(),'utf8');
+  };
+  const report=await verifyResearch(JSON.parse(await downloadText('[data-research-export=json]')));
+  const attempt={origin:new URL(page.url()).origin,asset,graph:report.modules.graph.status,machine_learning:report.modules.machine_learning.status};
+  (summary.address_evidence_attempts ||= []).push(attempt);console.log(JSON.stringify({address_evidence_observation:attempt}));
+  assert.equal(report.scope.asset,asset,'Researched asset matches the submitted query');
+  if(report.modules.graph.status!=='available'){
+    assert.equal(report.modules.ledger.status,'available','Partial research still has a usable ledger observation');
+    assert.equal(await page.locator('.ar-evidence').count(),0,'Unavailable graph must not show stale graph controls');
+    assert.ok((await page.locator('.address-research').innerText()).includes(report.modules.graph.reason),'Source availability is explained in the research result');
+    assert.equal(await page.locator('[data-module=machine-learning]').getAttribute('data-status'),'unavailable');
+    await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Partial research mobile layout');
+    assert.equal(additionalResearchRequests,0);page.off('request',count);
+    (summary.address_evidence ||= []).push({...attempt,status:'source-unavailable',report_sha256:report.report_sha256});
+    note(`${attempt.origin}: ${asset} graph source unavailable; usable ledger, explicit availability, verified JSON, absent stale graph and mobile passed. Graph/CSV interactions were not exercised for this observation.`);
+    return;
+  }
+  const model=createAddressEvidence(report),view=model.query();assert.ok(view.events.length>0,'Production reference has captured events');
+  await page.click('[data-ae=toggle]');await page.locator('[data-ae=diagram] svg').waitFor();
+  assert.equal(await page.locator('[data-ae=connections] > button').count(),Math.min(8,view.connections.length),'First production connection page size');
+  assert.equal(await downloadText('[data-ae=csv]'),model.csv(),'All-page production evidence CSV');
+  const connection=view.connections[0];await page.locator('[data-ae=connections] > button').first().click();
+  assert.equal(await downloadText('[data-ae=csv]'),model.csv({},connection.key),'Selected production connection CSV');
+  await page.locator('[data-ae=events] > details > summary').first().click();
+  assert.ok(await page.locator('[data-ae=events] > details[open] .ar-evidence-source').count()>0,'Original source observation in the event inspector');
+  await page.click('[data-ae=reset]');
+  const sample=view.events[0];await page.selectOption('[data-ae=direction]',sample.direction);
+  await page.fill('[data-ae=minimum]',sample.amount);
+  assert.equal(await downloadText('[data-ae=csv]'),model.csv({direction:sample.direction,minimum:sample.amount}),'Exact filtered production CSV');
+  await page.click('[data-ae=reset]');
+  if(report.modules.machine_learning.status==='available'){
+    await page.locator('[data-ar-group]').first().click();
+    const peer=await page.locator('[data-ar-peer]').first().getAttribute('data-ar-peer');
+    await page.locator('[data-ar-peer]').first().click();assert.equal(await page.locator('[data-ae=focus]').inputValue(),peer,'ML reference selection focuses its captured graph node');
+  }else{
+    await page.locator('[data-ae-node][role=button]').first().click();
+    assert.notEqual(await page.locator('[data-ae=focus]').inputValue(),model.rootId,'Graph node selection changes focus');
+  }
+  assert.equal(await page.locator('.address-research').getAttribute('data-reference'),report.scope.reference,'Local focus preserves the original searched address');
+  await page.click('[data-ae=reset]');await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Address evidence mobile layout');
+  assert.deepEqual(JSON.parse(await downloadText('[data-research-export=json]')),report,'Inspection preserves the complete original report');
+  assert.equal(additionalResearchRequests,0,'Production graph inspection does not collect another source page');page.off('request',count);
+  const result={origin:new URL(page.url()).origin,asset,events:view.events.length,connections:view.connections.length,machine_learning:report.modules.machine_learning.status,report_sha256:report.report_sha256};
+  (summary.address_evidence ||= []).push(result);console.log(JSON.stringify({address_evidence:result}));
+  note(`${result.origin}: ${asset} evidence graph, ML/reference navigation, exact all-page/connection/filtered CSV, source inspection, unchanged JSON and mobile passed without another source request.`);
+}
+
 async function browserChecks() {
   if (!portalOnly) {
   const page = await anonymous.newPage();
@@ -332,10 +390,28 @@ async function browserChecks() {
 
 await mkdir(new URL('.data/porb-portal/', root), {recursive: true, mode: 0o700});
 try {
-  await publicChecks();
+  if(addressOnly){
+    for(const asset of ['BTC','USDT']){
+      const response=await anonymous.request.get(publicOrigin+'/api/atlas/analyze?asset='+asset,{timeout:120000});assert.equal(response.status(),200,asset+' public reference selection');
+      const report=await response.json(),reference=report.references.filter(row=>row.kind!=='transaction').sort((a,b)=>b.records-a.records)[0];assert.ok(reference?.reference,asset+' public reference');
+      addressQueries.set(asset,new URLSearchParams({network:asset==='BTC'?'bitcoin':'ethereum',asset,query:reference.reference}));
+    }
+  }else await publicChecks();
   if (!publicOnly) await privateChecks();
-  await browserChecks();
-  const directory=await anonymous.newPage();directory.on('pageerror',error=>errors.push(error.message));await directory.goto(privateOrigin+'/explore/');await directory.locator('#tools > a').nth(9).waitFor();assert.equal(await directory.locator('#tools > a').count(),10);assert.equal(await directory.locator('#trend-chart,#metrics').count(),0);if(addressQueries.has('BTC')){await directory.selectOption('#public-address-form [name=asset]','BTC');await directory.fill('#public-address-form [name=query]',addressQueries.get('BTC').get('query'));await directory.click('#public-address-form button');await directory.locator('.address-research[data-asset=BTC]').waitFor({timeout:65000});assert.ok(await directory.locator('[data-module=machine-learning]').count());}await directory.setViewportSize({width:390,height:844});assert.ok(await directory.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await directory.close();assert.deepEqual(errors,[]);note('Public tool directory renders ten open tools without a login and fits mobile.');
+  if(!addressOnly)await browserChecks();
+  const directory=await anonymous.newPage();directory.on('pageerror',error=>errors.push(error.message));
+  await directory.goto(privateOrigin+'/explore/');await directory.locator('#tools > a').nth(9).waitFor();assert.equal(await directory.locator('#tools > a').count(),10);assert.equal(await directory.locator('#trend-chart,#metrics').count(),0);
+  if(addressQueries.has('BTC')){
+    await directory.selectOption('#public-address-form [name=asset]','BTC');await directory.fill('#public-address-form [name=query]',addressQueries.get('BTC').get('query'));await directory.click('#public-address-form button');
+    await addressEvidenceChecks(directory,'BTC');
+  }
+  await directory.setViewportSize({width:390,height:844});assert.ok(await directory.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await directory.close();
+  if(addressQueries.has('USDT')){
+    const explorer=await anonymous.newPage();explorer.on('pageerror',error=>errors.push(error.message));
+    const query=new URLSearchParams(addressQueries.get('USDT'));query.set('kind','address');await explorer.goto('https://bloch.space/?'+query);
+    await addressEvidenceChecks(explorer,'USDT');await explorer.close();
+  }
+  assert.deepEqual(errors,[]);note('Public tool directory renders ten open tools without a login and fits mobile.');
   summary.status = 'passed';
 } catch (error) {
   summary.status = 'failed';
@@ -355,6 +431,6 @@ try {
   if (authenticated) await safely('session logout', () => api(member, '/auth/logout', {method: 'POST', body: {}}));
   summary.cleanup_errors = cleanupErrors;
   if (cleanupErrors.length) {summary.status = 'failed'; process.exitCode = 1; console.error('Cleanup needs attention:', cleanupErrors.join(', '));}
-  await writeFile(new URL(portalOnly ? '.data/porb-portal/atlas-portal-release.json' : '.data/porb-portal/atlas-live-verification.json', root), JSON.stringify(summary, null, 2), {mode: 0o600});
+  await writeFile(new URL(addressOnly ? '.data/porb-portal/address-evidence-release.json' : portalOnly ? '.data/porb-portal/atlas-portal-release.json' : '.data/porb-portal/atlas-live-verification.json', root), JSON.stringify(summary, null, 2), {mode: 0o600});
   await browser.close();
 }

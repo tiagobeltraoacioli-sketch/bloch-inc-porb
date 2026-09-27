@@ -110,6 +110,38 @@ shared module budget. Public and retained results never merge their snapshots.
 New searches clear prior output; superseded replies cannot replace the latest
 query. Logout/organization changes invalidate pending private research results.
 
+### Address evidence inspection
+
+Every available address graph now has an interactive evidence viewer in the three
+research interfaces. Focus any captured address, script or transaction, inspect
+directed connections and open the original events with their exact base units,
+transaction/block positions, finality and complete source observations/anchors.
+Circles identify addresses, diamonds scripts and squares transactions. UTXO input
+and output events remain separate across transaction boundaries; self events count
+once. Layout coordinates and block ordering do not infer owners, event times or
+continuity of funds.
+
+Local filters combine direction, event type, exact minimum amount, inclusive block
+heights and event/transaction/reference text. Unknown heights are disclosed and
+excluded only when a height bound is applied. Invalid filters clear the current
+view and disable its export. Connections page eight at a time, events ten and
+comparable references twenty. Diagram and reference controls support keyboard
+selection; the diagram scrolls horizontally on small screens.
+
+Descriptive ML group buttons filter the comparable-reference table. Selecting a
+reference focuses its captured graph without changing the searched address,
+collecting another source page or refitting the model. Group numbering remains
+unordered and specific to the original cohort. Unsupported graph modules, sparse
+ML cohorts and unavailable forecasts retain their explicit availability states.
+
+Evidence CSV includes every matching event across pages, or all events in the
+selected connection, with applied filters, exact quantities, complete source
+observations and the original `report_sha256`. Values are quoted and protected
+against spreadsheet formula interpretation. Exports above 16 MB fail explicitly
+without truncation and can be narrowed with filters. The complete research JSON
+is unchanged by inspection. `bloch-address-evidence/1` identifies the local view;
+it introduces no new server report, endpoint, score or persistence behavior.
+
 ## Authorization and capacity
 
 New scopes are `cases:read`, `cases:write`, `watchlists:read`, `watchlists:write`.

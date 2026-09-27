@@ -517,3 +517,59 @@ synthetic tests. Verification created no production accounts, reports, private
 records, cases or score grants. Source coverage and availability remain explicit
 limits, and public availability is not an identity, ownership or legal-compliance
 claim. The timestamped smoke output and screenshots remain ignored local artifacts.
+
+### Address evidence and ML reference navigation — 2026-09-27 UTC
+
+Portal deployment `46974db6` and Space deployment `7cfdf65d` publish interactive
+[address evidence inspection](unified-intelligence.md#address-evidence-inspection)
+in the [public research page](https://rednblue.space/explore/),
+[Bloch Space explorer](https://bloch.space/) and authenticated Address research.
+Graphus remains at `1b9f2d39` and the retired AML redirect at `0f1194d4`.
+
+Captured references and transactions can be focused in a typed directed graph,
+with direction/type/exact amount/block filters, connection and event inspectors,
+and original source observations/anchors. ML group controls open comparable
+references and their captured evidence. All inspection is local to one verified
+report. Complete filtered or selected-connection CSV spans every event page and
+retains the original report hash; the original JSON and ML fit remain unchanged.
+Counts, UTXO input/output roles, self events, missing heights and sample boundaries
+are explicit. Scores, AML previews and organization records stay authenticated.
+No server contract, source adapter, scoring model, migration or report-retention
+behavior changes; the partner contract remains at 73 operations.
+
+Validation: all 360 Node tests pass. Seven new tests cover exact integer totals,
+UTXO transaction boundaries, self events, combined filters, invalid references,
+unknown blocks, complete all-page and per-connection CSV, safe literal
+values, immutable snapshots, corrupt scopes, unavailable graphs and the complete
+16 MB export bound. The expanded WebKit address-research suite passes across
+public rednblue, all five Space assets and the isolated authenticated workspace.
+It checks ML-to-evidence navigation, keyboard selection, both pagination levels,
+exact CSV and unchanged JSON, no additional source collection, stale-result
+clearing, private scores beside public observations, logout, CSP and mobile layout.
+Desktop/mobile screenshots were inspected and control sizes adjusted. Both
+deployed Functions bundles compile; generated mounts and OpenAPI are reproducible.
+
+The production check started at `2026-09-27T00:21:57.556Z` verified byte-identical
+release assets on the custom domains, all anonymous private-access boundaries,
+the retired AML redirect, all five Atlas sources and all five address APIs. The
+Atlas samples contained BTC 87, ETH 24, USDT 241, USDC 289 and BLCH 844 records;
+BLCH supplied no timestamps. Existing timeline, graph, window, path and motif
+exports retained matching hashes, and the private login handoff passed. That run
+completed the new BTC browser workflow but stopped during the Space check. An
+isolated follow-up exposed a legitimately unavailable graph source alongside a
+usable ledger. The smoke now records and checks partial observations explicitly;
+it never treats a skipped graph/CSV workflow as an exercised one.
+
+The final `--address-only` run at `2026-09-27T00:26:58.837Z` passed both complete
+production workflows. The rednblue BTC report contained 38 graph events and 19
+focused connections; the Space USDT report contained 35 events/connections.
+Both had descriptive ML available. Group/reference navigation, source inspection,
+exact complete/connection/filtered CSV, unchanged original JSON and mobile layout
+passed without another research request during inspection. The timestamped result
+is ignored at `.data/porb-portal/address-evidence-release.json`.
+
+Production verification used public reads and unauthenticated denial checks only.
+No production credentials were available, so authenticated behavior was verified
+with an isolated synthetic account locally. No production accounts, private
+reports, reviews, cases or score grants were created or changed. Source-dependent
+availability and the original bounded-capture limits remain visible in the UI.
