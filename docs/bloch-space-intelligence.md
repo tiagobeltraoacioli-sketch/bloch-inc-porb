@@ -199,5 +199,8 @@ difference, module availability and records present only in one capture or chang
 between them. It uses the two verified reports in memory without new requests.
 The complete comparison JSON carries both report identities and its own SHA-256;
 different source windows are not presented as complete new or removed chain activity.
+Every asset report can also compare an earlier saved research JSON or three-asset
+bundle locally. File integrity, scope, retrieval order and limits are checked;
+the original current report stays unchanged and no file is uploaded or stored.
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

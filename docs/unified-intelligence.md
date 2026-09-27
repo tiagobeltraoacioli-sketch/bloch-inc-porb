@@ -195,6 +195,30 @@ comparable ML group numbers. A newer successful update clears the prior comparis
 a failed update keeps it with its original captures. New searches and private
 session/organization changes clear this local state through the existing viewer.
 
+Every available report, including single BTC/ETH/USDT/USDC/BLCH results, also offers
+**Compare with a saved capture**. Choose an earlier complete research JSON or an
+ETH/USDT/USDC bundle previously downloaded from the product. Bundle imports verify
+the entire bundle and every available child, then select only the matching asset.
+Network, reference and asset must match the displayed report. The baseline needs
+a valid UTC retrieval time no later than the current capture and a distinct report
+hash. Identical, newer, unavailable, mismatched and corrupt inputs are rejected.
+
+Files remain browser-local: no upload, source query, model refit or browser storage.
+The 32 MiB file limit allows pretty-printed JSON; existing compact limits still
+apply to individual reports, bundles and comparisons. Imported comparisons use the
+same `bloch-address-capture-comparison/1` format with optional
+`before.imported_from: {version, sha256}` identifying the verified report or bundle
+container. The new metadata and explicit local-file authenticity limitation are
+included in `comparison_sha256`. A checksum is not a trusted signature. File names
+are displayed as literal text and are not included in the comparison export.
+
+Imports preserve the current report, evidence filters and original downloads.
+Rejected replacement files clear the imported comparison; **Clear saved capture**
+also invalidates a pending file read. New searches, asset report replacement and
+logout/organization changes discard the affected local import. Updating one asset
+keeps the other assets' imported comparisons because their reports are unchanged.
+Late file reads cannot restore cleared or superseded results.
+
 The private view separately searches the organization's retained ETH, USDT and
 USDC observations. Each asset has its own result section, index coverage, error
 state and pagination cursor. **More observations** advances only assets with an

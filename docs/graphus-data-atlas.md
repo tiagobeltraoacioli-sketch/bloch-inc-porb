@@ -765,3 +765,72 @@ endpoints returned 410. No private production account or record was created.
 Authenticated execution remains validated with synthetic local accounts because
 no existing production owner credentials are available. The source observations
 and final verification stay ignored in `.data/porb-portal/address-bundle-release.json`.
+
+## Saved address capture comparisons — 2026-09-27
+
+Space deployment `4d3a3d8d` and portal deployment `98e49a8c` publish local saved-file
+comparisons, succeeding `c0dc1188` and `06cc37eb`. Every available BTC, ETH, USDT,
+USDC or BLCH address report now offers **Compare with a saved capture**. Import a
+previous complete research JSON or ETH/USDT/USDC bundle and inspect exact balance
+differences, module availability and graph record differences. The current report,
+its evidence filters and its original downloads stay unchanged. The interface uses
+the shared Space components and supports desktop, mobile and keyboard controls.
+
+Imports check report integrity, the entire bundle and its available children,
+matching network/address/asset, real UTC timestamps, capture order and distinct
+report hashes. The file limit is 32 MiB for pretty-printed exports; existing compact
+report, bundle and comparison limits still apply. Comparison JSON includes the
+original container identity in optional `before.imported_from` metadata, covered
+by its own digest. Checksums bind supplied bytes and do not authenticate a file or
+establish source truth. Source windows, unavailable modules and native ETH history
+limitations remain explicit; comparison does not refit or compare ML group numbers.
+
+Files stay in browser memory without uploads, source requests or browser storage.
+Invalid replacements clear imported results. Clear, new queries, report replacement
+and private session changes invalidate pending reads. Updating one bundle asset
+preserves the other assets' imports. Literal filenames cannot create HTML, and
+unreadable local files receive a specific error. No endpoint, database migration,
+source adapter or scoring change is included. Graphus remains at `1b9f2d39`, the
+retired AML redirect at `0f1194d4`, migrations through 0010 and the partner contract
+at 73 operations. The Space shell cache remains v6; these research assets are not
+precached, and source/private API responses remain excluded.
+
+All 384 Node tests pass, including six new import contract tests. Four WebKit suites
+pass: saved captures, existing address research/evidence, combined search/refresh
+and the PWA lifecycle. Checks cover all five assets, independent hashes, exact
+amounts, corrupt or mismatched files, invalid dates, capacity limits, unchanged
+filtered evidence and downloads, independent asset state, delayed reads, logout,
+keyboard controls, mobile overflow and functional CSP errors. Comparison of resident
+bytes also passes with networking offline. This WebKit build rejects local File
+reads under global offline emulation; the real file-picker workflow instead passes
+with all HTTP requests blocked and no requests attempted. This is not claimed as
+verification of the native offline file picker. Desktop/mobile viewport screenshots
+were inspected. Both Functions bundles compile, the shared shell check passes and
+generated portal mounts reproduce the source. The new suites run in portal CI.
+
+Read-only production verification at `2026-09-27T17:33:10.874Z` passed on both
+custom domains. Deployed files match local bytes. Each combined lookup made three
+asset requests and one manual USDT update. Both browsers imported their previous
+real public bundle, exported comparisons identical to the independent calculation
+including container/comparison hashes, preserved current downloads and made no
+additional source request. Initial USDT captures had three events; USDC had no
+events in its returned bounded window. Both token CSV exports matched their
+evidence. The portal update retained usable graph evidence; the Space update had
+an available ledger and unavailable graph, which the comparison preserved as
+unknown. Descriptive ML was unavailable in these final captures. Mobile layouts,
+initial worker activation and browser error checks passed.
+
+Earlier verification attempts at `17:27:04Z` and `17:28:04Z` encountered a 502 from
+public Atlas sample discovery and then unavailable address sources. A diagnostic
+request subsequently returned a partial Space report; the final run used an
+explicit public address already observed in the earlier `12:41:02Z` source probe.
+The verifier records this selection and does not silently retry discovery. No
+source reliability fix is claimed: availability varied during verification. The
+failed and successful checks remain separate ignored artifacts under
+`.data/porb-portal/`, with the final result in `address-bundle-release.json`.
+
+Anonymous private reference/research/Atlas APIs returned 401 with no-store headers,
+private AML/Space pages reached login and retired public scores returned 410.
+No private production account, capture or record was created. Authenticated file
+workflows passed with an isolated synthetic local account; production owner-session
+execution remains unverified because no existing owner credentials are available.

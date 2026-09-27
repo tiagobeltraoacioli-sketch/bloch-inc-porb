@@ -1,4 +1,5 @@
 import {mountAddressEvidence} from './address-evidence-ui.js';
+import {mountSavedCapture} from './address-research-import-ui.js';
 const el=(tag,text,className)=>{const node=document.createElement(tag);if(text!=null)node.textContent=String(text);if(className)node.className=className;return node;};
 const number=value=>Number.isSafeInteger(value)?value.toLocaleString('en-US'):'Unavailable';
 const metric=(label,value)=>{const box=el('div',null,'ar-metric');box.append(el('span',label),el('strong',value));return box;};
@@ -10,7 +11,7 @@ function histogram(values,label){
   const title=document.createElementNS(ns,'title');title.textContent=label;svg.append(title);
   values.forEach(([key,value],i)=>{const text=document.createElementNS(ns,'text');text.setAttribute('x','4');text.setAttribute('y',String(24+i*27));text.textContent=key;const bar=document.createElementNS(ns,'rect');bar.setAttribute('x','96');bar.setAttribute('y',String(9+i*27));bar.setAttribute('width',String(value/max*330));bar.setAttribute('height','18');const count=document.createElementNS(ns,'text');count.setAttribute('x','440');count.setAttribute('y',String(24+i*27));count.textContent=number(value);svg.append(text,bar,count);});return svg;
 }
-export function renderResearch(host,report,{mounted=false}={}){
+export function renderResearch(host,report,{mounted=false,signal}={}){
   const {scope,modules}=report,{asset,reference}=scope,root=el('article',null,'address-research');root.dataset.reference=reference;root.dataset.asset=asset;
   const heading=el('header',null,'ar-heading');heading.append(el('p','GRAPHUS + BLOCH SPACE / ADDRESS RESEARCH','ar-kicker'),el('h2','One address. Connected observations.'),el('p',`${asset} · ${reference}`,'ar-reference'),el('p',`Retrieved ${report.retrieved_at} · ${report.coverage}`,'ar-note'));root.append(heading);
   const grid=el('div',null,'ar-grid'),ledger=panel('Source record','EXPLORER / GRAPHUS');
@@ -61,5 +62,5 @@ export function renderResearch(host,report,{mounted=false}={}){
   const actions=el('div',null,'ar-actions'),download=el('button','Download complete research JSON','ar-button');download.type='button';download.dataset.researchExport='json';download.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'})),a=el('a');a.href=url;a.download=`address-research-${asset}-${reference}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);};actions.append(download);
   const space=mounted?location.origin+'/space':'https://bloch.space',graphus=mounted?location.origin+'/graphus':'https://bloch-graphus.xyz';
   for(const [label,url] of [['Explore graph',`${space}/graph/?${new URLSearchParams({asset,kind:'address',query:reference})}`],['Source record',`${space}/?${new URLSearchParams({network:scope.network,asset,kind:'address',query:reference})}`],['Graphus analytics',`${graphus}/analytics.html?${new URLSearchParams({asset:asset.toLowerCase(),address:reference})}`]]){const link=el('a',label);link.href=url;actions.append(link);}
-  root.append(actions);host.replaceChildren(root);return root;
+  root.append(actions);mountSavedCapture(root,report,{signal});host.replaceChildren(root);return root;
 }
