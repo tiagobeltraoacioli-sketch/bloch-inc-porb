@@ -252,6 +252,36 @@ outstanding cursor, without collecting public sources again. Existing tenant and
 score-read authorization applies to every retained request; the public bundle
 remains independently usable when a retained asset query fails.
 
+### Reopen saved address research
+
+**Open saved address research** is available beside address search in Space, the
+public directory and the private reference view. It needs no live report: open a
+complete BTC, ETH, USDT, USDC or BLCH research JSON, or a three-asset Ethereum
+bundle. The saved view retains the original scope, times, module availability,
+exact balances, graph evidence, stored ML results and report/bundle hashes. It
+supports the same evidence filters, exact CSV and full JSON downloads. Open the
+newer file first and use **Compare with a saved capture** to compare an earlier
+file locally. Model fitting and source collection do not run when opening a file.
+
+The reader checks the 32 MiB file limit, compact report/bundle limits, original
+digests, canonical scope, real UTC dates, module structure, graph provenance and
+bounded analytics/model arrays. Every available bundle child must pass before any
+tab is displayed. Unavailable entries stay explicit, including bundles with zero
+available reports. Checksums and structural checks do not authenticate the file,
+prove its findings or establish current chain state; the view labels this boundary.
+Module links start separate live research only when followed.
+
+A replacement file is verified and prepared before replacing the current view.
+Invalid files leave the previous report, filters and imported comparison intact.
+New file selections and **Close saved research** invalidate pending reads. Live
+queries and network switches leave this separately labeled local view unchanged;
+logout clears it and cancels pending reads in the private reference view. Nothing
+is uploaded or placed in browser storage. Files remain only in the loaded page's
+memory. Loading this page and its modules initially still requires a connection;
+this feature does not add an offline startup cache. Browser verification separately
+exercises resident-byte parsing in offline mode and the native file picker with
+all HTTP blocked, since WebKit's global offline emulation can deny `File.text()`.
+
 ### Address evidence inspection
 
 Every available address graph now has an interactive evidence viewer in the three

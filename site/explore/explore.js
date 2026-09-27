@@ -1,6 +1,8 @@
 import {MODULES} from '/portal/module-catalog.js';
 import {researchSelection,collectResearch} from '/space/assets/address-research-bundle.js';
 import {renderResearchResult} from '/space/assets/address-research-bundle-ui.js';
+import {mountResearchReader} from '/space/assets/address-research-reader-ui.js';
+mountResearchReader(document.getElementById('saved-address-research'));
 const tools=document.getElementById('tools');
 for(const item of MODULES.filter(item=>item.public_url)){
   const card=document.createElement('a');card.className='tool';card.href=item.public_url;

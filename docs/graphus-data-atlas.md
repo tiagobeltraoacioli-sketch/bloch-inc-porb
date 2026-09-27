@@ -905,3 +905,71 @@ private AML/Space pages reached login and retired public scores returned 410.
 No production account or private record was created. Private individual updates
 and logout behavior were verified with isolated synthetic local accounts;
 authenticated production execution was not exercised.
+
+
+## Saved address research reader — 2026-09-27
+
+Deployed Space `49eb0f77` and portal `65f90190`. **Open saved address research**
+now opens complete BTC/ETH/USDT/USDC/BLCH reports and Ethereum three-asset bundles
+without a live lookup. It is available in the public record explorer, rednblue's
+public directory, the private reference view and mounted Space. The separately
+labeled saved view preserves original observations, exact amounts, stored model
+results, module availability, evidence and digests. Users can inspect/filter
+captured graphs, download exact CSV/full JSON and compare an earlier saved file.
+Nothing is uploaded, persisted in browser storage or refitted as a new model.
+
+The reader validates file and compact-response limits, canonical scope, real UTC
+timestamps, hashes, module shape, graph provenance and bounded analytics/model
+arrays. Every available bundle child is checked before the first tab is exposed.
+Invalid replacements preserve the previous file, evidence filters and comparison.
+New selections and close invalidate pending reads. Live searches and network
+changes keep the separately labeled saved view; private logout clears it. Source
+links start separate live research. Long BLCH reference labels now wrap correctly
+in the shared evidence notes. Checksums establish internal consistency, not source
+authenticity, verified findings or current chain state.
+
+All 395 Node tests pass, including seven reader contract tests. The strengthened
+reference validation passed its focused tests and the final reader browser run.
+Six WebKit suites pass: saved reader, existing research/evidence, combined queries,
+saved-file comparisons, individual updates and PWA lifecycle. Reader checks cover
+all five assets, original JSON/exact CSV, stored ML groups, two-file comparison,
+full/partial/unavailable bundles, malformed inactive tabs, replacement failures,
+no HTTP or browser storage, superseded/closed reads, private logout, mounted Space,
+keyboard operation, mobile overflow and functional CSP. Desktop/mobile viewport
+screenshots were inspected. The existing evidence test now scopes its summary
+selector to a report instead of the newly added file control. An initial SVG-click
+timeout in the concurrent regression run did not recur in its isolated rerun.
+
+The offline check validates resident bytes with the network disabled, then uses
+the native file picker while blocking all HTTP. WebKit's global offline emulation
+can deny local `File.text()` itself, so this does not claim a native offline-picker
+verification or offline startup support. The page/modules must already be loaded.
+Both Functions bundles compile; the shared Space shell check and unchanged
+73-operation OpenAPI check pass. No source adapter, endpoint, score or migration
+changed. Graphus remains `1b9f2d39`, retired AML `0f1194d4`, migrations through 0010
+and shell cache v6. The changed research assets are not in the precache.
+
+
+Read-only production checks passed at `2026-09-27T20:00:29.394Z` and
+`2026-09-27T20:02:28.691Z`. Both custom domains served the deployed HTML, JavaScript
+and CSS byte-for-byte. In the final run all six public asset requests returned 200.
+The reader preserved each real capture's full JSON and exact token CSV, compared
+an earlier ETH capture locally and reopened the complete portal bundle in Space
+with the same original hashes. Opening files, changing tabs, inspecting evidence,
+comparing and exporting made no HTTP request or browser-storage write. Mobile
+layout, keyboard close and page JavaScript checks passed. The token graph windows
+were empty in that final run, so live CSV checks covered headers/empty captured
+sets; populated graph events and available ML groups were exercised with local
+synthetic fixtures. Native ETH history remained unsupported and descriptive ML
+was unavailable in these live samples.
+
+The first run returned 502 for all three Space source queries while the portal's
+three reports were available. The unavailable bundle remained explicitly labeled
+and exportable; the later successful replies do not establish a reliability fix.
+Both production checks and the final original public captures remain in ignored
+`.data/porb-portal/address-reader-first-verification.json`,
+`address-reader-release.json` and `address-reader-public-captures.json`.
+Anonymous private reference/research/Atlas APIs returned 401 with no-store, private
+AML/Space paths reached login and retired public score endpoints returned 410.
+No production account or private record was created or changed. Private reader
+and logout behavior were tested only with isolated synthetic local accounts.

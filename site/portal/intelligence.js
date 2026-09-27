@@ -2,6 +2,7 @@ import {atlasLink} from './atlas-context.js';
 import {MODULES,moduleUrl} from './module-catalog.js';
 import {researchSelection,collectResearch} from '/space/assets/address-research-bundle.js';
 import {renderResearchResult} from '/space/assets/address-research-bundle-ui.js';
+import {mountResearchReader} from '/space/assets/address-research-reader-ui.js';
 const $=id=>document.getElementById(id);
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 const date=v=>new Date(v).toLocaleString(),short=v=>v.length>30?v.slice(0,14)+'…'+v.slice(-10):v;
@@ -10,6 +11,7 @@ function download(value,name){const url=URL.createObjectURL(new Blob([JSON.strin
 export class Intelligence {
   constructor({api,perform,message,openRun,showView,runs,role}){
     Object.assign(this,{api,perform,message,openRun,showView,runs,role});this.reset();
+    this.savedResearch=mountResearchReader($('saved-address-research'),{mounted:true});
     const tabs=$('module-tabs');tabs.replaceChildren();for(const item of MODULES){const button=el('button',item.name);button.dataset.module=item.id;button.title=item.description;button.setAttribute('aria-pressed','false');button.onclick=()=>this.module(item.id);tabs.append(button);}
     $('reference-form').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,()=>this.search(false));};
     $('reference-more').onclick=()=>this.perform($('reference-more'),()=>this.search(true));
@@ -26,6 +28,7 @@ export class Intelligence {
     $('watch-evaluate').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,async()=>{const result=await this.api('/v1/watchlists/evaluate','POST',{analysis_id:e.target.elements.analysis.value});$('watch-evaluation').textContent=`${result.observations_created} new observation(s) recorded. Re-evaluation of the same sample does not duplicate matches.`;await this.observations();});};
   }
   reset(){this.currentCase=null;this.referencePages=new Map();this.caseCursor=null;this.watchCursor=null;this.observationCursor=null;this.pendingEvidence=null;this.referenceQuery=null;this.researchController?.abort();
+    this.savedResearch?.clear();
     this.referenceEpoch=(this.referenceEpoch||0)+1;
     for(const id of ['reference-results','reference-research','reference-launchers','case-list','evidence-list','watch-list','observation-list'])$(id).replaceChildren();
     $('case-detail').hidden=true;$('module-frame').removeAttribute('src');this.currentModule=null;

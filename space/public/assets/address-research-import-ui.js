@@ -11,6 +11,9 @@ const messages={
   saved_capture_unchanged:'This is the same capture as the displayed report. Choose a different earlier capture.',
   research_scope_mismatch:'Choose a capture for the same network, asset and address.',
 };
+export function savedCaptureError(error){
+  return error.name==='NotReadableError'?'The browser could not read this file. Check that it is accessible on this device and choose it again.':messages[error.message]||(/integrity/.test(error.message)?'The file failed its integrity check.':'The file is inconsistent, unsupported or exceeds the evidence limits.');
+}
 export function mountSavedCapture(host,current,{signal}={}){
   const root=el('details',null,'ar-panel ar-saved-capture');root.dataset.savedCapture=current.scope.asset;
   root.append(el('summary','Compare with a saved capture'),el('p','Choose an earlier complete research JSON or three-asset bundle for this address. Only the matching asset is compared. The file stays in this page: no upload, source query or browser storage. Checksums do not authenticate a local file.','ar-note'));
@@ -31,8 +34,7 @@ export function mountSavedCapture(host,current,{signal}={}){
       status.textContent=`Local file compared: ${file.name}. Previous capture: ${comparison.before.retrieved_at}. The displayed report and its filters are unchanged.`;
     }catch(error){
       if(!active())return;
-      const reason=error.name==='NotReadableError'?'The browser could not read this file. Check that it is accessible on this device and choose it again.':messages[error.message]||(/integrity/.test(error.message)?'The file failed its integrity check.':'The file is inconsistent, unsupported or exceeds the evidence limits.');
-      status.textContent='Saved capture rejected. '+reason+' No imported comparison is displayed.';
+      status.textContent='Saved capture rejected. '+savedCaptureError(error)+' No imported comparison is displayed.';
     }finally{if(active()){input.value='';root.removeAttribute('aria-busy');}}
   };
   return root;

@@ -207,5 +207,11 @@ previous-capture download and local before/after comparison. Failed updates reta
 the dated report and its filters; changed successful updates replace all dependent
 views together, including the supplemental ledger and raw JSON. Private retained
 organization observations are unaffected by these public-source updates.
+**Open saved address research** reopens a complete report or Ethereum bundle without
+a successful live query. It retains original amounts, graph evidence, stored ML
+results and hashes, supports local file-to-file comparison and identifies the
+contents as saved observations. Invalid replacements preserve the current saved
+view. The [saved reader](unified-intelligence.md#reopen-saved-address-research)
+uses no uploads or browser storage and requires the page to have loaded first.
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

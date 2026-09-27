@@ -1,5 +1,6 @@
 import {BUNDLE_VERSION,researchSelection,collectResearch} from './address-research-bundle.js';
 import {renderResearchResult} from './address-research-bundle-ui.js';
+import {mountResearchReader} from './address-research-reader-ui.js';
 const $ = selector => document.querySelector(selector);
 const state = {network:'bitcoin', overview:null, overviewAt:0, overviewRequest:0, overviewPending:false, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
@@ -518,6 +519,7 @@ async function switchNetwork(network,historyMode='push') {
   await refreshOverview();
 }
 
+mountResearchReader($('#saved-address-research'),{mounted:location.pathname.startsWith('/space/')});
 document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
 $('#refresh-overview').addEventListener('click',()=>refreshOverview());
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
