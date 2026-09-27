@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {verifyResearchBundle} from '../space/public/assets/address-research-bundle.js';
+import {verifyResearch} from '../space/public/assets/address-research-core.js';
 import {createAddressEvidence} from '../space/public/assets/address-evidence.js';
 import {compareAddressReports} from '../space/public/assets/address-research-comparison.js';
 import {compareSavedCapture} from '../space/public/assets/address-research-import.js';
@@ -10,7 +11,7 @@ const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||process.argv[2]||'pla
 const root=new URL('../',import.meta.url),portal='https://rednblue.space',space='https://bloch.space';
 const suppliedReference=process.argv.find(value=>value.startsWith('--reference='))?.slice('--reference='.length);
 if(suppliedReference!==undefined)assert.match(suppliedReference,/^0x[0-9a-f]{40}$/,'Provide a normalized address already observed in a public source');
-const summary={checked_at:new Date().toISOString(),scope:'public-ethereum-address-capture-comparison-and-authentication-boundaries',checks:[],observations:[]},errors=[];
+const summary={checked_at:new Date().toISOString(),scope:'public-ethereum-address-capture-comparison-and-authentication-boundaries',checks:[],observations:[],api_responses:[]},errors=[];
 const note=message=>{summary.checks.push(message);console.log(message);},hash=value=>createHash('sha256').update(value).digest('hex');
 const browser=await webkit.launch(),context=await browser.newContext({viewport:{width:1440,height:1000}});
 function sharedCapture(item){
@@ -35,7 +36,7 @@ try{
   }
   for(const name of ['preview','score'])assert.equal((await context.request.get(space+'/api/porb/'+name)).status(),410,'Retired public score endpoint');
   note('Anonymous private observations, research gateway, Atlas and AML/Space pages remain gated; public score endpoints remain retired.');
-  const files=['address-research-bundle.js','address-research-bundle-ui.js','address-research-comparison.js','address-research-comparison-ui.js','address-research-import.js','address-research-import-ui.js','address-research-ui.js','address-research.css','app.js','space-shell.js','space-design.css'];
+  const files=['address-research-bundle.js','address-research-bundle-ui.js','address-research-refresh-ui.js','address-research-comparison.js','address-research-comparison-ui.js','address-research-import.js','address-research-import-ui.js','address-research-ui.js','address-research.css','app.js','space-shell.js','space-design.css'];
   for(const [origin,remote,local]of [
     [space,'/?network=ethereum','space/public/index.html'],[space,'/sw.js','space/public/sw.js'],[space,'/assets/pwa.js','space/public/assets/pwa.js'],[portal,'/explore/','site/explore/index.html'],[portal,'/explore/explore.js','site/explore/explore.js'],
     ...['index.html','portal.js','intelligence.js'].map(name=>[portal,name==='index.html'?'/portal/':'/portal/'+name,'site/portal/'+name]),
@@ -51,6 +52,7 @@ try{
   for(const origin of [portal,space]){
     const invalid=await context.request.get(origin+'/api/research?'+new URLSearchParams({network:'ethereum',asset:'ETH_ALL',query:reference}));assert.equal(invalid.status(),400,'Combined selection never becomes a chain API asset');
     const page=await context.newPage(),requests=[];let documents=0;summary.current_origin=origin;page.on('pageerror',error=>{const failure={origin,message:String(error.message).split('\n')[0]};errors.push(failure);console.log(JSON.stringify({browser_error:failure}));});page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())documents++;const url=new URL(request.url());if(url.pathname==='/api/research')requests.push(url.searchParams.get('asset'));});
+    page.on('response',response=>{const url=new URL(response.url());if(url.pathname==='/api/research')summary.api_responses.push({origin,asset:url.searchParams.get('asset'),status:response.status()});});
     if(origin===portal){await page.goto(origin+'/explore/',{waitUntil:'domcontentloaded',timeout:60000});await page.selectOption('#public-address-form [name=asset]','ETH_ALL');await page.fill('#public-address-form [name=query]',reference);await page.click('#public-address-form button');}
     else await page.goto(origin+'/?'+new URLSearchParams({network:'ethereum',kind:'address',asset:'ETH_ALL',query:reference}),{waitUntil:'domcontentloaded',timeout:60000});
     await page.locator('.address-research-bundle').waitFor({timeout:75000});assert.deepEqual(requests.slice().sort(),['ETH','USDC','USDT'],'One actual query per selected asset');
@@ -98,7 +100,24 @@ try{
     }
     assert.equal(documents,1,'A manual refresh preserves the current document');
     await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Combined address mobile layout');
-    console.log(JSON.stringify(record));note(origin+': scoped asset requests, one manual '+selected+' refresh ('+(succeeded?'new capture':'source unavailable; original preserved')+'), verified exports and mobile passed. '+(record.evidence_csv_assets.length?'Exact graph CSV checked for '+record.evidence_csv_assets.join(', ')+'.':'Graph sources were unavailable; no graph CSV workflow was exercised.'));await page.close();
+    console.log(JSON.stringify(record));note(origin+': scoped asset requests, one manual '+selected+' refresh ('+(succeeded?'new capture':'source unavailable; original preserved')+'), verified exports and mobile passed. '+(record.evidence_csv_assets.length?'Exact graph CSV checked for '+record.evidence_csv_assets.join(', ')+'.':'Graph sources were unavailable; no graph CSV workflow was exercised.'));
+    const singleUrl=origin+(origin===portal?'/explore/?':'/?')+new URLSearchParams({network:'ethereum',kind:'address',asset:selected,query:reference});
+    await page.goto(singleUrl,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>document.querySelector('[data-research-refresh]')||document.querySelector('#public-address-status')?.textContent.startsWith('Address research unavailable:')||document.querySelector('#message')?.textContent.startsWith('Lookup unavailable:'),null,{timeout:75000});
+    if(!await page.locator('[data-research-refresh]').count()){record.single={asset:selected,status:'initial source unavailable',message:(await page.locator('#public-address-status,#message').allTextContents()).join(' ')};throw new Error(record.single.message);}
+    const singleBefore=await verifyResearch(JSON.parse(await download('[data-research-export]'))),singleReads=requests.length,singleDocuments=documents;record.single={asset:selected,before_sha256:singleBefore.report_sha256};
+    await page.click('[data-research-refresh]');await page.waitForFunction(asset=>{const text=document.querySelector('[data-research-status]')?.textContent;return text?.startsWith(asset+' updated')||text?.startsWith(asset+' update unavailable')||text?.startsWith(asset+' returned the same');},selected,{timeout:75000});
+    assert.equal(requests.length,singleReads+1,'Single-asset refresh makes one scoped request');assert.equal(requests.at(-1),selected);
+    const singleAfter=await verifyResearch(JSON.parse(await download('[data-research-export]')));record.single.after_sha256=singleAfter.report_sha256;record.single.status=await page.locator('[data-research-status]').innerText();record.single.modules=Object.fromEntries(Object.entries(singleAfter.modules).map(([name,value])=>[name,value.status]));
+    if(record.single.status.startsWith(selected+' updated')){
+      assert.deepEqual(JSON.parse(await download('[data-research-previous]')),singleBefore);await page.click('[data-research-compare]');await page.locator('[data-research-comparison] [data-comparison-export]').waitFor();
+      const compared=JSON.parse(await download('[data-research-comparison] [data-comparison-export]'));assert.deepEqual(compared,await compareAddressReports(singleBefore,singleAfter));record.single.comparison_sha256=compared.comparison_sha256;
+    }else{assert.deepEqual(singleAfter,singleBefore);assert.equal(await page.locator('[data-research-previous]').isHidden(),true);}
+    if(origin===space){
+      const raw=page.locator('[data-research-raw]');await raw.locator('summary').click();assert.deepEqual(JSON.parse(await download('[data-research-raw] button:has-text("Download JSON")')),singleAfter,'The supplemental raw download uses the current capture');
+      assert.equal(await page.locator('[data-research-ledger]').count(),singleAfter.modules.ledger.status==='available'?1:0,'Superseded ledger details cannot survive a partial capture');
+    }
+    assert.equal(documents,singleDocuments,'An individual update preserves the current document');assert.equal(requests.length,singleReads+1,'Previous/current downloads and comparison make no source queries');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Single-asset mobile layout');
+    console.log(JSON.stringify({origin,single:record.single}));note(origin+': individual update, current/previous capture integrity, independent comparison and mobile checked.');await page.close();
   }
   summary.browser_errors=errors;assert.deepEqual(errors,[],'Production JavaScript errors');summary.status='passed';
 }catch(error){summary.status='failed';summary.error=String(error.message);console.error(summary.error);process.exitCode=1;}

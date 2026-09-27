@@ -219,6 +219,32 @@ logout/organization changes discard the affected local import. Updating one asse
 keeps the other assets' imported comparisons because their reports are unchanged.
 Late file reads cannot restore cleared or superseded results.
 
+Single-asset BTC/ETH/USDT/USDC/BLCH reports also provide **Update [asset]**, with one
+bounded request for the displayed network, asset and reference. Editing search
+fields does not change that scope until another search is submitted. Updates are
+manual and serialized; the current report and its downloads stay usable while a
+request runs. Source errors, rate limits, scope or integrity mismatches and render
+failures preserve the current capture, its filters, saved-file comparison and any
+previous capture. Failure notices identify the retained capture time.
+
+A successful changed report replaces the entire capture. Old graph/ML results are
+not carried into partial responses. Space's supplemental ledger, activity pages and
+raw JSON are prepared and replaced with the same report; unavailable ledger data
+removes the old details. Evidence filters and imported comparisons reset for the
+new capture. Identical report hashes preserve the existing views and previous
+capture instead of creating a duplicate update.
+
+**Download previous capture** retains the complete preceding report and its original
+hash until another changed successful update or a new search. **Compare captures**
+uses the existing local comparison contract and makes no source request. Failed
+updates preserve this comparison; a changed successful update clears it. Private
+retained organization observations and pagination remain independent. New searches,
+network changes and logout discard local capture history and invalidate late
+updates through the existing viewer lifecycle. No new endpoint or persistent
+history is introduced. Single and combined viewers dispose each replaced report's
+import controls, including pending file reads, instead of retaining discarded
+report elements through the parent search signal.
+
 The private view separately searches the organization's retained ETH, USDT and
 USDC observations. Each asset has its own result section, index coverage, error
 state and pagination cursor. **More observations** advances only assets with an

@@ -834,3 +834,74 @@ private AML/Space pages reached login and retired public scores returned 410.
 No private production account, capture or record was created. Authenticated file
 workflows passed with an isolated synthetic local account; production owner-session
 execution remains unverified because no existing owner credentials are available.
+
+## Individual address capture updates — 2026-09-27
+
+Space deployment `610ad4be` and portal deployment `fdbe4919` publish individual
+capture updates, succeeding the saved-file release `4d3a3d8d` and `98e49a8c`.
+Intermediate deployments `21368e77` and `fc2f6629` were superseded by the final
+report-control cleanup before release verification. Every individual BTC, ETH,
+USDT, USDC or BLCH report now offers **Update [asset]**, **Download previous capture**
+and **Compare captures** in the same shared interface as combined research.
+
+One manual update requests only the displayed network, asset and reference.
+Unsubmitted edits to the search form do not redirect it. Current evidence and
+downloads remain usable while collection runs. Failed, rate-limited, corrupt,
+mismatched or unrenderable replacements preserve the complete current report,
+filters, imported comparisons and previous capture. Identical report hashes also
+preserve that state. A changed successful response replaces the whole report and
+resets its local evidence filters and saved-file comparison, retaining the preceding
+complete research JSON with its original digest.
+
+Space now prepares the research report, supplemental ledger/activity view and raw
+JSON together before replacement. A partial report cannot leave an old ledger or
+graph beside a new capture. The existing local comparison contract supplies exact
+balance and graph-record differences without another request. New searches,
+network changes and logout invalidate late results. Single and combined viewers
+abort replaced reports' import controls so discarded elements and their captured
+data are not retained by the parent search signal across repeated updates.
+Private retained observations, scores and pagination remain independent.
+
+All 388 Node tests pass, including four new single-refresh contract tests. Five
+WebKit suites pass: individual updates, existing address research/evidence,
+combined search/refresh, saved-file imports and PWA lifecycle/offline handling.
+The affected individual, combined and import suites passed again after report
+cleanup. Browser checks exercise all five assets, one scoped request, immutable
+previous/current exports, independent comparison hashes, unchanged reads during
+updates, same-capture responses, partial replacements, rejected rendering,
+rate limits, offline failure, edited search fields, mounted authenticated Space,
+independent private retained results and logout during a request. Current raw JSON
+and ledger details are checked against the same capture. Desktop/mobile viewport
+screenshots were inspected; keyboard controls, overflow and functional CSP checks
+pass. Both Functions bundles compile, the shared shell is consistent and OpenAPI
+remains at 73 operations. No endpoint, migration, source adapter or scoring change
+is included. Graphus remains `1b9f2d39`, the retired AML redirect `0f1194d4`, migrations
+through 0010 and the shell cache v6; changed research assets are not precached.
+
+Read-only production verification at `2026-09-27T19:04:25.205Z` passed on both custom
+domains. Deployed assets match local bytes. Individual USDT on rednblue and ETH on
+Space each made exactly one refresh request, exported the exact original previous
+capture, and produced comparison JSON identical to the independent calculation.
+Downloads and comparisons made no further source request or document reload. The
+Space supplemental raw export matched the current report, and its ledger detail
+availability matched the same capture. Mobile layouts and JavaScript checks passed.
+Combined lookup, manual refresh and saved-bundle comparison also passed.
+
+Source availability varied. Rednblue's initial token captures included two USDT
+events and an empty bounded USDC window, with exact CSV verification for both.
+Its combined USDT update had no graph; its subsequent individual USDT update did
+have graph evidence. Descriptive ML remained unavailable in these observations.
+Space token queries returned 502, so verification used its available native ETH
+capture; native address history stayed unsupported. The first verification at
+`19:00:57Z` completed the portal combined workflow but timed out awaiting an
+individual result. The verifier now records public API response statuses and
+recognizes explicit initial-source failures. No reliability fix for the sources
+is claimed. The failed attempt and final result remain separate ignored artifacts
+in `.data/porb-portal/address-refresh-first-attempt.json` and
+`.data/porb-portal/address-bundle-release.json`.
+
+Anonymous private reference/research/Atlas APIs returned 401 with no-store headers,
+private AML/Space pages reached login and retired public scores returned 410.
+No production account or private record was created. Private individual updates
+and logout behavior were verified with isolated synthetic local accounts;
+authenticated production execution was not exercised.

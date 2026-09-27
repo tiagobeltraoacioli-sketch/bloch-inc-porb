@@ -84,3 +84,13 @@ export async function refreshResearch(bundle,asset,request,{signal,now=()=>new D
   signal?.throwIfAborted();
   return updated;
 }
+
+// Keep a single asset's contract and original bytes. The caller replaces the
+// entire report only after this returns; failures never amend old observations.
+export async function refreshSingleResearch(report,request,{signal}={}){
+  signal?.throwIfAborted();
+  const scope=researchSelection(report?.scope?.asset,report?.scope?.reference,report?.scope?.network);
+  await checkedReport(report,scope,scope.assets[0]);
+  signal?.throwIfAborted();
+  return collectResearch(scope,request,{signal});
+}

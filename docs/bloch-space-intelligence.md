@@ -202,5 +202,10 @@ different source windows are not presented as complete new or removed chain acti
 Every asset report can also compare an earlier saved research JSON or three-asset
 bundle locally. File integrity, scope, retrieval order and limits are checked;
 the original current report stays unchanged and no file is uploaded or stored.
+Individual BTC/ETH/USDT/USDC/BLCH queries now also offer manual updates, a complete
+previous-capture download and local before/after comparison. Failed updates retain
+the dated report and its filters; changed successful updates replace all dependent
+views together, including the supplemental ledger and raw JSON. Private retained
+organization observations are unaffected by these public-source updates.
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

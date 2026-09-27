@@ -436,9 +436,11 @@ function showResult(kind,data,query,asset,researchOptions={}) {
     renderResearchResult(root,data,{mounted:location.pathname.startsWith('/space/'),...researchOptions});section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   if(kind==='address'&&data.version==='bloch-address-research/1'){
-    const report=element('div');renderResearchResult(report,data,{mounted:location.pathname.startsWith('/space/')});root.append(report);
-    if(data.modules.ledger.status==='available'){grid.append(...renderAddress(data.modules.ledger.data,query,asset));root.append(grid);}
-    root.append(rawResponse(data,'research',state.network,query,asset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
+    const renderSupplement=(host,capture)=>{
+      if(capture.modules.ledger.status==='available'){const ledger=element('div','result-grid');ledger.dataset.researchLedger='';ledger.append(...renderAddress(capture.modules.ledger.data,query,asset));host.append(ledger);}
+      const raw=rawResponse(capture,'research',state.network,query,asset);raw.dataset.researchRaw='';host.append(raw);
+    };
+    renderResearchResult(root,data,{mounted:location.pathname.startsWith('/space/'),...researchOptions,renderSupplement});section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   grid.append(...(kind==='address'?renderAddress(data,query,asset):kind==='block'?renderBlock(data,query):renderTransaction(data,query)));
   root.append(grid,rawResponse(data,kind,state.network,query,asset,state.result?.offset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});
