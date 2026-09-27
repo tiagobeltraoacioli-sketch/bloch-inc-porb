@@ -16,7 +16,7 @@ const server=createServer(async(req,res)=>{try{
   }else if(url.pathname==='/api/overview')response=Response.json(spaceDataFixture(url.searchParams.get('network')));
   else{
     const file=resolve(root,'.'+decodeURIComponent(url.pathname)+(url.pathname.endsWith('/')?'index.html':''));assert.ok(file.startsWith(root+'/'));let body=await readFile(file);
-    if(url.pathname==='/sw.js'&&version===2)body=Buffer.from(body.toString().replace('bloch-space-shell-v5','bloch-space-shell-v5-test-update'));
+    if(url.pathname==='/sw.js'&&version===2)body=Buffer.from(body.toString().replace('bloch-space-shell-v6','bloch-space-shell-v6-test-update'));
     response=new Response(body,{headers:{...headers,'content-type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.webmanifest':'application/manifest+json'})[extname(file)]||'application/octet-stream','cache-control':'no-cache',...(url.pathname==='/sw.js'?{'service-worker-allowed':'/'}:{})}});
   }
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
@@ -36,7 +36,7 @@ try{
   const reloaded=page.waitForEvent('load');await page.locator('.pwa-toast button').click();await reloaded;await page.locator('.address-research-bundle').waitFor();
   assert.equal(navigations,2,'An accepted controller replacement reloads exactly once');assert.equal(reads,6,'Accepted update starts one replacement capture');assert.equal(new URL(page.url()).searchParams.get('asset'),'ETH_ALL');
   const cached=await page.evaluate(async()=>{const keys=await caches.keys(),urls=[];for(const key of keys)for(const request of await(await caches.open(key)).keys())urls.push(new URL(request.url).pathname);return {keys,urls};});
-  assert.deepEqual(cached.keys,['bloch-space-shell-v5-test-update']);assert.ok(cached.urls.length>10);assert.ok(!cached.urls.some(url=>url.startsWith('/api/')),'No API or private observation may enter the offline shell cache');
+  assert.deepEqual(cached.keys,['bloch-space-shell-v6-test-update']);assert.ok(cached.urls.length>10);assert.ok(!cached.urls.some(url=>url.startsWith('/api/')),'No API or private observation may enter the offline shell cache');
   await context.setOffline(true);const response=await page.evaluate(async()=>{try{const response=await fetch('/api/research?network=ethereum&asset=ETH&query=0x'+'1'.repeat(40));return {status:response.status,body:await response.json()};}catch{return {status:null};}});
   // WebKit offline emulation may reject before dispatching a worker fetch event.
   // Neither a network rejection nor the worker's 503 may substitute cached data.

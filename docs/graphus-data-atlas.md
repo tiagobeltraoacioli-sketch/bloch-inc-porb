@@ -703,3 +703,65 @@ execution remains validated locally with an isolated synthetic account, not with
 an unavailable production owner session. Source availability remains bounded and
 may change on later requests. The ignored verification artifact is
 `.data/porb-portal/address-bundle-release.json`.
+
+## Shared Space identity and capture comparisons — 2026-09-27
+
+Space deployment `c0dc1188` and portal deployment `06cc37eb` publish the shared
+interface and address capture comparisons, succeeding `cdf0cb50` and `8571232c`.
+All eleven Space pages now share navigation, typography, colors, controls and a
+network context bar. Dark and light themes persist across pages and tabs. Browser
+history restores the matching network; workspace and Graph Lab selections update
+the shared links. The nine authenticated Space mounts use the same interface and
+keep navigation within the portal. Account and Downloads retain their public
+functions; the portal mount still excludes Space accounts, installation and PWA.
+Header/footer templates and a deterministic checked renderer prevent future drift.
+
+After a successful per-asset update in combined address research, compare the
+current and previous captures locally. Exact signed balance differences, module
+availability, records present only in one capture and changed source records have
+a complete independently hashed JSON export. Both original report identities,
+capture coverage and observations remain available. Missing data never becomes a
+zero balance or empty graph. Source-window differences are not described as complete
+new/removed chain activity, fund flows, reorganizations or ML group movement.
+The comparison makes no new requests and expires with its local viewer state.
+
+All 378 Node tests pass, including four comparison contract tests. Six WebKit
+suites pass: shared identity, mounted modules, existing address research, combined
+address refresh/comparison, the general portal and PWA lifecycle/offline behavior.
+The identity matrix checks all eleven pages in both themes at 1440 and 390 pixels.
+Mounted Graph Lab also passes at the narrower mobile iframe width across all five
+assets, including exact graph exports and canvas resizing. Desktop/mobile
+screenshots were inspected; light-theme contrast and narrow navigation were fixed.
+Local functional runs have no application JavaScript or CSP errors. Both Functions
+bundles compile, generated mounts reproduce the source and OpenAPI remains at 73
+operations. There is no database migration, endpoint, source adapter or scoring
+change. The shell cache is v6 and still excludes API responses/private data.
+
+Read-only production UI verification at `2026-09-27T03:03:26.056Z` passed on all
+eleven public pages. Deployed HTML, common styles/controllers and page controllers
+match source bytes. Theme toggles, mobile layouts, network continuity and browser
+history passed without application errors. Cloudflare injects an external analytics
+beacon that the existing self-only script policy blocks; verification records that
+specific platform-script block separately and leaves the policy unchanged. The
+ignored report is `.data/porb-portal/space-identity-release.json`.
+
+Production address verification at `2026-09-27T03:04:30.364Z` passed on both custom
+domains. Each combined lookup made three asset requests; a USDT update made one
+more, preserved ETH/USDC content and exported both current and previous bundles.
+Both browsers then produced comparison JSON identical to the independent local
+calculation, including exact balance differences and matching report/comparison
+hashes, without any extra source request. All three ledger modules were available.
+Token graphs and their descriptive ML were unavailable in this capture, so live
+event-difference/graph CSV checks were not exercised; those paths passed with
+isolated fixtures. Native ETH address history remains unsupported. Mobile layouts
+and initial service-worker activation preserved the document without errors.
+An earlier verification attempt timed out waiting for a full page load; the final
+script waits for parsed content and the actual research controls, while separately
+counting document requests to detect unintended reloads.
+
+Anonymous private reference/research/Atlas APIs still returned 401 with no-store
+headers, private AML/Space pages reached the login gate and retired public score
+endpoints returned 410. No private production account or record was created.
+Authenticated execution remains validated with synthetic local accounts because
+no existing production owner credentials are available. The source observations
+and final verification stay ignored in `.data/porb-portal/address-bundle-release.json`.

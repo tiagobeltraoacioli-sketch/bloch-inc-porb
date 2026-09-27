@@ -9,6 +9,31 @@ The subsequent [Graph Lab release](bloch-space-graph-lab.md) adds `/graph/`:
 progressive public-evidence expansion, ordered paths, nine graph-analysis panels,
 source-preserving imports/exports and a macOS 1.1 Command-5 shortcut.
 
+## Shared interface
+
+All eleven public pages use the same Space header, network selector, navigation,
+footer, typography, form controls and color tokens. Dark green is the default;
+the light theme is available everywhere and the choice follows navigation, browser
+history and other open tabs. Workspace, Explorer, Graph Lab, network overviews and
+analytics preserve the selected network. Explicit route/query selections take
+precedence over the last network preference. Account and Downloads use the same
+controls. Data Atlas and the private workspace remain clearly linked destinations.
+
+`space/ui/header.html` and `footer.html` are the canonical static shell templates.
+After editing them, run `python3 scripts/build_space_shell.py`, then
+`python3 scripts/build_portal_modules.py` for the authenticated mounts. CI checks
+`build_space_shell.py --check` to prevent page drift. `space-shell.js` applies the
+saved theme before body paint and coordinates network navigation; `space-design.css`
+owns common visual tokens while existing page styles retain functional layouts.
+Only theme/network preferences are stored locally by this shell. Address evidence
+and private records are not persisted by it. Mounted navigation stays under
+`/space/`, with Account linking to portal access and PWA code excluded as before.
+
+`scripts/check_space_identity_browser.mjs` checks every page in both themes at
+1440 and 390 pixels, navigation/history, network changes, cross-tab theme updates,
+skip navigation, image loading, overflow and JavaScript/CSP errors using isolated
+synthetic source responses. Production checks are read-only.
+
 ## Research workspace
 
 Data Science and Machine Learning consume the same validated `/api/series`
@@ -86,7 +111,7 @@ navigation opens that shell, labels the connection state, and refuses API reads
 with a 503 JSON response. No live-data availability is implied while offline.
 Initial service-worker activation preserves the current page and in-flight address
 queries. Replacing an existing controller after an accepted update reloads once.
-Updates are offered with an explicit reload action. The current shell cache is v5. Bump the cache version when
+Updates are offered with an explicit reload action. The current shell cache is v6. Bump the cache version when
 shipping changed precached assets. Cache contents are restricted to the app's
 own cache-name prefix; APIs, POSTs and third-party requests are not persisted.
 
@@ -169,5 +194,10 @@ successful one replaces the whole asset report and offers the previous bundle fo
 download until another successful update or new search. Token graph and ledger
 activity share one validated request-local capture, while balance keeps its own
 observation. Updates follow the existing public/private gateway budgets.
+After a successful update, **Compare captures** calculates the exact balance
+difference, module availability and records present only in one capture or changed
+between them. It uses the two verified reports in memory without new requests.
+The complete comparison JSON carries both report identities and its own SHA-256;
+different source windows are not presented as complete new or removed chain activity.
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

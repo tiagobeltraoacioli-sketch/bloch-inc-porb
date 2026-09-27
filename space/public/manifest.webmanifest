@@ -6,8 +6,8 @@
   "start_url": "/app/?network=bloch&view=overview",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#070d0b",
-  "theme_color": "#070d0b",
+  "background_color": "#081210",
+  "theme_color": "#081210",
   "lang": "en",
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
@@ -19,6 +19,6 @@
     {"name":"Bloch research","url":"/app/?network=bloch&view=science&range=24h"},
     {"name":"Ethereum models","url":"/app/?network=ethereum&view=ml&range=48"},
     {"name":"Bitcoin analytics","url":"/app/?network=bitcoin&view=science&range=30"},
-    {"name":"BI-PoRB workspace","url":"/account/"}
+    {"name":"Research account","url":"/account/"}
   ]
 }

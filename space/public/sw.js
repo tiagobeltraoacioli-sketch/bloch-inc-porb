@@ -1,5 +1,5 @@
-const CACHE='bloch-space-shell-v5';
-const SHELL=['/app/','/account/','/graph/','/assets/graph-lab.js','/assets/graph-lab.css','/assets/graph-core.js','/assets/graph-worker.js','/assets/site.css','/assets/light.css','/assets/workspace.css','/assets/research.css',
+const CACHE='bloch-space-shell-v6';
+const SHELL=['/app/','/account/','/graph/','/assets/graph-lab.js','/assets/graph-lab.css','/assets/graph-core.js','/assets/graph-worker.js','/assets/site.css','/assets/light.css','/assets/space-design.css','/assets/space-shell.js','/assets/workspace.css','/assets/research.css',
   '/assets/account.css','/assets/account.js','/assets/workspace.js','/assets/research.js','/assets/science.js','/assets/pwa.js',
   '/assets/favicon.png','/assets/bloch-inc-logo-dark.png','/assets/icon-192.png','/assets/icon-512.png','/manifest.webmanifest'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL))));

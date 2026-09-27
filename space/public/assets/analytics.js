@@ -9,10 +9,6 @@ const fixed=(raw,places)=>{try{const n=BigInt(raw),unit=10n**BigInt(places),frac
 const utc=value=>{const date=new Date(typeof value==='number'?value*1000:value);return Number.isFinite(date.getTime())?date.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'})+' UTC':'—';};
 const choices={bitcoin:['10','30'],ethereum:['12','48'],bloch:['6h','24h','7d']}[network];
 const label={bitcoin:{'10':'10 blocks','30':'30 blocks'},ethereum:{'12':'12 blocks','48':'48 blocks'},bloch:{'6h':'6 hours','24h':'24 hours','7d':'7 days'}}[network];
-const themeKey='bloch-space-theme';
-try{if(localStorage.getItem(themeKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
-function theme(){const dark=document.documentElement.dataset.theme==='dark';$('#theme-toggle').setAttribute('aria-label',`Switch to ${dark?'light':'dark'} theme`);$('.theme-toggle-label').textContent=dark?'Light':'Dark';$('meta[name="theme-color"]').content=dark?'#050706':'#f8faf4';}
-theme();$('#theme-toggle').addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem(themeKey,document.documentElement.dataset.theme);}catch{}theme();});
 
 function card(label,value,detail){const item=node('div','analytics-stat');item.append(node('span','',label),node('strong','',value),node('small','',detail));return item;}
 function rawRows(data){

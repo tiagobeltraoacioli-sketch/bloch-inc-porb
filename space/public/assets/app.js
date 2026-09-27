@@ -1,18 +1,6 @@
 import {BUNDLE_VERSION,researchSelection,collectResearch} from './address-research-bundle.js';
 import {renderResearchResult} from './address-research-bundle-ui.js';
 const $ = selector => document.querySelector(selector);
-const themeStorageKey='bloch-space-theme';
-try{if(localStorage.getItem(themeStorageKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
-function setTheme(theme,persist=false){
-  document.documentElement.dataset.theme=theme;
-  const next=theme==='light'?'dark':'light';
-  const toggle=$('#theme-toggle');toggle.setAttribute('aria-label',`Switch to ${next} theme`);toggle.title=`Switch to ${next} theme`;
-  toggle.querySelector('.theme-toggle-label').textContent=next==='light'?'Light':'Dark';
-  $('meta[name="theme-color"]').content=theme==='light'?'#f8faf4':'#050706';
-  if(persist)try{localStorage.setItem(themeStorageKey,theme);}catch{}
-}
-setTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
-$('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light',true));
 const state = {network:'bitcoin', overview:null, overviewAt:0, overviewRequest:0, overviewPending:false, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
 const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Address research can collect ETH, USDT and USDC together or one asset.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
@@ -511,7 +499,7 @@ async function refreshOverview(){
 async function switchNetwork(network,historyMode='push') {
   if(!titles[network])return;
   if(historyMode==='push')state.navigation++;
-  state.network=network;++state.request;++state.overviewRequest;
+  state.network=network;window.dispatchEvent(new CustomEvent('space:network',{detail:{network}}));++state.request;++state.overviewRequest;
   state.searchController?.abort();clear($('#result'));
   state.result=null;state.overview=null;state.overviewAt=0;state.overviewPending=false;
   for(const tab of document.querySelectorAll('[data-network]'))tab.setAttribute('aria-selected',String(tab.dataset.network===network));
@@ -535,7 +523,7 @@ $('#clear-result').addEventListener('click',()=>{state.navigation++;state.reques
 async function restoreLocation(historyMode='none'){
   const navigation=++state.navigation;
   const params=new URLSearchParams(location.search);
-  const network=titles[params.get('network')]?params.get('network'):'bitcoin';
+  const network=titles[params.get('network')]?params.get('network'):(document.documentElement.dataset.spaceNetwork||'bloch');
   const kind=['auto','block','tx','address'].includes(params.get('kind'))?params.get('kind'):'auto';
   const query=params.get('query')||'';
   const asset=network==='ethereum'&&['ETH','USDT','USDC','ETH_ALL'].includes(params.get('asset'))?params.get('asset'):'ETH';

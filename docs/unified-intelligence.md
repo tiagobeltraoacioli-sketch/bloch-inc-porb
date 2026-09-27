@@ -167,9 +167,33 @@ capture's original date; the download does not claim that an update succeeded.
 **Download previous bundle** preserves the complete bundle immediately before the
 last successful update, in browser memory until the next successful update or new
 search. Both versions verify using the existing bundle format. This is a local
-download convenience, not a retained history, synchronized snapshot or change
-analysis. New queries, network changes and logout/organization changes invalidate
+download convenience, not a retained history or synchronized snapshot.
+New queries, network changes and logout/organization changes invalidate
 pending updates. Public asset updates never reload private retained-result pages.
+
+**Compare ETH/USDT/USDC captures** appears when the last successful asset update
+has two available, distinct reports. It verifies both child hashes and their exact
+network/asset/reference scope, then calculates locally without source requests.
+The comparison lists all five modules' previous/current availability and the exact
+signed balance difference in base units when both balances have compatible units.
+Usable graphs are matched by original event ID; records found only before, only
+after, changed material fields and unchanged counts remain separate. New observation
+IDs or retrieval timestamps alone do not count as changed events. Transaction,
+direction, event type, exact amount, block position and finality remain explicit.
+UTXO input/output events are never flattened into address-to-address flows.
+
+The inspector shows twenty compared records per page. **Download comparison JSON**
+contains every compared record, source observations, both capture times/coverage and
+original report hashes. `bloch-address-capture-comparison/1` uses `comparison_sha256`
+over UTF-8 `JSON.stringify(comparison without comparison_sha256)`, preserving returned
+property and array order. Input reports have the existing 2,800,100-byte limit;
+the compact comparison is limited to 8,500,000 bytes and fails without truncation.
+Missing modules stay unavailable rather than becoming empty graphs or zero balances.
+Different capture windows may explain record presence; the comparison does not
+claim complete activity, a reorganization, traced funds, transferred volume or
+comparable ML group numbers. A newer successful update clears the prior comparison;
+a failed update keeps it with its original captures. New searches and private
+session/organization changes clear this local state through the existing viewer.
 
 The private view separately searches the organization's retained ETH, USDT and
 USDC observations. Each asset has its own result section, index coverage, error

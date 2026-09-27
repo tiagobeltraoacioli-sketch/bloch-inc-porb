@@ -8,10 +8,6 @@ const money=(raw,places=8)=>{try{const value=BigInt(raw),base=10n**BigInt(places
 const ethHeight=value=>{try{return count(Number(BigInt(value)));}catch{return '—';}};
 const when=value=>{const date=new Date(typeof value==='number'?value*1000:value);return Number.isFinite(date.getTime())?date.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'})+' UTC':'—';};
 const record=(kind,query,asset)=>{const params=new URLSearchParams({network,kind,query:String(query)});if(asset)params.set('asset',asset);return `/?${params}`;};
-const themeKey='bloch-space-theme';
-try{if(localStorage.getItem(themeKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
-function theme(){const dark=document.documentElement.dataset.theme==='dark';$('#theme-toggle').setAttribute('aria-label',`Switch to ${dark?'light':'dark'} theme`);$('.theme-toggle-label').textContent=dark?'Light':'Dark';$('meta[name="theme-color"]').content=dark?'#050706':'#f8faf4';}
-theme();$('#theme-toggle').addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem(themeKey,document.documentElement.dataset.theme);}catch{}theme();});
 const analyticsLink=make('a','chain-analytics-link','Open live data app ↗');analyticsLink.href=`/app/?network=${network}&view=analytics`;$('.chain-hero').append(analyticsLink);
 $('#chain-search').addEventListener('submit',event=>{event.preventDefault();const query=$('#chain-query').value.trim();if(query)location.href=record('auto',query);});
 
