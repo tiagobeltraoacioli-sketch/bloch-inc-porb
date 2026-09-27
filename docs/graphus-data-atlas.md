@@ -573,3 +573,71 @@ No production credentials were available, so authenticated behavior was verified
 with an isolated synthetic account locally. No production accounts, private
 reports, reviews, cases or score grants were created or changed. Source-dependent
 availability and the original bounded-capture limits remain visible in the UI.
+
+### Combined Ethereum address research — 2026-09-27 UTC
+
+Portal deployment `c58916d9` and Space deployment `acc27488` publish the
+[combined Ethereum address query](unified-intelligence.md#ethereum-address-query-across-assets).
+Select **Ethereum: ETH + USDT + USDC** in rednblue address research, or
+**ETH + USDT + USDC** in the Space explorer. One submitted reference starts three
+existing bounded asset requests concurrently. Asset tabs retain independent
+balances, graph evidence, ML cohorts, availability and inspection state. Complete
+bundle downloads bind all three outcomes and preserve each original child report
+and digest. A missing asset or module remains unavailable without hiding usable
+results or implying zero activity. Single-asset queries retain their existing
+server and download contracts.
+
+The authenticated view also searches retained observations separately for ETH,
+USDT and USDC, with per-asset coverage, error states and pagination cursors. More
+observations advances only unfinished private pages, without new public collection.
+Public exports never include these private scores or records. Source/network
+changes, invalid private queries and logout clear stale output. Combined query
+links survive public/Space reloads; the private deep link prefills the same selection.
+No API endpoint, scoring model, adapter, database migration or retention policy
+changes. Graphus remains at `1b9f2d39`, the retired AML redirect at `0f1194d4`, and
+the partner contract at 73 operations.
+
+Validation: all 368 Node tests pass. Eight new bundle tests cover normalized and
+chain-specific selections, concurrent requests, deterministic result ordering,
+exact immutable child data, partial/total failures, sanitized error codes, original
+single-asset behavior, cancellation, UTF-8 size limits, scope/hash mismatches and
+invalid or contradictory bundle contents. Four WebKit suites pass: the expanded
+address research regression, the new combined-query suite, the general portal and
+real service-worker activation/update/offline checks.
+Browser coverage includes keyboard tabs, independent evidence filters and exact
+CSV, original child/bundle downloads, unavailable graphs/assets, superseded public
+requests, Space reload/network cancellation, authenticated mounted Space, independent
+private pagination and failures, invalid-query cleanup and logout with pending
+private responses. Desktop/mobile screenshots were inspected. Both deployed
+Functions bundles compile; generated mounts and OpenAPI remain reproducible.
+
+Production inspection also exposed an initial PWA activation reload on Space while
+the three research requests were pending. The final Space deployment succeeds
+intermediate `881c5728` and fixes this: the first controller claim preserves the
+current document, while accepting an update to an existing controller reloads once.
+The shell cache is now v5; source and private API responses remain excluded. A real
+local service-worker test holds all three requests across initial activation,
+accepts a worker update, checks cache replacement and verifies that an offline
+search clears prior reports and shows explicit unavailable outcomes. WebKit offline
+emulation rejected the transport before the worker fallback; no cached report was
+returned. The private mount still omits PWA code and offline caching.
+
+Final production verification at `2026-09-27T01:08:21.711Z` passed with no browser
+errors. Both domains serve byte-identical release assets. Each query made exactly
+one request for each actual asset, retained child/bundle hashes through tab
+inspection and fit mobile. Space's service worker controlled the initial page
+without reloading it. Anonymous private observations, the private research gateway,
+Atlas and AML/Space pages remained gated; retired public score endpoints returned
+410. These checks made no private production writes.
+
+Source availability varied during verification. Earlier captures returned 95
+focused USDT events and descriptive ML in both interfaces; their complete evidence
+CSVs matched the original reports. The final capture returned three usable ledger
+reports on rednblue, and ETH/USDC ledger reports with an explicit USDT source failure
+on Space. Token graph/ML sources were unavailable in that final capture; native ETH
+graph history remained unsupported. The final run therefore verified partial-result
+handling rather than exercising graph CSV again. It did not manufacture balances,
+events or model results. Authenticated production execution remains unverified
+without an existing owner session; private behavior passed locally with isolated
+synthetic accounts. The timestamped result remains ignored at
+`.data/porb-portal/address-bundle-release.json`.

@@ -84,7 +84,9 @@ The manifest provides a standalone application, 192/512 pixel icons and research
 shortcuts. `sw.js` precaches only the public application shell and code. Offline
 navigation opens that shell, labels the connection state, and refuses API reads
 with a 503 JSON response. No live-data availability is implied while offline.
-Updates are offered with an explicit reload action. The current shell cache is v4. Bump the cache version when
+Initial service-worker activation preserves the current page and in-flight address
+queries. Replacing an existing controller after an accepted update reloads once.
+Updates are offered with an explicit reload action. The current shell cache is v5. Bump the cache version when
 shipping changed precached assets. Cache contents are restricted to the app's
 own cache-name prefix; APIs, POSTs and third-party requests are not persisted.
 
@@ -157,5 +159,9 @@ same report is available at `https://rednblue.space/explore/` and in its private
 Address research view. The shared [evidence viewer](unified-intelligence.md#address-evidence-inspection)
 adds local direction/type/amount/block filters, typed graph navigation, exact event
 and source inspection, complete filtered CSV and ML-group-to-reference navigation.
+The **ETH + USDT + USDC** selection queries the same Ethereum address for all three
+assets concurrently. Asset tabs retain separate balances, source captures, graph
+filters and ML cohorts; a complete hashed bundle can be downloaded without merging
+histories or private scores. See [combined address research](unified-intelligence.md#ethereum-address-query-across-assets).
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

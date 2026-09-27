@@ -1,19 +1,61 @@
 # Graphus of Bloch Inc — A Matter of Data 2.0
 
-Graphus is the proposed Bloch Inc data and graph intelligence platform. BI-PoRB is its first specialized AML/FT service. Graphus owns the off-chain multi-chain data model, temporal graph engine, provenance, privacy-preserving feature computation, and optional zero-knowledge proof research. BI-PoRB owns sanctions evidence, transaction review signals, wallet context, human review, and customer AML workflows. Neither product changes Bloch consensus or publishes private findings on-chain.
+Graphus provides bounded public-chain research tools and the off-chain data and
+graph capabilities used by the private BI-PoRB portal. Its architecture also
+includes later research into temporal ML, durable ingestion and optional
+zero-knowledge computation. Implemented features and research proposals are
+separate; neither Graphus nor BI-PoRB changes Bloch consensus or publishes private
+findings on-chain.
 
-## Product boundary
+## Public research
 
-- Graphus may support authorized research, analytics, market infrastructure observability, and BI-PoRB through separate tenant policies. Each use needs its own purpose, data rights, access, retention, and disclosure rule.
-- The public Graphus site is a design and capability preview. Illustrative visuals are synthetic; source heights are probes, not indexed transaction coverage.
-- The public constellation's target-to-target path explorer is synthetic and restricted to one Ethereum asset at a time. Its highlights show directed, day-ordered fixture events and do not prove value continuity or ownership.
-- The observed-shapes panel is synthetic. It counts direct peers and ordered event pairs for ETH and ERC-20 fixtures; BTC and BLCH have unknown direct sender attribution. Pair timing never proves that the same value passed through a wallet.
-- The public map can expand a searched synthetic ETH or ERC-20 point to two visual graph steps. The private bounded neighborhood prototype preserves directed event evidence and never traverses an unknown UTXO/eUTXO sender. Neither view establishes wallet ownership or historical coverage.
-- The network-evidence inspector exposes each generated link's event ID, direction, fixture date, amount, and graph step, with a step filter and focus controls. The private prototype exposes source- and finality-tagged edge rows for the same bounded query shape; no real wallet event is served on the public site.
-- Public wallet and flow exploration is planned for lawful chain facts and ML detail, including feature definitions and values, methods, validation, uncertainty, and limitations. Only the AML score requires explicit delegated access. Identity resolution, IP data, customer cases, private labels, and confidential sources remain private; public features require source-rights and data-protection review. No public wallet blacklist.
-- Graph connections are evidence hypotheses until bridge receipts or other independently verified relations support them. Graph proximity alone does not imply illicit activity.
-- ZK research targets verifiable bounded computation over committed features; it does not establish source truth or model quality.
+The initial assets are BTC, ETH, Ethereum-mainnet USDT/USDC and BLCH. Public tools
+inspect source-reported chain facts with their capture bounds, exact amounts,
+anchors and provenance. System Map, Constellation, Analytics and Data Atlas support
+bounded evidence collection and inspection. Atlas includes its 84-field registry,
+activity timelines, typed connection graphs, paths, patterns and observed-window
+comparisons. See [the implementation and release history](graphus-data-atlas.md).
+Synthetic demonstrations remain identified as fixtures and never replace a failed
+real source response.
 
-## Initial deployment
+[Unified address research](unified-intelligence.md#unified-address-research) is
+available through Bloch Space, the public rednblue directory and the authenticated
+portal. It returns module availability, ledger observations, typed evidence and
+descriptive ML. The combined Ethereum selection queries ETH, USDT and USDC for one
+reference, preserving separate balances, captures, graphs and models. Evidence
+inspection, complete downloads and ML group navigation retain the original report
+identity. Missing sources, unsupported native ETH history and insufficient cohorts
+remain explicit. These are bounded observations, not complete chain histories.
 
-The former DEX host is the private data host. The former Bridge host is the Graphus graph/ML/ZK research host. The L2 host remains reserved for L2. Current scheduled jobs are OFAC refresh, bounded Bloch indexer probing, and Ethereum/Bitcoin public-source height probes. A one-shot private Bloch research sample and structural ML experiment have been completed; neither provides production coverage, AML labels, or scores. The first asset wave is ETH, Ethereum-mainnet USDT/USDC, BTC, and BLCH; Solana is deferred. No Graphus customer API or validated AML model is live.
+Public ML groups describe comparable references in one captured sample. They do
+not infer identity, ownership, illicit activity or future outcomes. Topological
+paths and event sequences do not establish continuity of value. Source findings,
+human decisions and model hypotheses must remain distinguishable; there is no
+public wallet blacklist.
+
+## Private service boundary
+
+The authenticated rednblue portal supports tenant accounts, scoped keys, saved
+analyses, descriptive Red/Blue scores, Atlas reports, investigations, review and
+audit workflows. Its [partner contract](../site/developers/openapi.json) documents
+the implemented API. Scores, AML demonstrations, organization records, private
+labels and customer evidence require their original tenant/scoped authorization.
+They are not included in public address bundles. Delegation is resource-scoped;
+a validated AML score is still a separate release gate.
+
+Identity resolution, IP/jurisdiction context, confidential sources and verified
+bridge findings are not inferred from public addresses. Purpose, source rights,
+retention, deletion, review and access controls remain separate requirements.
+Public availability does not establish a customer's lawful basis or legal
+compliance. ZK research would attest bounded computation under a specified circuit,
+not source truth, model quality or guilt.
+
+## Infrastructure and research
+
+The [architecture](graphus-2-architecture.md) assigns the former DEX host to data
+research, the former Bridge host to graph/ML/ZK research and reserves the L2 host
+for L2. Earlier height probes and private Bloch samples are separate from the
+bounded source adapters used by the public applications. Publishing a browser
+feature does not create archival ingestion, reorg reconciliation, independently
+validated outcomes or production-wide coverage. Solana remains outside the initial
+asset set, and temporal ML and ZK proposals retain their stated validation gates.

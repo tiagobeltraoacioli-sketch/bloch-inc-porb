@@ -13,5 +13,12 @@ if('serviceWorker' in navigator){
     const offer=()=>{if(registration.waiting)toast('A new version of Bloch Space is ready.',()=>registration.waiting.postMessage('ACTIVATE_UPDATE'));};offer();
     registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',()=>{if(registration.waiting&&navigator.serviceWorker.controller)offer();}));
   }).catch(()=>{document.querySelector('#install-app')?.setAttribute('title','Offline installation is unavailable in this browser.');});
-  let reloading=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!reloading&&navigator.serviceWorker.controller){reloading=true;location.reload();}});
+  // Initial activation may occur while a live lookup is running. Keep that page;
+  // only replacing a controller on an already controlled page needs a reload.
+  let controlled=Boolean(navigator.serviceWorker.controller),reloading=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!navigator.serviceWorker.controller)return;
+    if(controlled&&!reloading){reloading=true;location.reload();}
+    controlled=true;
+  });
 }

@@ -53,7 +53,7 @@ async function session(){
   const isAdmin=['owner','admin'].includes(result.organization.role);$('admin-controls').hidden=!isAdmin;$('org-controls').hidden=result.organization.role!=='owner';$('collect-form').querySelector('button').disabled=result.organization.role==='viewer';
   $('access-description').textContent=`${result.user.email} · ${result.organization.role} · ${result.organization.name}`;
   showView(state.view);
-  if(state.view==='references'&&pendingReference){const asset=pendingReference.get('asset'),reference=pendingReference.get('reference');if(['BTC','ETH','USDT','USDC','BLCH'].includes(asset)&&reference&&/^[a-zA-Z0-9]{14,100}$/.test(reference)){$('reference-form').elements.asset.value=asset;$('reference-form').elements.reference.value=reference;intelligence.launchers(asset,reference);}pendingReference=null;}
+  if(state.view==='references'&&pendingReference){const asset=pendingReference.get('asset'),reference=pendingReference.get('reference');if(['BTC','ETH','USDT','USDC','BLCH','ETH_ALL'].includes(asset)&&reference&&/^[a-zA-Z0-9]{14,100}$/.test(reference)){$('reference-form').elements.asset.value=asset;$('reference-form').elements.reference.value=reference;intelligence.launchers(asset==='ETH_ALL'?'ETH':asset,reference);}pendingReference=null;}
   await Promise.allSettled([loadOverview(),loadRuns()]);if(['cases','watchlists'].includes(state.view))await intelligence.view(state.view);
   if(state.view==='analyses'&&pendingAtlas.analysis){const selected=pendingAtlas;pendingAtlas={analysis:null,node:null};try{await openRun(selected.analysis,selected.node);}catch(error){message(error.message);}}
 }

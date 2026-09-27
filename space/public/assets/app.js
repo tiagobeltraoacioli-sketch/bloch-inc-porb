@@ -1,5 +1,5 @@
-import {verifyResearch} from './address-research-core.js';
-import {renderResearch} from './address-research-ui.js';
+import {BUNDLE_VERSION,researchSelection,collectResearch} from './address-research-bundle.js';
+import {renderResearchResult} from './address-research-bundle-ui.js';
 const $ = selector => document.querySelector(selector);
 const themeStorageKey='bloch-space-theme';
 try{if(localStorage.getItem(themeStorageKey)==='dark')document.documentElement.dataset.theme='dark';}catch{}
@@ -15,7 +15,7 @@ setTheme(document.documentElement.dataset.theme==='dark'?'dark':'light');
 $('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light',true));
 const state = {network:'bitcoin', overview:null, overviewAt:0, overviewRequest:0, overviewPending:false, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
-const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Choose ETH, USDT or USDC for addresses.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
+const hints = {bitcoin:'Search a Bitcoin address, transaction ID, block hash or height.',ethereum:'Search an Ethereum address, transaction hash, block hash or height. Address research can collect ETH, USDT and USDC together or one asset.',bloch:'Search a 64-hex script hash, transaction ID, block ID or slot.'};
 const assetDecimals = {BTC:8, ETH:18, USDT:6, USDC:6, BLCH:8};
 const clear = node => node.replaceChildren();
 const element = (tag, className, text) => {const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=String(text);return node;};
@@ -36,13 +36,13 @@ function apiParams(route,network,query,asset,offset=0,cursor=null){
   if(route==='history'&&cursor)params.set('cursor',cursor);
   return params;
 }
-async function api(route, network, query, asset, offset=0, cursor=null) {
+async function api(route, network, query, asset, offset=0, cursor=null, signal) {
   const params=apiParams(route,network,query,asset,offset,cursor);
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),route==='research'?60000:15000);
   try{
-    const response=await fetch(`/api/${route}?${params}`,{signal:controller.signal,cache:'no-store'});
+    const response=await fetch(`/api/${route}?${params}`,{signal:signal?AbortSignal.any([signal,controller.signal]):controller.signal,cache:'no-store'});
     const body=await response.json();
-    if(!response.ok)throw new Error(body.error||`Source returned ${response.status}`);
+    if(!response.ok){const error=new Error(body.error||`Source returned ${response.status}`);error.status=response.status;throw error;}
     return body;
   }finally{clearTimeout(timer);}
 }
@@ -444,8 +444,11 @@ function renderTransaction(data,query) {
 
 function showResult(kind,data,query,asset) {
   const section=$('#result-section'),root=$('#result');clear(root);const grid=element('div','result-grid');
+  if(kind==='address'&&data.version===BUNDLE_VERSION){
+    renderResearchResult(root,data,{mounted:location.pathname.startsWith('/space/')});section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
   if(kind==='address'&&data.version==='bloch-address-research/1'){
-    const report=element('div');renderResearch(report,data,{mounted:location.pathname.startsWith('/space/')});root.append(report);
+    const report=element('div');renderResearchResult(report,data,{mounted:location.pathname.startsWith('/space/')});root.append(report);
     if(data.modules.ledger.status==='available'){grid.append(...renderAddress(data.modules.ledger.data,query,asset));root.append(grid);}
     root.append(rawResponse(data,'research',state.network,query,asset));section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
@@ -463,16 +466,17 @@ function setHistory(params,mode){
 }
 async function search(kind,query,asset,offset=0,historyMode='push') {
   if(historyMode==='push')state.navigation++;
-  const network=state.network;asset=network==='bitcoin'?'BTC':network==='bloch'?'BLCH':['ETH','USDT','USDC'].includes(asset)?asset:'ETH';const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
+  const network=state.network;asset=network==='bitcoin'?'BTC':network==='bloch'?'BLCH':['ETH','USDT','USDC','ETH_ALL'].includes(asset)?asset:'ETH';const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
+  state.searchController?.abort();state.searchController=new AbortController();const signal=state.searchController.signal;
   $('#result').replaceChildren();$('#result-section').hidden=true;state.result=null;
   message('Looking up source records and module analyses…');
-  const lookup=async route=>route==='address'?verifyResearch(await api('research',network,query,asset)):api(route,network,query,asset,offset);
+  const lookup=async route=>route==='address'?collectResearch(researchSelection(asset,query,network),(selected,scope)=>api('research',network,scope.reference,selected,0,null,signal),{signal}):api(route,network,query,asset,offset,null,signal);
   try{
     let resolved=requested;let data;
     try{data=await lookup(resolved);}catch(error){
       if(kind==='auto'&&/^(?:0x)?[0-9a-f]{64}$/i.test(query)&&resolved==='tx'&&error.message==='not_found'){
         resolved='block';
-        try{data=await api(resolved,network,query,asset,offset);}catch(blockError){
+        try{data=await api(resolved,network,query,asset,offset,null,signal);}catch(blockError){
           if(network==='bloch'&&blockError.message==='not_found'){resolved='address';asset='BLCH';data=await lookup(resolved);}
           else throw blockError;
         }
@@ -507,6 +511,7 @@ async function switchNetwork(network,historyMode='push') {
   if(!titles[network])return;
   if(historyMode==='push')state.navigation++;
   state.network=network;++state.request;++state.overviewRequest;
+  state.searchController?.abort();clear($('#result'));
   state.result=null;state.overview=null;state.overviewAt=0;state.overviewPending=false;
   for(const tab of document.querySelectorAll('[data-network]'))tab.setAttribute('aria-selected',String(tab.dataset.network===network));
   $('#network-title').textContent=titles[network];$('#search-hint').textContent=hints[network];$('#search-input').placeholder=network==='bloch'?'Script hash, transaction ID, block ID or slot':network==='ethereum'?'Ethereum address, transaction, block hash or height':'Bitcoin address, transaction, block hash or height';
@@ -525,14 +530,14 @@ async function switchNetwork(network,historyMode='push') {
 document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
 $('#refresh-overview').addEventListener('click',()=>refreshOverview());
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});
-$('#clear-result').addEventListener('click',()=>{state.navigation++;state.request++;state.result=null;$('#result-section').hidden=true;message('');setHistory(new URLSearchParams({network:state.network}),'push');});
+$('#clear-result').addEventListener('click',()=>{state.navigation++;state.request++;state.searchController?.abort();state.result=null;clear($('#result'));$('#result-section').hidden=true;message('');setHistory(new URLSearchParams({network:state.network}),'push');});
 async function restoreLocation(historyMode='none'){
   const navigation=++state.navigation;
   const params=new URLSearchParams(location.search);
   const network=titles[params.get('network')]?params.get('network'):'bitcoin';
   const kind=['auto','block','tx','address'].includes(params.get('kind'))?params.get('kind'):'auto';
   const query=params.get('query')||'';
-  const asset=network==='ethereum'&&['ETH','USDT','USDC'].includes(params.get('asset'))?params.get('asset'):'ETH';
+  const asset=network==='ethereum'&&['ETH','USDT','USDC','ETH_ALL'].includes(params.get('asset'))?params.get('asset'):'ETH';
   const offset=/^(0|[1-9][0-9]{0,5})$/.test(params.get('offset')||'')?Number(params.get('offset')):0;
   $('#search-kind').value=kind;$('#search-input').value=query;$('#search-asset').value=asset;
   await switchNetwork(network,'none');

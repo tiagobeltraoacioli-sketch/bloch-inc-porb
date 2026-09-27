@@ -1,7 +1,7 @@
 import {atlasLink} from './atlas-context.js';
 import {MODULES,moduleUrl} from './module-catalog.js';
-import {researchScope,verifyResearch} from '/space/assets/address-research-core.js';
-import {renderResearch} from '/space/assets/address-research-ui.js';
+import {researchSelection,collectResearch} from '/space/assets/address-research-bundle.js';
+import {renderResearchResult} from '/space/assets/address-research-bundle-ui.js';
 const $=id=>document.getElementById(id);
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 const date=v=>new Date(v).toLocaleString(),short=v=>v.length>30?v.slice(0,14)+'…'+v.slice(-10):v;
@@ -25,7 +25,7 @@ export class Intelligence {
     $('observation-more').onclick=()=>this.perform($('observation-more'),()=>this.observations(true));
     $('watch-evaluate').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,async()=>{const result=await this.api('/v1/watchlists/evaluate','POST',{analysis_id:e.target.elements.analysis.value});$('watch-evaluation').textContent=`${result.observations_created} new observation(s) recorded. Re-evaluation of the same sample does not duplicate matches.`;await this.observations();});};
   }
-  reset(){this.currentCase=null;this.referenceCursor=null;this.caseCursor=null;this.watchCursor=null;this.observationCursor=null;this.pendingEvidence=null;this.referenceQuery=null;
+  reset(){this.currentCase=null;this.referencePages=new Map();this.caseCursor=null;this.watchCursor=null;this.observationCursor=null;this.pendingEvidence=null;this.referenceQuery=null;this.researchController?.abort();
     this.referenceEpoch=(this.referenceEpoch||0)+1;
     for(const id of ['reference-results','reference-research','reference-launchers','case-list','evidence-list','watch-list','observation-list'])$(id).replaceChildren();
     $('case-detail').hidden=true;$('module-frame').removeAttribute('src');this.currentModule=null;
@@ -51,23 +51,30 @@ export class Intelligence {
   async search(more){
     const form=$('reference-form');let scope;
     if(!more){
-      const asset=form.elements.asset.value,network={BTC:'bitcoin',ETH:'ethereum',BLCH:'bloch',USDT:'ethereum',USDC:'ethereum'}[asset];
-      scope=researchScope(new URL('/api/research?'+new URLSearchParams({network,asset,query:form.elements.reference.value}),location.origin));
-      this.referenceQuery={asset,reference:scope.reference};this.referenceCursor=null;this.referenceEpoch++;
-      $('reference-results').replaceChildren(el('p','Searching retained organization observations…'));$('reference-research').replaceChildren(el('p','Collecting public source records, graph analyses and machine learning…'));$('reference-more').hidden=true;this.launchers(asset,scope.reference);
+      this.referenceEpoch++;this.researchController?.abort();this.referenceQuery=null;this.referencePages=new Map();
+      for(const id of ['reference-results','reference-research','reference-launchers'])$(id).replaceChildren();$('reference-more').hidden=true;$('reference-coverage').textContent='';
+      scope=researchSelection(form.elements.asset.value,form.elements.reference.value);
+      this.referenceQuery=scope;this.researchController=new AbortController();
+      for(const asset of scope.assets){
+        const box=el('section'),rows=el('div'),status=el('p','Searching retained organization observations…','source-note');box.dataset.referenceAsset=asset;box.append(el('h3',asset),status,rows);$('reference-results').append(box);this.referencePages.set(asset,{cursor:null,rows,status,coverage:null});
+      }
+      $('reference-coverage').textContent='Searching each selected asset independently in this organization.';
+      $('reference-research').replaceChildren(el('p','Collecting public source records, graph analyses and machine learning…'));$('reference-more').hidden=true;this.launchers(scope.assets[0],scope.reference);
     }
-    const epoch=this.referenceEpoch;
-    const query=new URLSearchParams({...this.referenceQuery,limit:'10'});if(more&&this.referenceCursor)query.set('cursor',this.referenceCursor);
-    const publicResult=more?Promise.resolve():this.api('/v1/space/research?'+new URLSearchParams({network:scope.network,asset:scope.asset,query:scope.reference})).then(verifyResearch).then(report=>{if(epoch===this.referenceEpoch)renderResearch($('reference-research'),report,{mounted:true});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
-    const retained=this.api('/v1/references?'+query).then(result=>{
-    if(epoch!==this.referenceEpoch)return;this.referenceCursor=result.next_cursor;const box=$('reference-results');if(!more)box.replaceChildren();
-    $('reference-coverage').textContent=`${result.index.indexed}/${result.index.retained} retained ${result.asset} analyses indexed. ${result.coverage}`;
-    this.launchers(result.asset,result.reference);
-    if(!result.items.length&&!more)box.append(el('p','No match in retained organization samples. Public research is shown separately above.'));
-    for(const item of result.items){const row=el('div',undefined,'list-row'),info=el('div',`${item.asset} · ${date(item.created_at)}`);info.append(el('small',`Red ${item.score.red??'unavailable'} · Blue ${item.score.blue} · ${item.score.incoming_events} in / ${item.score.outgoing_events} out`),el('small',`Dataset SHA-256: ${item.digest}`));const actions=el('div',undefined,'graph-actions');actions.append(this.action('Inspect graph',()=>this.openRun(item.id,item.node_id)),this.action('Attach to investigation',async()=>this.attach(item.id,item.node_id)));row.append(info,actions);box.append(row);}
-    $('reference-more').hidden=!result.next_cursor;
-    }).catch(error=>{if(epoch===this.referenceEpoch)$('reference-results').replaceChildren(el('p','Retained observations unavailable: '+error.message));});
-    await Promise.all([publicResult,retained]);
+    const epoch=this.referenceEpoch,queryScope=this.referenceQuery;
+    const publicResult=more?Promise.resolve():collectResearch(scope,asset=>this.api('/v1/space/research?'+new URLSearchParams({network:scope.network,asset,query:scope.reference})),{signal:this.researchController.signal}).then(report=>{if(epoch===this.referenceEpoch)renderResearchResult($('reference-research'),report,{mounted:true});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
+    const retained=[...this.referencePages].filter(([,page])=>!more||page.cursor).map(async([asset,page])=>{
+      const query=new URLSearchParams({asset,reference:queryScope.reference,limit:'10'});if(more)query.set('cursor',page.cursor);
+      try{
+        const result=await this.api('/v1/references?'+query);if(epoch!==this.referenceEpoch)return;
+        if(result.asset!==asset||result.reference!==queryScope.reference)throw new Error('Retained reference scope mismatch.');
+        page.cursor=result.next_cursor;page.coverage=`${result.index.indexed}/${result.index.retained} retained ${asset} analyses indexed. ${result.coverage}`;page.status.textContent='';
+        if(!result.items.length&&!more)page.status.textContent='No match in retained organization samples. Public research is shown separately above.';
+        for(const item of result.items){const row=el('div',undefined,'list-row'),info=el('div',`${item.asset} · ${date(item.created_at)}`);info.append(el('small',`Red ${item.score.red??'unavailable'} · Blue ${item.score.blue} · ${item.score.incoming_events} in / ${item.score.outgoing_events} out`),el('small',`Dataset SHA-256: ${item.digest}`));const actions=el('div',undefined,'graph-actions');actions.append(this.action('Inspect graph',()=>this.openRun(item.id,item.node_id)),this.action('Attach to investigation',async()=>this.attach(item.id,item.node_id)));row.append(info,actions);page.rows.append(row);}
+      }catch(error){if(epoch===this.referenceEpoch)page.status.textContent='Retained observations unavailable: '+error.message;}
+    });
+    await Promise.all([publicResult,...retained]);
+    if(epoch===this.referenceEpoch){$('reference-more').hidden=![...this.referencePages.values()].some(page=>page.cursor);$('reference-coverage').textContent=[...this.referencePages.values()].map(page=>page.coverage).filter(Boolean).join(' ');}
   }
   analysisOptions(select){const old=select.value;select.replaceChildren(el('option','Select a saved analysis'));select.firstChild.value='';for(const run of this.runs()){const option=el('option',`${run.asset} · ${date(run.created_at)}`);option.value=run.id;select.append(option);}select.value=old;}
   async cases(more=false){const result=await this.api('/v1/cases?limit=20'+(more&&this.caseCursor?'&cursor='+encodeURIComponent(this.caseCursor):''));this.caseCursor=result.next_cursor;const box=$('case-list');if(!more)box.replaceChildren();if(!result.items.length&&!more)box.append(el('p','No investigations yet. Create one to retain evidence.'));for(const item of result.items){const row=el('div',undefined,'list-row'),text=el('div',item.title);text.append(el('small',`${item.status} · ${item.evidence_count} snapshots`));row.append(text,this.action('Open',()=>this.openCase(item.id)));box.append(row);}$('case-more').hidden=!this.caseCursor;}

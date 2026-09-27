@@ -110,6 +110,46 @@ shared module budget. Public and retained results never merge their snapshots.
 New searches clear prior output; superseded replies cannot replace the latest
 query. Logout/organization changes invalidate pending private research results.
 
+### Ethereum address query across assets
+
+Choose **Ethereum: ETH + USDT + USDC** in public or private address research, or
+**ETH + USDT + USDC** in the [Space explorer](https://bloch.space/?network=ethereum), to query one Ethereum reference across
+the three supported assets. The URL selection is `asset=ETH_ALL`; this is a browser
+selection, not a new chain asset or server API parameter. Three existing bounded
+requests run concurrently, each with its actual asset, network and normalized
+reference. Existing per-asset rate budgets still apply: one combined lookup uses
+three research requests. No new endpoint, model, account permission or persistence
+behavior is introduced.
+
+Asset tabs expose ledger, graph and ML availability independently. They preserve
+their own evidence filters and inspections without additional collection. Balances
+retain their asset and exact units; graphs, source timestamps, block anchors and
+ML cohorts are never merged. Native ETH history remains unsupported while ETH
+balance can still be usable. A failed token source does not hide the other reports,
+and failed or missing evidence is not interpreted as a zero balance or no activity.
+Arrow keys and Home/End operate the tab list. Public links and Space history/reload
+preserve the combined selection; network changes and new queries cancel stale
+public work. The authenticated workspace also clears pending/visible results when
+the session or organization changes.
+
+**Download all three asset reports** exports `bloch-address-research-bundle/1`.
+It contains the ordered ETH/USDT/USDC results, each complete child report and its
+original `report_sha256`, or an explicit unavailable result with a bounded error
+code. `bundle_sha256` hashes UTF-8 `JSON.stringify(bundle without bundle_sha256)`
+in returned property order. A checksum binds supplied bytes; it does not attest
+source identity or make these independently captured observations simultaneous.
+The collector validates each child hash and exact scope, limits each compact child
+to 2,800,100 bytes and the compact bundle to 8,500,000 bytes, and never truncates
+evidence. Single-asset report downloads retain their existing format. Neither
+bundle downloads nor public asset tabs contain organization scores or records.
+
+The private view separately searches the organization's retained ETH, USDT and
+USDC observations. Each asset has its own result section, index coverage, error
+state and pagination cursor. **More observations** advances only assets with an
+outstanding cursor, without collecting public sources again. Existing tenant and
+score-read authorization applies to every retained request; the public bundle
+remains independently usable when a retained asset query fails.
+
 ### Address evidence inspection
 
 Every available address graph now has an interactive evidence viewer in the three
