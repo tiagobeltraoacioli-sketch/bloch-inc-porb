@@ -100,7 +100,7 @@ function normalizeLog(log, {contract, address, first, last, finalizedHash}) {
   };
 }
 
-export async function queryEthereumActivity({address, asset, toBlock = null, expectedHash = null, env = {}, fetcher = fetch, now = () => new Date()}) {
+export async function queryEthereumActivity({address, asset, toBlock = null, expectedHash = null, env = {}, fetcher = fetch, now = () => new Date(), checkpoint}) {
   const token = String(asset || '').toUpperCase();
   if (!ADDRESS.test(address || '') || !['ETH', 'USDT', 'USDC'].includes(token)) {
     return fail('invalid_address_or_asset', 400);
@@ -112,9 +112,10 @@ export async function queryEthereumActivity({address, asset, toBlock = null, exp
       || !HEX32.test(expectedHash))) return fail('invalid_expected_hash', 400);
   try {
     const endpoint = rpcEndpoint(env);
-    const chainId = await rpc(fetcher, endpoint, 'eth_chainId', [], 1);
+    const shared = checkpoint ? await checkpoint() : null;
+    const chainId = checkpoint ? shared.chainId : await rpc(fetcher, endpoint, 'eth_chainId', [], 1);
     if (quantity(chainId) !== 1n) return fail('ethereum_network_mismatch');
-    const block = await rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false], 2);
+    const block = checkpoint ? shared.block : await rpc(fetcher, endpoint, 'eth_getBlockByNumber', ['finalized', false], 2);
     if (!block || typeof block.hash !== 'string' || !HEX32.test(block.hash)) {
       throw new Error('invalid_rpc_response');
     }

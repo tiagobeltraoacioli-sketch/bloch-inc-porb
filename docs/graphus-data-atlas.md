@@ -1030,3 +1030,79 @@ no source reliability fix is claimed. Anonymous private references, research and
 Atlas returned 401 with no-store; private AML/Space routes reached login and
 retired public score endpoints returned 410. No production account or private
 record was created or changed, and authenticated production was not exercised.
+
+
+## Shared token research checkpoint — 2026-09-27
+
+Space deployment `b139d678` publishes a request-local Ethereum checkpoint for
+USDT/USDC address research. The public rednblue explorer and authenticated
+research gateway consume this Space API, so portal deployment `2c85cec0` serves
+the updated reports without a new frontend release. Healthy token research now
+uses five RPC calls instead of seven: chain ID, finalized header, token balance
+and the two directional log filters. The validated header is immutable and
+shared by the balance and log-window end. A new search or another asset request
+obtains its own header; nothing is cached across users, requests or references.
+
+An unavailable, wrong-chain or malformed checkpoint prevents dependent balance
+and log reads. After a valid checkpoint, balance and activity failures remain
+independent: either usable module survives the other's failure. The same activity
+capture continues to feed the ledger and graph. Report coverage now describes
+the shared source-reported checkpoint and explicitly excludes atomic-snapshot,
+complete-history and independently verified finality claims. Existing report,
+bundle and saved-file versions remain compatible. Native ETH, Bitcoin, Bloch,
+standalone adapter behavior and descriptive models retain their existing scope.
+
+Research now cancels unread failed HTTP bodies. New application diagnostics emit
+only network, asset, an allowlisted operation, failure class, HTTP status, bounded
+retry timing and elapsed milliseconds. They omit endpoints, searched references,
+RPC parameters, raw errors and response bodies. Observer failures cannot change
+request results. This adds operational visibility without changing infrastructure
+access logs or exposing these diagnostics in public research reports. The
+45-second research deadline, source windows, source operator and client/manual
+retry behavior remain unchanged. No fallback provider or automatic retry was added.
+
+All 409 Node tests pass, including three new checkpoint/capture checks and three
+new source-diagnostic checks. Tests cover exact amounts and anchors, five-call
+collection, separate balance/activity failure, malformed or wrong-chain headers,
+no dependent reads after checkpoint failure, fresh searches, simultaneous assets,
+strict saved-reader compatibility, failed-body cancellation, signal propagation
+and diagnostic redaction/isolation. Two WebKit suites pass: address research and
+HTTP recovery across public, authenticated and mounted Space views. They include
+exports, evidence, private retained results, logout, waits, keyboard operation,
+mobile overflow and CSP. Both Functions bundles compile with the appropriate
+compatibility flags, and the shared Space shell check passes. No UI assets,
+endpoint, score, migration or OpenAPI contract changed; OpenAPI remains at 73
+operations, migrations at 0010 and the shell cache at v6. Graphus remains
+`1b9f2d39` and the retired AML redirect `0f1194d4`.
+
+The source investigation correlated two public HTML 502 responses at
+`2026-09-27T20:41:08.016Z` with normally completed Worker responses of status 502,
+no runtime exceptions, and activity-source HTTP failures. That establishes the
+application/source failure path for those requests, not the upstream cause or
+exact failed RPC operation. Diagnostic-only deployment `b801a7bf` was subsequently
+superseded by `b139d678`. Controlled local reads of the same public RPC succeeded,
+and the updated real adapter used five calls per token. Sanitized investigation
+evidence is ignored at `.data/porb-portal/source-availability-diagnosis.json`;
+raw infrastructure request headers were not added to the repository.
+
+The first browser verification at `2026-09-27T20:51:06.835Z` received 502 for all
+six asset queries, honored the 60-second pause and preserved downloadable
+unavailable bundles. It could not validate a complete checkpoint and is retained
+separately as `address-checkpoint-first-verification.json`. After the pause,
+public reads recovered. Final read-only production verification at
+`2026-09-27T20:53:13.489Z` passed on both custom domains. All six initial queries
+and both manual ETH updates returned 200. Four real USDT/USDC captures had ledger,
+graph and analytics available, with identical balance/activity/graph window-end
+number, hash and timestamp at source-reported finalized block 26,071,223. The
+strict saved reader accepted their full exported bundles. Each ETH update made
+one request and preserved both token captures. Mobile layout and page JavaScript
+checks passed. Native ETH history remained unsupported and descriptive ML was
+unavailable in these observations. The final artifact is ignored at
+`.data/porb-portal/address-checkpoint-release.json`.
+
+Anonymous private reference/research/Atlas requests returned 401 with no-store,
+AML/mounted Space reached login and retired public scores returned 410. No
+production account or private record was created or changed. Authenticated
+behavior was tested only with isolated synthetic local accounts. Intermittent
+502 responses remain an observed limitation; reducing redundant reads and later
+successful checks do not establish a source reliability fix.

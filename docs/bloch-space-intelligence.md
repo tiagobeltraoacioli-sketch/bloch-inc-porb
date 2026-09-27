@@ -219,3 +219,8 @@ usable captures and requires an explicit retry after the wait. No retry runs
 automatically. See [HTTP recovery](unified-intelligence.md#http-failures-and-manual-recovery).
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.
+USDT/USDC research now uses five source calls instead of seven by sharing one
+validated finalized checkpoint between balance and the end of the token-log
+window. The report discloses the shared block and separate-read limits. Failures
+after that checkpoint still preserve the independently available module, and
+every new research request obtains a fresh checkpoint.

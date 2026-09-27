@@ -33,7 +33,7 @@ export async function onRequest(context) {
   });
   const url = new URL(request.url);
   let result;
-  if(url.pathname==='/api/research')result=await handleResearch(url,{env});
+  if(url.pathname==='/api/research')result=await handleResearch(url,{env,observe:record=>console.warn('address_research_source_failure',record)});
   else if(url.pathname==='/api/graph')result=await handleGraph(url,{env});
   else if(url.pathname==='/api/graphus'&&url.searchParams.size===1)result=await graphusSnapshot(url.searchParams.get('network'));
   else if (url.pathname === '/api/intelligence' && url.searchParams.size === 1 && url.searchParams.get('network') === 'bitcoin') {

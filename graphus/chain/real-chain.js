@@ -217,7 +217,7 @@ async function rpc(fetcher, endpoint, method, params, id) {
   return response.result;
 }
 
-async function ethereumWallet(address, asset, env, fetcher, now) {
+async function ethereumWallet(address, asset, env, fetcher, now, checkpoint) {
   const endpoint = env.GRAPHUS_ETHEREUM_RPC_URL;
   let rpcUrl;
   try { rpcUrl = new URL(endpoint); }
@@ -225,9 +225,10 @@ async function ethereumWallet(address, asset, env, fetcher, now) {
   if (rpcUrl.protocol !== 'https:' || rpcUrl.username || rpcUrl.password) {
     throw new Error('ethereum_rpc_not_configured');
   }
-  const chainId = await rpc(fetcher, rpcUrl.href, 'eth_chainId', [], 1);
+  const shared = checkpoint ? await checkpoint() : null;
+  const chainId = checkpoint ? shared.chainId : await rpc(fetcher, rpcUrl.href, 'eth_chainId', [], 1);
   if (hexQuantity(chainId) !== 1n) throw new Error('ethereum_network_mismatch');
-  const block = await rpc(fetcher, rpcUrl.href, 'eth_getBlockByNumber', ['finalized', false], 2);
+  const block = checkpoint ? shared.block : await rpc(fetcher, rpcUrl.href, 'eth_getBlockByNumber', ['finalized', false], 2);
   if (!block || !/^[0-9a-f]{64}$/i.test((block.hash || '').replace(/^0x/, ''))) {
     throw new Error('invalid_rpc_response');
   }
@@ -268,7 +269,7 @@ async function ethereumWallet(address, asset, env, fetcher, now) {
   };
 }
 
-export async function queryChainWallet({network, asset, address, env = {}, fetcher = fetch, now = () => new Date()}) {
+export async function queryChainWallet({network, asset, address, env = {}, fetcher = fetch, now = () => new Date(), checkpoint}) {
   const chain = String(network || '').toLowerCase();
   const token = String(asset || (chain.startsWith('bitcoin') || chain === 'btc' ? 'BTC' : 'ETH')).toUpperCase();
   if (chain === 'bloch' || chain === 'bloch-mainnet' || token === 'BLCH') {
@@ -282,7 +283,7 @@ export async function queryChainWallet({network, asset, address, env = {}, fetch
     }
     if (chain === 'ethereum' || chain === 'ethereum-mainnet' || chain === 'eth') {
       if (!['ETH', 'USDT', 'USDC'].includes(token) || !ethAddress(address)) return failure('invalid_address_or_asset', 400);
-      return {status: 200, body: await ethereumWallet(address, token, env, fetcher, now)};
+      return {status: 200, body: await ethereumWallet(address, token, env, fetcher, now, checkpoint)};
     }
     return failure('unsupported_network', 400);
   } catch (error) {

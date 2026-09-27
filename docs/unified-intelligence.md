@@ -110,14 +110,29 @@ shared module budget. Public and retained results never merge their snapshots.
 New searches clear prior output; superseded replies cannot replace the latest
 query. Logout/organization changes invalidate pending private research results.
 
-For USDT/USDC, the ledger's token activity and the graph now consume the same
-validated activity capture within one research request. Its events, retrieval time
-and window anchor are preserved in both views. Balance remains a separate source
-observation. A successful current-window token query uses seven RPC calls instead
-of eleven: three for balance and four for activity. A failed activity capture is
-shared too, with no automatic second attempt. Captures are never cached across
-requests, assets, addresses or users. Usable balance or graph evidence still
-survives an independently failed module.
+For USDT/USDC, the ledger's token activity and graph consume the same validated
+activity capture within one research request. Balance and the end of the log
+window now use one immutable source-reported finalized checkpoint: chain ID,
+block number, hash and time are validated before either dependent read. A healthy
+query uses five RPC calls instead of seven: two for the checkpoint, one for balance
+and two for indexed token logs. The shared activity events, retrieval time and
+window anchor remain unchanged between views. Balance and logs are separate
+source observations, not an atomic state snapshot or independent finality proof.
+
+An invalid or unavailable checkpoint prevents unanchored balance/log requests.
+After a valid checkpoint, a failed balance does not hide the graph and failed
+activity does not hide the balance. Failures are shared without an automatic
+second attempt. Checkpoints and captures never persist across requests, assets,
+addresses or users; a manual new query obtains a new checkpoint. Native ETH,
+Bitcoin, Bloch and standalone adapter calls retain their existing behavior.
+
+Research cancels unread HTTP failure bodies. Application diagnostic events for
+failed source requests include only network, asset, an allowlisted operation,
+failure class, HTTP status, bounded retry timing and elapsed milliseconds. They
+contain no endpoint, searched reference, RPC parameters, exception text or response
+body. A failed diagnostic callback cannot affect a source result. This does not
+change infrastructure access-log policies or provide an upstream availability
+guarantee. The 45-second research deadline and existing per-read limits remain.
 
 ### Ethereum address query across assets
 

@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {verifyResearchBundle} from '../space/public/assets/address-research-bundle.js';
+import {openSavedResearch} from '../space/public/assets/address-research-reader.js';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||process.argv[2]||'playwright');
 const root=new URL('../',import.meta.url),reference=process.argv.find(v=>v.startsWith('--reference='))?.slice(12);
+const checkpoint=process.argv.includes('--checkpoint');
 assert.match(reference||'',/^0x[a-f0-9]{40}$/,'Provide a reference previously observed in a public source');
 const summary={checked_at:new Date().toISOString(),reference,checks:[],observations:[]},errors=[];
-const browser=await webkit.launch(),context=await browser.newContext({viewport:{width:1440,height:1000}}),hash=value=>createHash('sha256').update(value).digest('hex');
+const browser=await webkit.launch(),context=await browser.newContext({viewport:{width:1440,height:1000},...(checkpoint?{extraHTTPHeaders:{'x-atlas-probe':'atlas-availability-20260927'}}:{})}),hash=value=>createHash('sha256').update(value).digest('hex');
 try{
   for(const path of ['/v1/references?asset=ETH&reference='+reference,'/v1/space/research?network=ethereum&asset=ETH&query='+reference,'/v1/atlas/private']){const r=await context.request.get('https://rednblue.space/api/porb'+path);assert.equal(r.status(),401);assert.match(r.headers()['cache-control'],/no-store/);}
   for(const path of ['/aml/assets/demo.json','/space/']){let url='https://rednblue.space'+path,login=false;for(let i=0;i<5;i++){const r=await context.request.get(url,{maxRedirects:0});assert.ok([301,302,307,308].includes(r.status()));const next=new URL(r.headers().location,url);assert.equal(next.origin,'https://rednblue.space');if(next.pathname==='/portal/'){login=true;break;}url=next.href;}assert.ok(login);}
@@ -25,8 +27,18 @@ try{
     page.on('pageerror',e=>errors.push({origin,message:e.message}));page.on('request',r=>{const u=new URL(r.url());if(u.pathname==='/api/research')requests.push(u.searchParams.get('asset'));});page.on('response',r=>{const u=new URL(r.url());if(u.pathname==='/api/research')record.responses.push({asset:u.searchParams.get('asset'),status:r.status(),content_type:r.headers()['content-type'],retry_after:r.headers()['retry-after']||null});});
     await page.goto(origin+(origin.includes('rednblue')?'/explore/?':'/?')+new URLSearchParams({network:'ethereum',kind:'address',asset:'ETH_ALL',query:reference}),{waitUntil:'domcontentloaded',timeout:60000});await page.locator('[data-bundle-export]').waitFor({timeout:75000});
     assert.deepEqual(requests.slice().sort(),['ETH','USDC','USDT']);
-    const download=async()=>{const pending=page.waitForEvent('download');await page.click('[data-bundle-export]');return verifyResearchBundle(JSON.parse(await readFile(await(await pending).path(),'utf8')));};
+    const download=async()=>{const pending=page.waitForEvent('download');await page.click('[data-bundle-export]');const contents=await readFile(await(await pending).path(),'utf8'),bundle=await verifyResearchBundle(JSON.parse(contents));if(checkpoint)assert.deepEqual(await openSavedResearch(contents),bundle);return bundle;};
     const before=await download();record.initial={bundle_sha256:before.bundle_sha256,assets:before.results.map(r=>({asset:r.asset,status:r.status,...(r.error?{error:r.error}:{modules:Object.fromEntries(Object.entries(r.report.modules).map(([k,v])=>[k,v.status]))})}))};
+    if(checkpoint){
+      record.checkpoints=[];
+      for(const item of before.results.filter(r=>r.status==='available'&&['USDT','USDC'].includes(r.asset))){
+        assert.match(item.report.coverage,/one source-reported finalized checkpoint/);const {ledger,graph}=item.report.modules;
+        if(ledger.status==='available'&&graph.status==='available'){
+          const balance=ledger.data.wallet.balance.block,activity=ledger.data.token_activity.observation.window_end_anchor;
+          assert.deepEqual(balance,activity);assert.deepEqual(graph.data.observations[0].anchor,activity);record.checkpoints.push({asset:item.asset,anchor:activity});
+        }
+      }
+    }
     if(await page.locator('[data-research-wait]').isVisible()){
       assert.equal(await page.locator('[data-bundle-refresh]:disabled').count(),3);await page.waitForTimeout(1100);assert.equal(requests.length,3);assert.deepEqual(await download(),before);record.recovery={status:'service requested a pause; no manual retry sent',message:await page.locator('[data-research-wait]').innerText()};
     }else{
@@ -39,5 +51,6 @@ try{
     await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));console.log(JSON.stringify(record));await page.close();
   }
   assert.deepEqual(errors,[]);summary.status='passed';summary.browser_errors=errors;
+  if(checkpoint){summary.matched_checkpoints=summary.observations.reduce((total,item)=>total+item.checkpoints.length,0);assert.ok(summary.matched_checkpoints>0,'No complete token checkpoint was available to verify');summary.checks.push('Real token balances and graph window ends share exact anchors; new bundles reopen through the strict saved reader.');}
 }catch(error){summary.status='failed';summary.error=String(error.message);console.error(summary.error);process.exitCode=1;}
-finally{await mkdir(new URL('.data/porb-portal/',root),{recursive:true,mode:0o700});await writeFile(new URL('.data/porb-portal/address-request-release.json',root),JSON.stringify(summary,null,2),{mode:0o600});await browser.close();}
+finally{await mkdir(new URL('.data/porb-portal/',root),{recursive:true,mode:0o700});await writeFile(new URL('.data/porb-portal/'+(checkpoint?'address-checkpoint-release.json':'address-request-release.json'),root),JSON.stringify(summary,null,2),{mode:0o600});await browser.close();}
