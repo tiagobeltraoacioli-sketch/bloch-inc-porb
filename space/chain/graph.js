@@ -116,7 +116,7 @@ export function tokenLogs(logs,asset,head,at=new Date().toISOString()){
   if(logs.length>512)b.graph.warnings.push(`${logs.length} logs returned; only the first 512 are included.`);
   return b.done();
 }
-export async function handleGraph(url,{env={},fetcher=fetch,explore=handleExplore}={}){
+export async function handleGraph(url,{env={},fetcher=fetch,explore=handleExplore,activity=queryEthereumActivity}={}){
   const p=url.searchParams,network=p.get('network'),asset=p.get('asset')||{bitcoin:'BTC',ethereum:'ETH',bloch:'BLCH'}[network],kind=p.get('kind')||'recent';
   let query=p.get('query')||'',cursor=p.get('cursor');
   const bad=error=>({status:400,body:{error}});
@@ -136,7 +136,7 @@ export async function handleGraph(url,{env={},fetcher=fetch,explore=handleExplor
     }else if(kind==='address'&&network==='bloch'){
       const response=await queryBlochHistoryPage({address:query,cursor,fetcher});if(response.status!==200)throw new Error(response.body.error);graph=blochHistory(response.body);
     }else if(kind==='address'&&network==='ethereum'&&asset!=='ETH'){
-      const response=await queryEthereumActivity({address:query,asset,toBlock:cursor,env,fetcher});if(response.status!==200)throw new Error(response.body.error);graph=tokenActivity(response.body);
+      const response=await activity({address:query,asset,toBlock:cursor,env,fetcher});if(response.status!==200)throw new Error(response.body.error);graph=tokenActivity(response.body);
     }else if(kind==='address'){
       const b=builder(network,asset,'Bloch Space capability boundary','Native ETH address transaction history requires an index; it is not served by this source.');b.node('address',query);b.graph.warnings.push('Native ETH address history is unavailable. Load a transaction or the recent finalized-block sample.');graph=b.done();
     }else if(network==='bitcoin'){

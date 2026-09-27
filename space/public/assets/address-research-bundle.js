@@ -21,7 +21,7 @@ async function checkedReport(raw,scope,asset){
   check(report.scope?.network===scope.network&&report.scope?.reference===scope.reference&&report.scope?.asset===asset,'research_scope_mismatch');
   return report;
 }
-function failure(error){
+export function researchFailure(error){
   if(error?.status===401||error?.status===403)return 'access_unavailable';
   if(error?.status===429||/rate_limit/i.test(error?.message||''))return 'rate_limited';
   if(['AbortError','TimeoutError'].includes(error?.name))return 'source_timeout';
@@ -39,7 +39,7 @@ export async function collectResearch(selection,request,{signal,now=()=>new Date
   }
   const results=await Promise.all(scope.assets.map(async asset=>{
     try{return {asset,status:'available',report:await checkedReport(await request(asset,scope),scope,asset)};}
-    catch(error){return {asset,status:'unavailable',error:failure(error)};}
+    catch(error){return {asset,status:'unavailable',error:researchFailure(error)};}
   }));
   signal?.throwIfAborted();
   const body={version:BUNDLE_VERSION,scope:{network:scope.network,reference:scope.reference,assets:scope.assets},assembled_at:now(),
@@ -64,4 +64,23 @@ export async function verifyResearchBundle(raw){
     else check(result.status==='unavailable'&&exactKeys(result,['asset','status','error'])&&['access_unavailable','rate_limited','source_timeout','source_unavailable','research_scope_mismatch','research_integrity_mismatch','unsupported_research_report','research_response_limit'].includes(result.error),'research_bundle_result_mismatch');
   }
   return bundle;
+}
+
+// Replace one entire capture, never stitch old and new modules. A failed update
+// leaves the original bundle untouched, including its assembly time and digest.
+export async function refreshResearch(bundle,asset,request,{signal,now=()=>new Date().toISOString()}={}){
+  signal?.throwIfAborted();
+  check(ETHEREUM_ASSETS.includes(asset),'invalid_research_asset');
+  const original=await verifyResearchBundle(bundle);
+  signal?.throwIfAborted();
+  const scope=researchSelection(ETHEREUM_SELECTION,original.scope.reference,original.scope.network);
+  const report=await checkedReport(await request(asset,scope),scope,asset);
+  signal?.throwIfAborted();
+  const {bundle_sha256,...body}=original;
+  body.results=body.results.map(item=>item.asset===asset?{asset,status:'available',report}:item);
+  body.assembled_at=now();
+  check(bytes(body)<=BUNDLE_LIMITS.bundle_bytes,'research_bundle_response_limit');
+  const updated={...body,bundle_sha256:await researchHash(body)};
+  signal?.throwIfAborted();
+  return updated;
 }

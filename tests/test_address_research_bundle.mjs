@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {researchSelection,collectResearch,verifyResearchBundle,BUNDLE_VERSION,BUNDLE_LIMITS} from '../space/public/assets/address-research-bundle.js';
+import {researchSelection,collectResearch,refreshResearch,researchFailure,verifyResearchBundle,BUNDLE_VERSION,BUNDLE_LIMITS} from '../space/public/assets/address-research-bundle.js';
 import {researchHash} from '../space/public/assets/address-research-core.js';
 import {researchReport,researchFixture,RESEARCH_AMOUNT} from './address_research_fixture.js';
 
@@ -63,4 +63,35 @@ test('bundle verification rejects reordered, omitted, mutated and contradictory 
     b=>b.results[0]={asset:'ETH',status:'unavailable',error:'source_unavailable',report:b.results[0].report},b=>b.assembled_at='not-a-date',
   ];
   for(const mutate of mutations){const b=structuredClone(original);mutate(b);await assert.rejects(()=>rehash(b).then(verifyResearchBundle));}
+});
+
+test('one asset refresh replaces its whole report and preserves other captures without recollection or mutation',async()=>{
+  const original=await collect(),before=JSON.stringify(original),calls=[];
+  const replacement=(await researchReport('USDT',{graphUnavailable:true})).body;
+  const updated=await refreshResearch(original,'USDT',async(asset,requestScope)=>{calls.push(asset);assert.deepEqual(requestScope,scope());return replacement;},{now:()=> '2026-09-27T02:00:00Z'});
+  assert.deepEqual(calls,['USDT']);assert.equal(JSON.stringify(original),before);
+  assert.equal(updated.assembled_at,'2026-09-27T02:00:00Z');assert.notEqual(updated.bundle_sha256,original.bundle_sha256);
+  assert.deepEqual(updated.results[0],original.results[0]);assert.deepEqual(updated.results[2],original.results[2]);
+  assert.deepEqual(updated.results[1].report,replacement);assert.equal(updated.results[1].report.modules.graph.status,'unavailable','Old graph cannot be stitched into a newer partial report');
+  await verifyResearchBundle(updated);replacement.modules.ledger.status='unavailable';assert.equal(updated.results[1].report.modules.ledger.status,'available');
+});
+test('retry recovers an unavailable asset; failed or untrusted refreshes leave all previous bytes intact',async()=>{
+  const original=await collect(asset=>{if(asset==='USDC')throw new Error('busy');return report(asset);}),before=JSON.stringify(original);
+  const updated=await refreshResearch(original,'USDC',report,{now});assert.equal(updated.results[2].status,'available');await verifyResearchBundle(updated);
+  const wrong=await report('USDT'),corrupt=await report('USDC');corrupt.modules.ledger.data.wallet.balance.base_units='0';
+  const oversized=await report('USDC');oversized.padding='x'.repeat(BUNDLE_LIMITS.report_bytes);
+  for(const request of [async()=>{throw Object.assign(new Error('private upstream detail'),{status:429});},async()=>wrong,async()=>corrupt,async()=>oversized]){
+    await assert.rejects(()=>refreshResearch(original,'USDC',request));assert.equal(JSON.stringify(original),before);
+  }
+  assert.equal(researchFailure({status:429,message:'private upstream detail'}),'rate_limited');assert.equal(researchFailure({status:401}),'access_unavailable');assert.equal(researchFailure(new DOMException('aborted','AbortError')),'source_timeout');
+});
+test('invalid bundle or asset and pre-aborted refreshes cannot issue a request; late refreshes cannot replace a newer search',async()=>{
+  const original=await collect(),controller=new AbortController();controller.abort();let calls=0;
+  const request=()=>{calls++;return report('USDT');};
+  await assert.rejects(()=>refreshResearch(original,'BTC',request),/invalid_research_asset/);
+  await assert.rejects(()=>refreshResearch({...original,bundle_sha256:'0'.repeat(64)},'USDT',request),/integrity/);
+  await assert.rejects(()=>refreshResearch(original,'USDT',request,{signal:controller.signal}),{name:'AbortError'});assert.equal(calls,0);
+  const late=new AbortController();let finish,started;const arrived=new Promise(resolve=>{started=resolve;});
+  const pending=refreshResearch(original,'USDT',()=>{started();return new Promise(resolve=>{finish=resolve;});},{signal:late.signal});
+  await arrived;late.abort();finish(await report('USDT'));await assert.rejects(()=>pending,{name:'AbortError'});await verifyResearchBundle(original);
 });

@@ -641,3 +641,65 @@ events or model results. Authenticated production execution remains unverified
 without an existing owner session; private behavior passed locally with isolated
 synthetic accounts. The timestamped result remains ignored at
 `.data/porb-portal/address-bundle-release.json`.
+
+## Address asset refresh release — 2026-09-27
+
+Portal deployment `8571232c` and Space deployment `cdf0cb50` publish individual
+asset updates in the combined Ethereum address search. Each tab can update an
+existing report or retry an unavailable one with one bounded request. Other
+captures, hashes, dates, evidence filters and selected tabs remain intact. A
+successful update replaces the entire asset report, including any unavailable
+modules in the newer capture; it never fills those gaps with older evidence.
+The combined download is reassembled and verified using its existing v1 format.
+A second download retains the complete bundle immediately before the last
+successful update in browser memory, until the next successful update or search.
+
+Updates are serialized while navigation, inspection and current downloads remain
+usable. Failed, rate-limited, mismatched and corrupt replies leave the original
+bundle unchanged and show its original capture date. A new query, network change,
+logout or organization change invalidates a pending update. Private retained
+observations and their pagination are not recollected by a public asset update.
+
+The ledger's token activity and its graph now share one validated USDT/USDC
+capture inside each research request. A normal successful token report makes
+seven RPC calls instead of eleven. The balance is still a separate observation;
+activity events, retrieval time and anchor agree between its two views. Failures
+are shared without a hidden retry. Nothing is cached across requests, assets,
+addresses or sessions. No public score, model or ML availability claim is added.
+Graphus remains at `1b9f2d39`, the retired AML redirect at `0f1194d4`, migrations at
+0010, the partner contract at 73 operations and the Space shell cache at v5.
+
+Validation: all 374 Node tests pass, including six new tests for real adapter
+composition, exact token amounts, seven-call collection, independent balance
+failure, shared activity failure, request isolation, immutable asset replacement,
+recovery, rejected updates and cancellation. Four WebKit suites pass: single-asset
+research/evidence, combined search/refresh, the general private portal and real PWA
+activation/update/offline behavior. Browser checks cover one-request updates,
+preserved filters/tab choice, original and previous exports, retry recovery,
+partial replacement, rate limits, current exports during an update, new-query and
+network cancellation, independent private pagination, logout during an update,
+mobile layouts and CSP. Offline updates keep the exact dated bundle with a failure
+notice; a new offline search clears it and returns explicit unavailable results.
+Desktop/mobile screenshots were inspected. Both Functions bundles compile with
+their runtime compatibility settings. Generated mounts match production bytes;
+rebuilding OpenAPI leaves the existing partner contract unchanged.
+
+Read-only production verification at `2026-09-27T01:29:28.760Z` passed on both
+custom domains with no browser errors. Release assets matched local bytes. Each
+combined search issued exactly three asset requests; a manual USDT update issued
+one additional request, preserved the other two captures and exported both the
+verified new bundle and the complete previous bundle. Both domains returned 36
+focused USDT events with descriptive ML available. USDC returned a source-reported
+empty bounded window, with ML unavailable; this does not establish no activity
+outside that window. Token ledger/graph events, amounts, timestamps and window
+anchors agreed, and both token CSV exports matched their captured evidence.
+Native ETH balance was usable while native address history remained unsupported.
+Mobile layouts and initial PWA activation passed without a document reload.
+
+Anonymous private reference, research and Atlas APIs returned 401; private AML and
+Space pages led to login, and retired public score endpoints returned 410. No
+private production writes or synthetic production records were created. Private
+execution remains validated locally with an isolated synthetic account, not with
+an unavailable production owner session. Source availability remains bounded and
+may change on later requests. The ignored verification artifact is
+`.data/porb-portal/address-bundle-release.json`.

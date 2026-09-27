@@ -163,5 +163,11 @@ The **ETH + USDT + USDC** selection queries the same Ethereum address for all th
 assets concurrently. Asset tabs retain separate balances, source captures, graph
 filters and ML cohorts; a complete hashed bundle can be downloaded without merging
 histories or private scores. See [combined address research](unified-intelligence.md#ethereum-address-query-across-assets).
+Each tab can update or retry just that asset without collecting the other two or
+clearing their filters. A failed update retains the original dated capture; a
+successful one replaces the whole asset report and offers the previous bundle for
+download until another successful update or new search. Token graph and ledger
+activity share one validated request-local capture, while balance keeps its own
+observation. Updates follow the existing public/private gateway budgets.
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

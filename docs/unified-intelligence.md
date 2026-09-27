@@ -110,6 +110,15 @@ shared module budget. Public and retained results never merge their snapshots.
 New searches clear prior output; superseded replies cannot replace the latest
 query. Logout/organization changes invalidate pending private research results.
 
+For USDT/USDC, the ledger's token activity and the graph now consume the same
+validated activity capture within one research request. Its events, retrieval time
+and window anchor are preserved in both views. Balance remains a separate source
+observation. A successful current-window token query uses seven RPC calls instead
+of eleven: three for balance and four for activity. A failed activity capture is
+shared too, with no automatic second attempt. Captures are never cached across
+requests, assets, addresses or users. Usable balance or graph evidence still
+survives an independently failed module.
+
 ### Ethereum address query across assets
 
 Choose **Ethereum: ETH + USDT + USDC** in public or private address research, or
@@ -142,6 +151,25 @@ The collector validates each child hash and exact scope, limits each compact chi
 to 2,800,100 bytes and the compact bundle to 8,500,000 bytes, and never truncates
 evidence. Single-asset report downloads retain their existing format. Neither
 bundle downloads nor public asset tabs contain organization scores or records.
+
+Each asset tab offers **Update ETH/USDT/USDC**, or **Retry** when its report could
+not be collected. A manual update makes one existing bounded research request for
+that exact asset and reference, under the same rate and authorization limits.
+Only one update may run at a time; tabs, filters and downloads remain usable.
+Success replaces the asset's entire report, including any newly unavailable
+modules, and reassembles the bundle with a new assembly time and digest. Other
+asset reports retain their exact content, timestamps, hashes and inspection state.
+Old evidence is never stitched into a newer partial capture.
+
+A failed, rate-limited, mismatched or corrupt update leaves the entire current
+bundle and filters unchanged. The status identifies the failure and the retained
+capture's original date; the download does not claim that an update succeeded.
+**Download previous bundle** preserves the complete bundle immediately before the
+last successful update, in browser memory until the next successful update or new
+search. Both versions verify using the existing bundle format. This is a local
+download convenience, not a retained history, synchronized snapshot or change
+analysis. New queries, network changes and logout/organization changes invalidate
+pending updates. Public asset updates never reload private retained-result pages.
 
 The private view separately searches the organization's retained ETH, USDT and
 USDC observations. Each asset has its own result section, index coverage, error

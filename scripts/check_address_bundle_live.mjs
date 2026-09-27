@@ -6,9 +6,19 @@ import {verifyResearchBundle} from '../space/public/assets/address-research-bund
 import {createAddressEvidence} from '../space/public/assets/address-evidence.js';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||process.argv[2]||'playwright');
 const root=new URL('../',import.meta.url),portal='https://rednblue.space',space='https://bloch.space';
-const summary={checked_at:new Date().toISOString(),scope:'public-ethereum-address-bundle-and-authentication-boundaries',checks:[],observations:[]},errors=[];
+const summary={checked_at:new Date().toISOString(),scope:'public-ethereum-address-refresh-and-authentication-boundaries',checks:[],observations:[]},errors=[];
 const note=message=>{summary.checks.push(message);console.log(message);},hash=value=>createHash('sha256').update(value).digest('hex');
 const browser=await webkit.launch(),context=await browser.newContext({viewport:{width:1440,height:1000}});
+function sharedCapture(item){
+  if(!['USDT','USDC'].includes(item.asset)||item.status!=='available')return false;
+  const m=item.report.modules;if(m.ledger.status!=='available'||m.graph.status!=='available')return false;
+  const activity=m.ledger.data.token_activity,graph=m.graph.data;assert.ok(activity,'Usable token views share one activity capture');
+  assert.equal(graph.observations.length,1);assert.equal(graph.observations[0].at,activity.observation.retrieved_at);assert.deepEqual(graph.observations[0].anchor,activity.observation.window_end_anchor);assert.equal(graph.edges.length,activity.activity.events.length);
+  for(const [i,event]of activity.activity.events.entries()){
+    const edge=graph.edges[i];assert.equal(edge.txid,event.transaction_hash);assert.equal(edge.amount,event.amount_base_units);assert.equal(edge.block.height,event.block_number);assert.equal(edge.block.hash,event.block_hash);assert.equal(edge.block.log,event.log_index);
+  }
+  return true;
+}
 await mkdir(new URL('.data/porb-portal/',root),{recursive:true,mode:0o700});
 try{
   for(const path of ['/v1/references?asset=ETH&reference=0x'+'1'.repeat(40),'/v1/space/research?network=ethereum&asset=USDT&query=0x'+'1'.repeat(40),'/v1/atlas/private']){
@@ -45,6 +55,7 @@ try{
       const selector=`[data-bundle-panel=${item.asset}]`,result={asset:item.asset,status:item.status};record.assets.push(result);
       if(item.status==='unavailable'){result.error=item.error;assert.equal(await page.locator(selector+' .address-research').count(),0);continue;}
       Object.assign(result,{ledger:item.report.modules.ledger.status,graph:item.report.modules.graph.status,machine_learning:item.report.modules.machine_learning.status,report_sha256:item.report.report_sha256});
+      result.shared_token_capture=sharedCapture(item);
       assert.deepEqual(JSON.parse(await download(selector+' [data-research-export]')),item.report,'Complete child report retains its original content');
       if(item.report.modules.graph.status==='available'){
         const model=createAddressEvidence(item.report);result.focused_events=model.query().events.length;
@@ -52,8 +63,22 @@ try{
       }else assert.equal(await page.locator(selector+' .ar-evidence').count(),0,'Unsupported graph stays explicit');
     }
     assert.deepEqual(JSON.parse(await download('[data-bundle-export]')),bundle,'Tab inspection preserves the original combined download');assert.equal(requests.length,3,'Tab and evidence inspection never collects another source');
+    const selected=bundle.results.find(item=>item.asset!=='ETH'&&(item.status==='unavailable'||item.report.modules.graph.status==='unavailable'))?.asset||'USDT';
+    await page.click(`[data-bundle-asset=${selected}]`);await page.click(`[data-bundle-refresh=${selected}]`);
+    await page.waitForFunction(asset=>{const status=document.querySelector('[data-bundle-status]')?.textContent;return status?.startsWith(asset+' updated')||status?.startsWith(asset+' update unavailable');},selected,{timeout:75000});
+    assert.equal(requests.length,4,'Manual refresh collects only one additional asset');assert.equal(requests[3],selected);
+    const updated=await verifyResearchBundle(JSON.parse(await download('[data-bundle-export]'))),succeeded=(await page.locator('[data-bundle-status]').innerText()).startsWith(selected+' updated');
+    record.refresh={asset:selected,succeeded,bundle_sha256:updated.bundle_sha256};
+    if(succeeded){
+      assert.notEqual(updated.bundle_sha256,bundle.bundle_sha256);assert.deepEqual(await verifyResearchBundle(JSON.parse(await download('[data-bundle-previous]'))),bundle,'Previous complete bundle remains available');
+      for(const [i,item]of bundle.results.entries())if(item.asset!==selected)assert.deepEqual(updated.results[i],item,'Other asset captures stay byte-identical');
+      const item=updated.results.find(item=>item.asset===selected);assert.equal(item.status,'available');assert.deepEqual(JSON.parse(await download(`[data-bundle-panel=${selected}] [data-research-export]`)),item.report);record.refresh.shared_token_capture=sharedCapture(item);record.refresh.modules=Object.fromEntries(Object.entries(item.report.modules).map(([name,value])=>[name,value.status]));
+    }else{
+      assert.deepEqual(updated,bundle,'Failed update retains the original content, timestamps and digest');assert.equal(await page.locator('[data-bundle-previous]').isVisible(),false);
+    }
+    assert.equal(loads,1,'A manual refresh preserves the current document');
     await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Combined address mobile layout');
-    console.log(JSON.stringify(record));note(origin+': three scoped asset requests, independent availability, original child/bundle hashes and mobile passed. '+(record.evidence_csv_assets.length?'Exact graph CSV checked for '+record.evidence_csv_assets.join(', ')+'.':'Graph sources were unavailable; no graph CSV workflow was exercised.'));await page.close();
+    console.log(JSON.stringify(record));note(origin+': scoped asset requests, one manual '+selected+' refresh ('+(succeeded?'new capture':'source unavailable; original preserved')+'), verified exports and mobile passed. '+(record.evidence_csv_assets.length?'Exact graph CSV checked for '+record.evidence_csv_assets.join(', ')+'.':'Graph sources were unavailable; no graph CSV workflow was exercised.'));await page.close();
   }
   summary.browser_errors=errors;assert.deepEqual(errors,[],'Production JavaScript errors');summary.status='passed';
 }catch(error){summary.status='failed';summary.error=String(error.message).split('\n')[0];console.error(summary.error);process.exitCode=1;}

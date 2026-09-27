@@ -62,7 +62,8 @@ export class Intelligence {
       $('reference-research').replaceChildren(el('p','Collecting public source records, graph analyses and machine learning…'));$('reference-more').hidden=true;this.launchers(scope.assets[0],scope.reference);
     }
     const epoch=this.referenceEpoch,queryScope=this.referenceQuery;
-    const publicResult=more?Promise.resolve():collectResearch(scope,asset=>this.api('/v1/space/research?'+new URLSearchParams({network:scope.network,asset,query:scope.reference})),{signal:this.researchController.signal}).then(report=>{if(epoch===this.referenceEpoch)renderResearchResult($('reference-research'),report,{mounted:true});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
+    const signal=this.researchController.signal,request=asset=>this.api('/v1/space/research?'+new URLSearchParams({network:queryScope.network,asset,query:queryScope.reference}));
+    const publicResult=more?Promise.resolve():collectResearch(scope,request,{signal}).then(report=>{if(epoch===this.referenceEpoch)renderResearchResult($('reference-research'),report,{mounted:true,request,signal});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
     const retained=[...this.referencePages].filter(([,page])=>!more||page.cursor).map(async([asset,page])=>{
       const query=new URLSearchParams({asset,reference:queryScope.reference,limit:'10'});if(more)query.set('cursor',page.cursor);
       try{

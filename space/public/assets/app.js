@@ -442,10 +442,10 @@ function renderTransaction(data,query) {
   return [left,aside];
 }
 
-function showResult(kind,data,query,asset) {
+function showResult(kind,data,query,asset,researchOptions={}) {
   const section=$('#result-section'),root=$('#result');clear(root);const grid=element('div','result-grid');
   if(kind==='address'&&data.version===BUNDLE_VERSION){
-    renderResearchResult(root,data,{mounted:location.pathname.startsWith('/space/')});section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
+    renderResearchResult(root,data,{mounted:location.pathname.startsWith('/space/'),...researchOptions});section.hidden=false;section.scrollIntoView({behavior:'smooth',block:'start'});return;
   }
   if(kind==='address'&&data.version==='bloch-address-research/1'){
     const report=element('div');renderResearchResult(report,data,{mounted:location.pathname.startsWith('/space/')});root.append(report);
@@ -470,7 +470,8 @@ async function search(kind,query,asset,offset=0,historyMode='push') {
   state.searchController?.abort();state.searchController=new AbortController();const signal=state.searchController.signal;
   $('#result').replaceChildren();$('#result-section').hidden=true;state.result=null;
   message('Looking up source records and module analyses…');
-  const lookup=async route=>route==='address'?collectResearch(researchSelection(asset,query,network),(selected,scope)=>api('research',network,scope.reference,selected,0,null,signal),{signal}):api(route,network,query,asset,offset,null,signal);
+  const request=(selected,scope)=>api('research',network,scope.reference,selected,0,null,signal);
+  const lookup=async route=>route==='address'?collectResearch(researchSelection(asset,query,network),request,{signal}):api(route,network,query,asset,offset,null,signal);
   try{
     let resolved=requested;let data;
     try{data=await lookup(resolved);}catch(error){
@@ -483,7 +484,7 @@ async function search(kind,query,asset,offset=0,historyMode='push') {
       }else throw error;
     }
     if(sequence!==state.request)return;
-    state.result={kind:resolved,query,asset,offset};message('');showResult(resolved,data,query,asset);
+    state.result={kind:resolved,query,asset,offset};message('');showResult(resolved,data,query,asset,{request,signal});
     const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);if(resolved==='block'&&offset>0)params.set('offset',String(offset));
     setHistory(params,historyMode);
   }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}

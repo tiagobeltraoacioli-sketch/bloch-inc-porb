@@ -18,12 +18,13 @@ async function search(){
   try{
     const asset=form.elements.asset.value,scope=researchSelection(asset,form.elements.query.value);
     const params=new URLSearchParams({network:scope.network,asset,query:scope.reference});
-    const body=await collectResearch(scope,async selected=>{
+    const request=async selected=>{
       const response=await fetch('/api/research?'+new URLSearchParams({network:scope.network,asset:selected,query:scope.reference}),{cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
       const value=await response.json();if(!response.ok){const error=new Error(value.error||'source_unavailable');error.status=response.status;throw error;}return value;
-    },{signal});
+    };
+    const body=await collectResearch(scope,request,{signal});
     if(epoch!==sequence)return;
-    renderResearchResult(result,body);status.textContent=body.results?.every(r=>r.status==='unavailable')?'No asset report could be collected. Each source failure is shown separately.':'Source observations loaded. Coverage and unavailable modules are stated in the report.';
+    renderResearchResult(result,body,{request,signal});status.textContent='Collection finished. Current source availability and coverage are shown in each asset report.';
     history.replaceState(null,'',location.pathname+'?'+params);
   }catch(error){if(epoch===sequence)status.textContent='Address research unavailable: '+error.message;}
 }

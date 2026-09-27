@@ -1,5 +1,6 @@
 import {handleExplore} from './explorer.js';
 import {handleGraph} from './graph.js';
+import {queryEthereumActivity} from '../../graphus/chain/ethereum-activity.js';
 import {researchScope,analyzeAddress,researchHash,RESEARCH_VERSION} from '../public/assets/address-research-core.js';
 
 const unavailable=reason=>({status:'unavailable',reason});
@@ -7,9 +8,13 @@ export async function handleResearch(url,{env={},fetcher=fetch,explore=handleExp
   let scope;try{scope=researchScope(url);}catch(error){return {status:400,body:{error:error.message}};}
   const {network,asset,reference}=scope,params=new URLSearchParams({network,asset,query:reference}),deadline=AbortSignal.timeout(45000);
   const boundedFetch=(input,init={})=>fetcher(input,{...init,signal:init.signal?AbortSignal.any([deadline,init.signal]):deadline});
+  // Both token views use one validated activity capture within this request.
+  // Balance remains a separate observation; neither results nor failures persist.
+  let activityResult;
+  const activity=()=>activityResult??=queryEthereumActivity({address:reference,asset,env,fetcher:boundedFetch,now:()=>new Date(now())});
   const [walletResult,graphResult]=await Promise.allSettled([
-    explore(new URL('https://bloch.space/api/address?'+params),{env,fetcher:boundedFetch,now}),
-    asset==='ETH'?Promise.resolve(null):graph(new URL('https://bloch.space/api/graph?'+params+'&kind=address'),{env,fetcher:boundedFetch}),
+    explore(new URL('https://bloch.space/api/address?'+params),{env,fetcher:boundedFetch,now,activity}),
+    asset==='ETH'?Promise.resolve(null):graph(new URL('https://bloch.space/api/graph?'+params+'&kind=address'),{env,fetcher:boundedFetch,activity}),
   ]);
   let ledger=unavailable('The address source could not return a consistent observation.'),evidence=unavailable('The graph source could not return a consistent observation.'),analytics=unavailable('Graph evidence is unavailable.'),machine_learning=unavailable('Graph evidence is unavailable.');
   if(walletResult.status==='fulfilled'&&walletResult.value?.status===200){

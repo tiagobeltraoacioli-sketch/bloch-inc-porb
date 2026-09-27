@@ -529,14 +529,14 @@ export function blochTransactionPosition(tx, health) {
   return result;
 }
 
-async function address(fetcher, env, network, asset, query, now) {
+async function address(fetcher, env, network, asset, query, now, loadActivity) {
   const chain = {bitcoin:'bitcoin-mainnet', ethereum:'ethereum-mainnet', bloch:'bloch-mainnet'}[network];
   const result = await queryChainWallet({network: chain, asset, address: query, env, fetcher});
   if (result.status !== 200) return reply(result.status, result.body);
   let activity = null;
   let utxos = null;
   if (network === 'ethereum' && ['USDT', 'USDC'].includes(asset)) {
-    const response = await queryEthereumActivity({asset, address: query, env, fetcher});
+    const response = await loadActivity({asset, address: query, env, fetcher});
     if (response.status === 200) activity = response.body;
   }
   if (network === 'bitcoin') {
@@ -554,7 +554,7 @@ async function address(fetcher, env, network, asset, query, now) {
   return reply(200, {...source(network, 'Graphus public-chain adapter', now(), 'Graphus queries one identifier and a bounded observation window; UTXO details, when available, are a separate source snapshot.'), wallet: result.body, token_activity: activity, utxos});
 }
 
-export async function handleExplore(url, {env = {}, fetcher = fetch, now = () => new Date().toISOString()} = {}) {
+export async function handleExplore(url, {env = {}, fetcher = fetch, now = () => new Date().toISOString(), activity = queryEthereumActivity} = {}) {
   if (url.search.length > 256) return bad('query_too_long');
   const route = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
   const network = url.searchParams.get('network');
@@ -602,7 +602,7 @@ export async function handleExplore(url, {env = {}, fetcher = fetch, now = () =>
   if (route === 'tx' && !isHex64(query)) return bad('invalid_transaction');
   if (!['overview', 'address', 'block', 'tx'].includes(route)) return bad('not_found', 404);
   try {
-    if (route === 'address') return address(fetcher, env, network, asset, query, now);
+    if (route === 'address') return address(fetcher, env, network, asset, query, now, activity);
     const body = route === 'overview' ? await ({bitcoin:bitcoinOverview, ethereum:(f,n) => ethereumOverview(f,env,n), bloch:blochOverview}[network])(fetcher, now)
       : route === 'block' ? await ({bitcoin:bitcoinBlock, ethereum:(f,q,n,o) => ethereumBlock(f,env,q,n,o), bloch:blochBlock}[network])(fetcher, network === 'bloch' ? query.replace(/^0x/, '').toLowerCase() : query, now, offset)
       : await ({bitcoin:bitcoinTx, ethereum:(f,q,n) => ethereumTx(f,env,`0x${q.replace(/^0x/, '')}`,n), bloch:blochTx}[network])(fetcher, query.replace(/^0x/, '').toLowerCase(), now);
