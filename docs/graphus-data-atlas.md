@@ -973,3 +973,60 @@ Anonymous private reference/research/Atlas APIs returned 401 with no-store, priv
 AML/Space paths reached login and retired public score endpoints returned 410.
 No production account or private record was created or changed. Private reader
 and logout behavior were tested only with isolated synthetic local accounts.
+
+
+## Address research HTTP recovery — 2026-09-27
+
+Deployed Space `5086517d` and portal `2c85cec0`. Public address research and the
+private reference workspace now use the same bounded request client. HTTP
+failures are handled before JSON parsing, so an HTML error page cannot replace
+the actual response status with a parser error. Public and authenticated research
+gateways sanitize error bodies while preserving allowed statuses and bounded
+`Retry-After` hints. Successful reports retain the existing scope and digest
+verification, with a 3 MiB response limit and 60-second client deadline.
+
+A page-local wait notice honors seconds or valid HTTP dates on 429/502/503/504.
+A 429 without a valid hint defaults to 60 seconds; explicit zero remains zero.
+The longest active wait applies across address searches and individual/bundle
+updates, with a maximum accepted hint of one day. A concurrent success does not
+clear it. Existing captures, evidence filters, local comparisons and downloads
+remain usable. Expiry only enables the controls: it never starts another request.
+Repeated submissions during the wait cannot clear the current report or trigger
+a new source lookup. No wait state is persisted or added to saved research JSON.
+Private workspace reset aborts pending research and clears the wait; expired
+sessions still clear private views and return to login.
+
+All 403 Node tests pass, including eight new request/gateway tests. Eight WebKit
+suites pass: HTTP recovery, combined queries, individual refresh, saved reader,
+private portal, address research/evidence, saved-file comparison and PWA lifecycle.
+Together, the request and recovery checks cover HTML failures, HTTP dates and clock skew, explicit zero,
+429 fallback, simultaneous requests, manual retry after expiry, preserved exports,
+local comparisons and private retained rows, aborted/stale responses, response
+limits, deadlines and session expiry. Forced service responses and accounts were
+used only in isolated local fixtures. Desktop/mobile screenshots were inspected;
+keyboard operation, overflow and functional CSP checks pass. Both Functions
+bundles compile, the shared shell check passes and OpenAPI stays at 73 operations.
+No endpoint, source adapter, model, score or migration changed. Graphus remains
+`1b9f2d39`, retired AML `0f1194d4`, migrations through 0010 and shell cache v6.
+The changed research assets are not in the precache.
+
+Read-only production verification at `2026-09-27T20:25:26.132Z` passed on both
+custom domains, including byte-for-byte deployed asset checks. Rednblue's ETH
+and USDT requests returned sanitized JSON 502 with `Retry-After: 60`; USDC
+returned 200 with ledger data. All three update buttons stayed disabled during
+the wait, exports preserved the original bundle, and no retry was sent. Space's
+three initial requests returned 200. One manual ETH refresh made exactly one
+additional request and left the token captures unchanged. Mobile layouts and
+page JavaScript checks passed. Token graph data and descriptive ML were
+unavailable in these observations; native ETH history remained unsupported.
+The verification artifact is ignored at
+`.data/porb-portal/address-request-release.json`.
+
+An earlier public probe at `2026-09-27T20:08:14.316Z` observed HTML 502 responses
+with `Retry-After: 60` on ETH from both domains while token reports and the public
+RPC chain-ID request succeeded. This establishes the error-handling defect,
+not the origin of the intermittent failures. No runtime trace was obtained and
+no source reliability fix is claimed. Anonymous private references, research and
+Atlas returned 401 with no-store; private AML/Space routes reached login and
+retired public score endpoints returned 410. No production account or private
+record was created or changed, and authenticated production was not exercised.

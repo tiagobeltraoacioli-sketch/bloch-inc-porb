@@ -16,7 +16,7 @@ const errors=[],reads=[],retainedReads=[],revisions=new Map();let failed=0,optio
 function deferNext(){delay=true;started=new Promise(resolve=>{arrived=resolve;});}
 async function source(url,init){
  const u=new URL(url),asset=u.searchParams.get('asset');reads.push({asset,reference:u.searchParams.get('query')});assert.equal(init?.headers?.cookie,undefined);assert.equal(init?.headers?.authorization,undefined);
- if(failed)return Response.json({error:'source_unavailable'},{status:failed});
+ if(failed)return Response.json({error:'source_unavailable'},{status:failed,headers:{'retry-after':'0'}});
  const value=await researchReport(asset,{reference:wrongScope?'0x'+'f'.repeat(40):u.searchParams.get('query'),...options});
  if(value.status!==200)return Response.json(value.body,{status:value.status});
  const {report_sha256,...body}=value.body,revision=revisions.get(asset)||0;

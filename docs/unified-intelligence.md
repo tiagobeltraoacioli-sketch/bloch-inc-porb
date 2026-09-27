@@ -252,6 +252,34 @@ outstanding cursor, without collecting public sources again. Existing tenant and
 score-read authorization applies to every retained request; the public bundle
 remains independently usable when a retained asset query fails.
 
+### HTTP failures and manual recovery
+
+Address research now reads an unsuccessful response's HTTP status before its
+body. HTML error pages are canceled without parsing, rendering or exposing their
+contents. Successful responses have a 3 MiB streaming limit and a 60-second
+deadline; scope, report size and digest validation still run before acceptance.
+An invalid JSON success cannot replace a displayed capture. The public and private
+research gateways normalize allowed upstream failures to a fixed error and retain
+bounded retry timing instead of losing it while parsing an HTML failure.
+
+`Retry-After` is honored for 429/502/503/504 responses as integer seconds or a valid
+IMF-fixdate HTTP date, up to 24 hours. A server `Date` header accounts for clock
+skew. Invalid/missing hints default to 60 seconds for 429 and no imposed wait for
+the other statuses; zero and past dates permit an immediate manual retry. A page's
+research client shares its wait across assets and references. Concurrent queries
+already in flight can finish; their success does not shorten a longer active wait.
+
+Search and update controls show the remaining wait. Repeated submits cannot
+collect another address or erase the current view during it. The timer only
+reenables controls: it never sends a retry. Captures, previous downloads, filtered
+evidence, comparisons and private retained observations remain usable. Other
+module requests and private retained pagination keep their existing behavior.
+Wait state lives in memory, outside all hashed reports and browser storage; it
+does not establish server-side authorization or replace source request budgets.
+Logout/organization reset clears private wait state and cancels pending research.
+A 401 on private research still clears the workspace and presents the login gate.
+These changes do not claim to resolve intermittent source/edge 502 failures.
+
 ### Reopen saved address research
 
 **Open saved address research** is available beside address search in Space, the

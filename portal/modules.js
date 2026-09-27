@@ -1,5 +1,6 @@
 import {authorize,budget,json,requireValue,PortalError} from './security.js';
 import {readPublicJson} from '../graphus/chain/network-graph.js';
+import {researchRetrySeconds} from '../space/public/assets/address-research-request.js';
 
 // Fixed public, read-only adapters. Never forward a session, key or tenant data upstream.
 export const MODULE_ROUTES={
@@ -32,14 +33,15 @@ export async function moduleRoute(path,request,env,principal,fetcher){
   const url=new URL(request.url);requireValue(url.search.length<=2200&&[...url.searchParams].every(([k,v])=>routes[route].includes(k)&&v.length<=1700&&url.searchParams.getAll(k).length===1),'invalid_module_query');
   await budget(env,`modules:${principal.tenant_id}`,60,60);
   const upstream=new URL(`/api/${route}`,origin);upstream.search=url.search;
-  let status=200,retryAfter='60';
+  let status=200,retryAfter='60';const research=origin==='https://bloch.space'&&route==='research';
   try{
     const content=await readPublicJson(async(u,options)=>{
       const response=await fetcher(u,{...options,signal:AbortSignal.timeout(55000),redirect:'manual',headers:{accept:'application/json','user-agent':'BI-PoRB/1.1 public-module-connector'}});
       status=response.status;requireValue(status>=200&&status<300||[400,404,422,429,502,503,504].includes(status),'module_source_unavailable',502);
-      const retry=response.headers.get('retry-after');if(retry&&/^[0-9]{1,5}$/.test(retry))retryAfter=retry;
+      if(research){retryAfter=String(researchRetrySeconds(response.headers,status));if(!response.ok){response.body?.cancel().catch(()=>{});return Response.json({error:'address_research_unavailable'});}}
+      const retry=response.headers.get('retry-after');if(!research&&retry&&/^[0-9]{1,5}$/.test(retry))retryAfter=retry;
       return response.ok?response:new Response(response.body,{headers:response.headers,status:200});
     },upstream.href);
-    return json(content,status,status===429?{'retry-after':retryAfter}:{});
+    return json(content,status,status===429||research&&Number(retryAfter)>0?{'retry-after':retryAfter}:{});
   }catch(error){if(error instanceof PortalError)throw error;throw new PortalError('module_source_unavailable',502);}
 }

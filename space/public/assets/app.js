@@ -1,6 +1,11 @@
 import {BUNDLE_VERSION,researchSelection,collectResearch} from './address-research-bundle.js';
 import {renderResearchResult} from './address-research-bundle-ui.js';
 import {mountResearchReader} from './address-research-reader-ui.js';
+import {createResearchClient} from './address-research-request.js';
+import {mountResearchCooldown} from './address-research-cooldown-ui.js';
+import {researchFailure} from './address-research-bundle.js';
+import {researchFailureReasons} from './address-research-refresh-ui.js';
+const researchClient=createResearchClient();
 const $ = selector => document.querySelector(selector);
 const state = {network:'bitcoin', overview:null, overviewAt:0, overviewRequest:0, overviewPending:false, result:null, request:0, navigation:0};
 const titles = {bitcoin:'Bitcoin / mainnet', ethereum:'Ethereum / mainnet', bloch:'Bloch / Genesis-4'};
@@ -27,6 +32,7 @@ function apiParams(route,network,query,asset,offset=0,cursor=null){
 }
 async function api(route, network, query, asset, offset=0, cursor=null, signal) {
   const params=apiParams(route,network,query,asset,offset,cursor);
+  if(route==='research')return researchClient.request(`/api/research?${params}`,{signal});
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),route==='research'?60000:15000);
   try{
     const response=await fetch(`/api/${route}?${params}`,{signal:signal?AbortSignal.any([signal,controller.signal]):controller.signal,cache:'no-store'});
@@ -456,12 +462,14 @@ function setHistory(params,mode){
   else history.replaceState(null,'',target);
 }
 async function search(kind,query,asset,offset=0,historyMode='push') {
+  if((kind==='address'||kind==='auto'&&detect(query)==='address')&&researchClient.remaining())return;
   if(historyMode==='push')state.navigation++;
   const network=state.network;asset=network==='bitcoin'?'BTC':network==='bloch'?'BLCH':['ETH','USDT','USDC','ETH_ALL'].includes(asset)?asset:'ETH';const requested=kind==='auto'?detect(query):kind;const sequence=++state.request;
   state.searchController?.abort();state.searchController=new AbortController();const signal=state.searchController.signal;
   $('#result').replaceChildren();$('#result-section').hidden=true;state.result=null;
   message('Looking up source records and module analyses…');
   const request=(selected,scope)=>api('research',network,scope.reference,selected,0,null,signal);
+  request.client=researchClient;
   const lookup=async route=>route==='address'?collectResearch(researchSelection(asset,query,network),request,{signal}):api(route,network,query,asset,offset,null,signal);
   try{
     let resolved=requested;let data;
@@ -478,7 +486,7 @@ async function search(kind,query,asset,offset=0,historyMode='push') {
     state.result={kind:resolved,query,asset,offset};message('');showResult(resolved,data,query,asset,{request,signal});
     const params=new URLSearchParams({network,kind:resolved,query});if(resolved==='address')params.set('asset',asset);if(resolved==='block'&&offset>0)params.set('offset',String(offset));
     setHistory(params,historyMode);
-  }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${error.message}. Check the identifier and source coverage.`,true);}
+  }catch(error){if(sequence!==state.request)return;message(`Lookup unavailable: ${requested==='address'?researchFailureReasons[researchFailure(error)]:error.message}. Check the identifier and source coverage.`,true);}
 }
 
 async function refreshOverview(){
@@ -520,6 +528,7 @@ async function switchNetwork(network,historyMode='push') {
 }
 
 mountResearchReader($('#saved-address-research'),{mounted:location.pathname.startsWith('/space/')});
+mountResearchCooldown($('#search-form'),researchClient);
 document.querySelectorAll('[data-network]').forEach(tab=>tab.addEventListener('click',()=>switchNetwork(tab.dataset.network)));
 $('#refresh-overview').addEventListener('click',()=>refreshOverview());
 $('#search-form').addEventListener('submit',event=>{event.preventDefault();const query=$('#search-input').value.trim();if(query)search($('#search-kind').value,query,$('#search-asset').value);});

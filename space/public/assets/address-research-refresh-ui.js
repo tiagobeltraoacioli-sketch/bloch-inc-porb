@@ -2,6 +2,7 @@ import {refreshSingleResearch,researchFailure} from './address-research-bundle.j
 import {renderResearch} from './address-research-ui.js';
 import {compareAddressReports} from './address-research-comparison.js';
 import {renderCaptureComparison} from './address-research-comparison-ui.js';
+import {watchResearchCooldown} from './address-research-cooldown-ui.js';
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=String(text);if(cls)n.className=cls;return n;};
 export const researchFailureReasons={access_unavailable:'This source requires an active authorized session.',rate_limited:'The source request budget was reached. Retry this search later.',source_timeout:'The source did not respond before its deadline.',source_unavailable:'The source could not return a usable report.',research_scope_mismatch:'The returned report did not match this address and asset.',research_integrity_mismatch:'The returned report failed its integrity check.',unsupported_research_report:'The source returned an unsupported report version.',research_response_limit:'The complete asset report exceeds the response limit.'};
 
@@ -23,10 +24,11 @@ export function renderSingleResearch(host,report,options={}){
     try{renderResearch(node,value,{...options,signal:controller.signal});options.renderSupplement?.(node,value);return {node,controller};}
     catch(error){controller.abort();throw error;}
   }
-  function sync(){refresh.disabled=busy;compare.disabled=busy||comparing;previousDownload.hidden=!previous;compare.hidden=!previous||previous.report_sha256===current.report_sha256;}
+  function sync(){const wait=options.request.client?.remaining()||0;refresh.disabled=busy||!!wait;refresh.textContent='Update '+asset+(wait?` (${wait} s)`:'');compare.disabled=busy||comparing;previousDownload.hidden=!previous;compare.hidden=!previous||previous.report_sha256===current.report_sha256;}
   const initial=prepare(current);captureController=initial.controller;content.replaceChildren(initial.node);host.replaceChildren(root);sync();
+  watchResearchCooldown(root,options.request.client,options.signal,sync);
   refresh.onclick=async()=>{
-    if(busy||!active())return;
+    if(busy||!active()||options.request.client?.remaining())return;
     busy=true;sync();status.textContent=`Collecting a new ${asset} report… The displayed capture and downloads remain available.`;
     try{
       const next=await refreshSingleResearch(current,options.request,{signal:options.signal});if(!active())return;

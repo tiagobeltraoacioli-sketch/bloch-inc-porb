@@ -3,6 +3,8 @@ import {invitationToken,accessFailure} from './access-help.js';
 import {Intelligence} from './intelligence.js';
 import {Enrichment} from './enrichment.js';
 import {atlasLink,atlasSelection} from './atlas-context.js';
+import {createResearchClient} from '/space/assets/address-research-request.js';
+const researchClient=createResearchClient();api.researchClient=researchClient;
 const $=id=>document.getElementById(id),state={session:null,analysis:null,science:null,runs:[],view:'overview'};
 const accessChannel=typeof BroadcastChannel==='function'?new BroadcastChannel('porb-access'):null;
 const requestedView=new URLSearchParams(location.search).get('view');
@@ -21,8 +23,18 @@ const date=n=>n?new Date(n).toLocaleString():'—';
 const short=s=>s?.length>23?`${s.slice(0,12)}…${s.slice(-8)}`:s;
 function element(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 function message(text,gate=false){$(gate?'gate-status':'status').textContent=text;}
-async function api(path,method='GET',body){
+async function api(path,method='GET',body,{signal}={}){
   const version=contextVersion;
+  if(method==='GET'&&path.startsWith('/v1/space/research?')){
+    try{
+      const content=await researchClient.request(`/api/porb${path}`,{signal});
+      if(version!==contextVersion)throw new Error('Workspace changed. Repeat the action in the active organization.');return content;
+    }catch(error){
+      if(version!==contextVersion)throw new Error('Workspace changed. Repeat the action in the active organization.');
+      if([401,403].includes(error.status)){const failure=accessFailure(path,'module_source_unavailable',error.status,Boolean(state.session));if(failure.showLogin){state.session=null;showGate();}error.message=failure.message;}
+      throw error;
+    }
+  }
   const response=await fetch(`/api/porb${path}`,{method,credentials:'same-origin',cache:'no-store',headers:method==='GET'?{}:{'content-type':'application/json','x-porb-action':'1'},body:body===undefined?undefined:JSON.stringify(body)});
   const content=await response.json();if(version!==contextVersion)throw new Error('Workspace changed. Repeat the action in the active organization.');if(!response.ok){const failure=accessFailure(path,content.error,response.status,Boolean(state.session));if(failure.showLogin){state.session=null;showGate();}const error=new Error(failure.message);error.status=response.status;throw error;}return content;
 }

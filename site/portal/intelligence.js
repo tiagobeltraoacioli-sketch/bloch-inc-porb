@@ -3,6 +3,9 @@ import {MODULES,moduleUrl} from './module-catalog.js';
 import {researchSelection,collectResearch} from '/space/assets/address-research-bundle.js';
 import {renderResearchResult} from '/space/assets/address-research-bundle-ui.js';
 import {mountResearchReader} from '/space/assets/address-research-reader-ui.js';
+import {mountResearchCooldown} from '/space/assets/address-research-cooldown-ui.js';
+import {researchFailure} from '/space/assets/address-research-bundle.js';
+import {researchFailureReasons} from '/space/assets/address-research-refresh-ui.js';
 const $=id=>document.getElementById(id);
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
 const date=v=>new Date(v).toLocaleString(),short=v=>v.length>30?v.slice(0,14)+'…'+v.slice(-10):v;
@@ -12,8 +15,9 @@ export class Intelligence {
   constructor({api,perform,message,openRun,showView,runs,role}){
     Object.assign(this,{api,perform,message,openRun,showView,runs,role});this.reset();
     this.savedResearch=mountResearchReader($('saved-address-research'),{mounted:true});
+    this.researchWait=mountResearchCooldown($('reference-form'),this.api.researchClient);
     const tabs=$('module-tabs');tabs.replaceChildren();for(const item of MODULES){const button=el('button',item.name);button.dataset.module=item.id;button.title=item.description;button.setAttribute('aria-pressed','false');button.onclick=()=>this.module(item.id);tabs.append(button);}
-    $('reference-form').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,()=>this.search(false));};
+    $('reference-form').onsubmit=e=>{e.preventDefault();if(this.api.researchClient.remaining())return;this.perform(e.submitter||$('reference-form').querySelector('button'),()=>this.search(false)).finally(()=>this.researchWait.sync());};
     $('reference-more').onclick=()=>this.perform($('reference-more'),()=>this.search(true));
     $('index-retained').onclick=()=>this.perform($('index-retained'),async()=>{for(const run of this.runs())await this.api(`/v1/analyses/${run.id}`);$('reference-coverage').textContent=`Indexed ${this.runs().length} retained analyses. Run the reference search again.`;});
     $('case-form').onsubmit=e=>{e.preventDefault();this.perform(e.submitter,async()=>{const item=await this.api('/v1/cases','POST',{title:e.target.elements.title.value});e.target.reset();await this.cases();await this.openCase(item.id);});};
@@ -29,6 +33,7 @@ export class Intelligence {
   }
   reset(){this.currentCase=null;this.referencePages=new Map();this.caseCursor=null;this.watchCursor=null;this.observationCursor=null;this.pendingEvidence=null;this.referenceQuery=null;this.researchController?.abort();
     this.savedResearch?.clear();
+    this.api.researchClient.reset();
     this.referenceEpoch=(this.referenceEpoch||0)+1;
     for(const id of ['reference-results','reference-research','reference-launchers','case-list','evidence-list','watch-list','observation-list'])$(id).replaceChildren();
     $('case-detail').hidden=true;$('module-frame').removeAttribute('src');this.currentModule=null;
@@ -52,6 +57,7 @@ export class Intelligence {
   action(label,fn){const b=el('button',label,'secondary');b.onclick=()=>this.perform(b,fn);return b;}
   launchers(asset,reference){const box=$('reference-launchers');box.replaceChildren();for(const [name,label] of [['constellation','Open Constellation'],['oculum','Open Oculum'],['analytics','Open Analytics'],['graph','Open Graph Lab'],['explorer','Inspect source record']])box.append(this.action(label,async()=>{this.module(name,asset,reference);this.showView('modules');}));}
   async search(more){
+    if(!more&&this.api.researchClient.remaining())return;
     const form=$('reference-form');let scope;
     if(!more){
       this.referenceEpoch++;this.researchController?.abort();this.referenceQuery=null;this.referencePages=new Map();
@@ -65,8 +71,8 @@ export class Intelligence {
       $('reference-research').replaceChildren(el('p','Collecting public source records, graph analyses and machine learning…'));$('reference-more').hidden=true;this.launchers(scope.assets[0],scope.reference);
     }
     const epoch=this.referenceEpoch,queryScope=this.referenceQuery;
-    const signal=this.researchController.signal,request=asset=>this.api('/v1/space/research?'+new URLSearchParams({network:queryScope.network,asset,query:queryScope.reference}));
-    const publicResult=more?Promise.resolve():collectResearch(scope,request,{signal}).then(report=>{if(epoch===this.referenceEpoch)renderResearchResult($('reference-research'),report,{mounted:true,request,signal});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+error.message));});
+    const signal=this.researchController.signal,request=asset=>this.api('/v1/space/research?'+new URLSearchParams({network:queryScope.network,asset,query:queryScope.reference}),'GET',undefined,{signal});request.client=this.api.researchClient;
+    const publicResult=more?Promise.resolve():collectResearch(scope,request,{signal}).then(report=>{if(epoch===this.referenceEpoch)renderResearchResult($('reference-research'),report,{mounted:true,request,signal});}).catch(error=>{if(epoch===this.referenceEpoch)$('reference-research').replaceChildren(el('p','Public research unavailable: '+researchFailureReasons[researchFailure(error)]));});
     const retained=[...this.referencePages].filter(([,page])=>!more||page.cursor).map(async([asset,page])=>{
       const query=new URLSearchParams({asset,reference:queryScope.reference,limit:'10'});if(more)query.set('cursor',page.cursor);
       try{

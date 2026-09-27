@@ -3,6 +3,7 @@ import {renderResearch} from './address-research-ui.js';
 import {compareAddressReports} from './address-research-comparison.js';
 import {renderCaptureComparison} from './address-research-comparison-ui.js';
 import {renderSingleResearch,researchFailureReasons as reasons} from './address-research-refresh-ui.js';
+import {watchResearchCooldown} from './address-research-cooldown-ui.js';
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=String(text);if(cls)n.className=cls;return n;};
 function save(bundle,previous=false){
   const url=URL.createObjectURL(new Blob([JSON.stringify(bundle,null,2)],{type:'application/json'})),a=el('a');a.href=url;a.download=`ethereum-address-research-${previous?'previous-':''}${bundle.scope.reference}.json`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -52,14 +53,14 @@ export function renderResearchResult(host,result,options={}){
       if(item.status==='available'){
         const m=item.report.modules;tab.append(el('span',`Ledger: ${m.ledger.status}`),el('span',`Graph: ${m.graph.status}`),el('span',`ML: ${m.machine_learning.status}`));
       }else tab.append(el('span','Report unavailable'));
-      const button=refreshButtons[i];if(button){button.disabled=busy;button.textContent=(item.status==='available'?'Update ':'Retry ')+item.asset;}
+      const button=refreshButtons[i];if(button){const wait=options.request.client?.remaining()||0;button.disabled=busy||!!wait;button.textContent=(item.status==='available'?'Update ':'Retry ')+item.asset+(wait?` (${wait} s)`:'');}
     });
     digest.textContent=current.bundle_sha256;previousDownload.hidden=!previous;
     const old=previous?.results.find(item=>item.asset===lastUpdatedAsset),latest=current.results.find(item=>item.asset===lastUpdatedAsset);
     compareButton.hidden=old?.status!=='available'||latest?.status!=='available'||old.report.report_sha256===latest.report.report_sha256;compareButton.disabled=busy;compareButton.textContent='Compare '+(lastUpdatedAsset||'')+' captures';
   }
   async function update(asset){
-    if(busy||options.signal?.aborted||!root.isConnected)return;
+    if(busy||options.signal?.aborted||!root.isConnected||options.request.client?.remaining())return;
     busy=true;sync();status.textContent=`Collecting a new ${asset} report… Current captures remain available while this request runs.`;
     const active=()=>root.isConnected&&!options.signal?.aborted;
     try{
@@ -92,5 +93,5 @@ export function renderResearchResult(host,result,options={}){
   };
   const integrity=el('details',null,'ar-bundle-integrity'),digest=el('code',null,'ar-digest');integrity.append(el('summary','Combined download integrity'),el('p','Each available report retains its original SHA-256. A successful asset update replaces that whole report and creates a new bundle hash; other report hashes stay unchanged. A failed update leaves the download unchanged. Hashes do not authenticate sources or align capture times.','ar-note'),digest);
   options.signal?.addEventListener('abort',()=>{for(const controller of captureControllers)controller?.abort();previous=null;for(const box of comparisonHosts)box.replaceChildren();},{once:true});
-  root.append(tabs,status,downloads,integrity,views);host.replaceChildren(root);sync();select(result.results.find(r=>r.status==='available')?.asset||'ETH');return root;
+  root.append(tabs,status,downloads,integrity,views);host.replaceChildren(root);sync();select(result.results.find(r=>r.status==='available')?.asset||'ETH');watchResearchCooldown(root,options.request?.client,options.signal,sync);return root;
 }

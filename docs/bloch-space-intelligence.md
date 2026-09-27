@@ -213,5 +213,9 @@ results and hashes, supports local file-to-file comparison and identifies the
 contents as saved observations. Invalid replacements preserve the current saved
 view. The [saved reader](unified-intelligence.md#reopen-saved-address-research)
 uses no uploads or browser storage and requires the page to have loaded first.
+Address queries and updates also handle HTML service errors without showing JSON
+parser failures. A shared countdown honors bounded `Retry-After` hints, preserves
+usable captures and requires an explicit retry after the wait. No retry runs
+automatically. See [HTTP recovery](unified-intelligence.md#http-failures-and-manual-recovery).
 See [the unified research contract](unified-intelligence.md#unified-address-research)
 for source coverage, native ETH limits, digest/export semantics and access controls.

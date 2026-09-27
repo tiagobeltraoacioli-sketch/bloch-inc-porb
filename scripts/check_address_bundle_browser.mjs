@@ -27,7 +27,7 @@ const revisions=new Map();
 function deferAsset(asset){delayAsset=asset;started=new Promise(resolve=>{arrived=resolve;});}
 async function source(url,init){
   const u=new URL(url),asset=u.searchParams.get('asset');assert.equal(u.pathname,'/api/research');assert.ok(assets.includes(asset));assert.equal(init?.headers?.cookie,undefined);assert.equal(init?.headers?.authorization,undefined);reads.push({asset,reference:u.searchParams.get('query')});
-  if(failed.has(asset))return Response.json({error:'source_unavailable'},{status:failureStatus});
+  if(failed.has(asset))return Response.json({error:'source_unavailable'},{status:failureStatus,headers:{'retry-after':'0'}});
   const value=await researchReport(asset,{reference:u.searchParams.get('query'),graphUnavailable:graphUnavailable.has(asset)}),{report_sha256,...body}=value.body;
   body.modules.ledger.data.wallet.balance.base_units={ETH:'1000000000000000000',USDT:RESEARCH_AMOUNT,USDC:'123450000'}[asset];
   if(revisions.has(asset)){body.retrieved_at=new Date(Date.UTC(2026,8,27,2,revisions.get(asset))).toISOString();body.modules.ledger.data.wallet.balance.base_units=(BigInt(body.modules.ledger.data.wallet.balance.base_units)+BigInt(revisions.get(asset))).toString();}

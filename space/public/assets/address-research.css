@@ -13,3 +13,5 @@
 
 .ar-research-reader>summary{cursor:pointer;font-weight:600}.ar-research-reader>.ar-note,.ar-reader-origin>.ar-note{font-size:12px;line-height:1.7;opacity:.78}.ar-reader-origin h2{font-size:clamp(24px,3vw,36px);line-height:1.2;margin:8px 0 16px}.ar-research-reader *{box-sizing:border-box}
 .ar-research-reader button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+.ar-request-wait{border:1px solid var(--line,#75818c55);border-left:3px solid currentColor;padding:14px 18px;margin:16px 0;color:inherit;font:13px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-wrap:anywhere}.ar-request-wait[hidden]{display:none}.ar-request-wait p{margin:0}.ar-request-wait span{display:block;font-size:12px;margin-top:8px;font-variant-numeric:tabular-nums}

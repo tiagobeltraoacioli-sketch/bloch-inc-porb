@@ -2,6 +2,10 @@ import {MODULES} from '/portal/module-catalog.js';
 import {researchSelection,collectResearch} from '/space/assets/address-research-bundle.js';
 import {renderResearchResult} from '/space/assets/address-research-bundle-ui.js';
 import {mountResearchReader} from '/space/assets/address-research-reader-ui.js';
+import {createResearchClient} from '/space/assets/address-research-request.js';
+import {mountResearchCooldown} from '/space/assets/address-research-cooldown-ui.js';
+import {researchFailure} from '/space/assets/address-research-bundle.js';
+import {researchFailureReasons} from '/space/assets/address-research-refresh-ui.js';
 mountResearchReader(document.getElementById('saved-address-research'));
 const tools=document.getElementById('tools');
 for(const item of MODULES.filter(item=>item.public_url)){
@@ -13,22 +17,21 @@ for(const item of MODULES.filter(item=>item.public_url)){
   card.append(group,title,description,action);tools.append(card);
 }
 const form=document.getElementById('public-address-form'),status=document.getElementById('public-address-status'),result=document.getElementById('public-address-result');
+const researchClient=createResearchClient();mountResearchCooldown(form,researchClient);
 let sequence=0,controller;
 async function search(){
+  if(researchClient.remaining())return;
   const epoch=++sequence;controller?.abort();controller=new AbortController();const signal=controller.signal;
   result.replaceChildren();status.textContent='Collecting source records, graph analyses and machine learning…';
   try{
     const asset=form.elements.asset.value,scope=researchSelection(asset,form.elements.query.value);
     const params=new URLSearchParams({network:scope.network,asset,query:scope.reference});
-    const request=async selected=>{
-      const response=await fetch('/api/research?'+new URLSearchParams({network:scope.network,asset:selected,query:scope.reference}),{cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
-      const value=await response.json();if(!response.ok){const error=new Error(value.error||'source_unavailable');error.status=response.status;throw error;}return value;
-    };
+    const request=selected=>researchClient.request('/api/research?'+new URLSearchParams({network:scope.network,asset:selected,query:scope.reference}),{signal});request.client=researchClient;
     const body=await collectResearch(scope,request,{signal});
     if(epoch!==sequence)return;
     renderResearchResult(result,body,{request,signal});status.textContent='Collection finished. Current source availability and coverage are shown in each asset report.';
     history.replaceState(null,'',location.pathname+'?'+params);
-  }catch(error){if(epoch===sequence)status.textContent='Address research unavailable: '+error.message;}
+  }catch(error){if(epoch===sequence)status.textContent='Address research unavailable: '+(error.message==='invalid_address_or_asset'?'Check the complete address and selected asset.':researchFailureReasons[researchFailure(error)]);}
 }
 form.addEventListener('submit',event=>{event.preventDefault();search();});
 const params=new URLSearchParams(location.search);if(['BTC','ETH','BLCH','USDT','USDC','ETH_ALL'].includes(params.get('asset'))&&params.get('query')){form.elements.asset.value=params.get('asset');form.elements.query.value=params.get('query');search();}

@@ -26,10 +26,10 @@ export async function onRequest(context) {
   const path=new URL(request.url).pathname;
   if(path.startsWith('/api/account/')||path.startsWith('/api/porb/'))return handleAccount({...context,waitUntil:context.waitUntil?.bind(context)});
   if (request.method !== 'GET') return new Response(JSON.stringify({error:'read_only'}), {
-    status:405, headers:{'content-type':'application/json; charset=utf-8',allow:'GET'},
+    status:405, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store',allow:'GET'},
   });
   if (!available(request)) return new Response(JSON.stringify({error:'read_budget_exceeded'}), {
-    status:429, headers:{'content-type':'application/json; charset=utf-8','retry-after':'60'},
+    status:429, headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','retry-after':'60'},
   });
   const url = new URL(request.url);
   let result;
