@@ -1,0 +1,24 @@
+name = "blochai-rednblue"
+main = "worker.js"
+compatibility_date = "2026-09-28"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "rednblue.space/blochai", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/blochai/*", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/api/porb/v1/blochai/status", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/api/porb/v1/blochai/tasks", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/api/porb/v1/blochai/tasks/*", zone_name = "rednblue.space" }
+]
+
+[assets]
+directory = "../../.data/blochai-assets"
+binding = "ASSETS"
+run_worker_first = true
+
+[[d1_databases]]
+binding = "PORB_DB"
+database_name = "bi-porb-portal"
+database_id = "ef628d5b-dab4-4b34-bfa2-fbb610f878cb"

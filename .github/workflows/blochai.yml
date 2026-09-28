@@ -1,0 +1,21 @@
+name: BlochAI site privacy checks
+on:
+  push:
+    paths: ['portal/blochai.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
+  pull_request:
+    paths: ['portal/blochai.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
+permissions:
+  contents: read
+jobs:
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tests/*blochai*.mjs tests/test_porb_portal.mjs
+      - run: node scripts/build_blochai_assets.mjs
+      - run: node scripts/build_blochai_public_assets.mjs
+      - run: node --check site/blochai/blochai.js
+      - run: node --check site/blochai-public/blochai-assistant.js

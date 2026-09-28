@@ -1,0 +1,9 @@
+# Optional public navigation link
+
+This isolated Worker can add a simple BlochAI link to the existing HTML navigation at the exact root of `bloch-graphus.xyz`, `bloch.space` and `blochl1.com`, plus the exact `/app/` entry on `bloch.space` only. When no navigation element exists it appends a small, semantic link container before the body's end, with a document-end fallback for incomplete HTML. It adds no JavaScript, stylesheet, cookie, private API or background request.
+
+Deployment is disabled by default: no routes are configured and `ENABLE_PUBLIC_LINK` is `false`. First validate the current origin and response for each site. If applicable, configure only exact root route patterns (`bloch-graphus.xyz/`, `bloch.space/`, `blochl1.com/`) and the exact `bloch.space/app/` entry and enable the flag. Never use wildcard path patterns. APIs and other deeper pages remain outside the integration.
+
+The handler rejects hosts outside its public allowlist, including `rednblue.space`. Disabled integration, unconfigured paths, non-GET methods, non-HTML responses and unsuccessful responses keep their original bodies and headers, with a sanitized `x-blochai-integration` diagnostic marker. Enabled rewriting preserves upstream security headers and removes validators invalidated by modifying the body. The real HTMLRewriter runtime is verified by `scripts/test_blochai_rewriter.mjs`, including the Explorer SPA shell.
+
+Cloudflare's [Routes documentation](https://developers.cloudflare.com/workers/configuration/routing/routes/) distinguishes an existing origin from another Worker on a route; same-zone routes cannot be a `fetch()` target. Validate the origin before enabling this pass-through integration. [HTMLRewriter](https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/) performs the bounded link insertion.
