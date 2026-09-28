@@ -13,15 +13,16 @@ try{
     const widget=page.locator('.blochai-assistant'),panel=widget.locator('.blochai-assistant__panel'),trigger=widget.locator('.blochai-assistant__trigger');
     console.log(JSON.stringify({stage:'page_loaded',name,url:page.url(),status:response.status(),marker:response.headers()['x-blochai-integration'],title:await page.title(),widgetCount:await widget.count()}));
     try{await trigger.waitFor({state:'visible',timeout:20000});}catch(error){await page.screenshot({path:new URL(`${name}-failure.png`,directory).pathname});await writeFile(new URL(`${name}-failure.html`,directory),await page.content());throw error;}assert.equal(await widget.count(),1);assert.equal(await widget.getAttribute('data-blochai-portal'),name);
-    assert.equal(await widget.locator('input,textarea').count(),0);await trigger.click();assert.equal(await panel.isVisible(),true);
+    assert.equal(await widget.locator('.blochai-assistant__search').count(),1);await trigger.click();assert.equal(await panel.isVisible(),true);
     assert.equal(await widget.locator('.blochai-public-link').getAttribute('href'),'https://blochai.xyz/');
     const result={name,url:page.url(),status:response.status(),marker:response.headers()['x-blochai-integration'],views:[],errors};
     if(process.env.BLOCHAI_SKIP_INFERENCE!=='1'){
+      await widget.locator('[data-topic]').first().click();
       await widget.locator('.blochai-assistant__submit').click();
       await page.waitForFunction(()=>{const status=document.querySelector('.blochai-assistant__status')?.textContent;return status?.startsWith('Explanation complete.')||(!document.querySelector('.blochai-assistant__submit')?.disabled&&status!== 'Only questions about this portal are available.');},{},{timeout:220000});
       const status=await widget.locator('.blochai-assistant__status').innerText();assert.match(status,/^Explanation complete\./,status);
       result.output=await widget.locator('.blochai-assistant__output').innerText();assert.ok(result.output.length>0);
-      assert.equal(submissions.length,1);assert.deepEqual(Object.keys(submissions[0]),['question_id']);result.submittedQuestion=submissions[0].question_id;
+      assert.equal(submissions.length,1);assert.deepEqual(Object.keys(submissions[0]),['question_id','mode','network']);result.submittedQuestion=submissions[0].question_id;
     }
     for(const width of [1440,390,360]){
       await page.setViewportSize({width,height:width===1440?1000:844});await page.evaluate(()=>scrollTo(0,0));

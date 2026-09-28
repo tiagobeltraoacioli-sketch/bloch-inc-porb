@@ -1,4 +1,5 @@
 import {PortalError,requireValue,bodyOf,authorize,budget,json,audit} from './security.js';
+import {researchRoute,normalizeResearch,prepareResearch,saveResearchSnapshot,readResearchSnapshot} from './blochai-research.js';
 
 const taskId=/^[a-zA-Z0-9_-]{1,128}$/;
 const states=['PENDING','ASSIGNED','READY','COMPLETED','FAILED'];
@@ -41,6 +42,7 @@ function task(data,expectedId){
 export async function blochaiRoute(path,request,env,principal,fetcher){
   if(!path.startsWith('/v1/blochai/'))return null;
   requireValue(principal.type==='session','browser_session_required',403);
+  const researchResponse=await researchRoute(path,request,env,principal);if(researchResponse)return researchResponse;
   const base=configuration(env),context={organization_id:principal.tenant_id};
   if(path==='/v1/blochai/status'&&request.method==='GET'){
     authorize(principal,'data:read');await budget(env,`blochai-status:${principal.tenant_id}`,30,60);
@@ -50,16 +52,24 @@ export async function blochaiRoute(path,request,env,principal,fetcher){
   const match=path.match(/^\/v1\/blochai\/tasks\/([a-zA-Z0-9_-]{1,128})$/);
   if(path==='/v1/blochai/tasks'&&request.method==='POST'){
     authorize(principal,'analyses:write');requireValue(base,'blochai_backend_not_configured',503);
-    const body=await bodyOf(request);requireValue(Object.keys(body).every(key=>['prompt','max_new_tokens'].includes(key)),'unexpected_fields');
+    const body=await bodyOf(request);requireValue(Object.keys(body).every(key=>['prompt','max_new_tokens','research'].includes(key)),'unexpected_fields');
     requireValue(typeof body.prompt==='string'&&body.prompt.trim().length>0&&body.prompt.length<=4000,'blochai_prompt_required');
     const maxNewTokens=body.max_new_tokens??128;requireValue(Number.isInteger(maxNewTokens)&&maxNewTokens>=16&&maxNewTokens<=256,'blochai_invalid_token_limit');
-    await budget(env,`blochai-submit-minute:${principal.tenant_id}`,6,60);await budget(env,`blochai-submit-day:${principal.tenant_id}`,100,86400);
-    const result=task(await upstream(env,fetcher,base,'/v1/tasks',{tenant_id:principal.tenant_id,prompt:body.prompt,max_new_tokens:maxNewTokens}));
-    await audit(env.PORB_DB,principal,'blochai.submit',result.task_id).run();return json({...result,...context},202);
+    const research=body.research===undefined?null:normalizeResearch(body.research);
+    requireValue(!research||body.prompt.length<=1500,'blochai_research_prompt_too_long');
+    await budget(env,`blochai-submit-minute:${principal.tenant_id}`,10,60);await budget(env,`blochai-submit-day:${principal.tenant_id}`,300,86400);
+    const prepared=research?await prepareResearch(body.prompt,research,fetcher):{prompt:body.prompt};
+    const result=task(await upstream(env,fetcher,base,'/v1/tasks',{tenant_id:principal.tenant_id,prompt:prepared.prompt,max_new_tokens:maxNewTokens,...(prepared.observations?{observations:prepared.observations}:{})}));
+    const warnings=[];
+    if(prepared.guide)try{await saveResearchSnapshot(env,principal,result.task_id,prepared.guide);}catch{warnings.push('research_snapshot_not_saved');console.warn('blochai_snapshot_unavailable');}
+    try{await audit(env.PORB_DB,principal,'blochai.submit',result.task_id).run();}catch{warnings.push('audit_unavailable');console.warn('blochai_audit_unavailable');}
+    // Once accepted, preserve the task capability even if ancillary persistence fails.
+    return json({...result,...context,...(prepared.guide?{guide:prepared.guide}:{}),...(warnings.length?{warnings}:{})},202);
   }
   if(match&&request.method==='GET'){
     authorize(principal,'analyses:read');requireValue(base,'blochai_backend_not_configured',503);await budget(env,`blochai-poll:${principal.tenant_id}`,90,60);
-    const result=task(await upstream(env,fetcher,base,`/v1/tasks/${encodeURIComponent(match[1])}?tenant_id=${encodeURIComponent(principal.tenant_id)}`),match[1]);return json({...result,...context});
+    const result=task(await upstream(env,fetcher,base,`/v1/tasks/${encodeURIComponent(match[1])}?tenant_id=${encodeURIComponent(principal.tenant_id)}`),match[1]);
+    const guide=await readResearchSnapshot(env,principal,match[1]);return json({...result,...context,...(guide?{guide}:{})});
   }
   throw new PortalError('not_found',404);
 }

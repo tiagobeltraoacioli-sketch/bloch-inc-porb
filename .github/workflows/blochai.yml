@@ -1,9 +1,9 @@
 name: BlochAI site privacy checks
 on:
   push:
-    paths: ['portal/blochai.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
+    paths: ['portal/blochai*.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'site/blochai-shared/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
   pull_request:
-    paths: ['portal/blochai.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
+    paths: ['portal/blochai*.js', 'portal/security.js', 'site/blochai/**', 'site/blochai-public/**', 'site/blochai-shared/**', 'deploy/blochai*/**', 'scripts/*blochai*', 'tests/*blochai*', '.github/workflows/blochai.yml']
 permissions:
   contents: read
 jobs:

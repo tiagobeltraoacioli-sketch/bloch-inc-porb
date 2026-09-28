@@ -1,10 +1,38 @@
-export const publicPortals = Object.freeze({
-  'bloch-graphus.xyz': {id:'graphus',name:'Graphus',scope:'Public graphs, connections and coverage.',questions:{connections:'How should I read public connections?',readings:'What can a Graphus reading explain?',coverage:'What are the coverage limits?'}},
-  'bloch.space': {id:'space',name:'Bloch Space',scope:'BTC, ETH and Bloch observations and freshness.',questions:{observations:'What do chain observations show?',freshness:'How should I check data freshness?',coverage:'What are the observation limits?'}},
-  'blochl1.com': {id:'explorer',name:'Bloch Explorer',scope:'Bloch blocks, transactions and eUTXO coverage.',questions:{blocks:'How should I read a Bloch block?',transactions:'What does a transaction record show?',eutxo:'How does the eUTXO view work?',coverage:'What are the explorer coverage limits?'}}
-});
+import {KNOWLEDGE} from './knowledge.js';
+
+export const ASSISTANT_ASSET_VERSION='20260928-chain-2';
+
+const configurations = {
+  'bloch-graphus.xyz': {id:'graphus',name:'Graphus',scope:'Explore public graphs, connections, provenance and coverage.'},
+  'bloch.space': {id:'space',name:'Bloch Space',scope:'Explore Bitcoin, Ethereum and Bloch observations and network research.'},
+  'blochl1.com': {id:'explorer',name:'Bloch Explorer',scope:'Explore Bloch blocks, transactions, eUTXO and source coverage.'}
+};
+export const publicPortals = Object.freeze(Object.fromEntries(Object.entries(configurations).map(([host,portal])=>{
+  const topics=KNOWLEDGE[portal.id].topics;
+  return [host,{...portal,topics,questions:Object.fromEntries(Object.entries(topics).map(([id,topic])=>[id,topic.question]))}];
+})));
+const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 
 export function assistantMarkup(host){
-  const portal=publicPortals[host];
-  return `<div class="blochai-assistant" data-blochai-portal="${portal.id}"><button class="blochai-assistant__trigger" type="button" aria-controls="blochai-assistant-panel" aria-expanded="false">BlochAI <span aria-hidden="true">↗</span></button><section id="blochai-assistant-panel" class="blochai-assistant__panel" role="dialog" aria-labelledby="blochai-assistant-title" hidden><header class="blochai-assistant__header"><div><span class="blochai-assistant__eyebrow">PUBLIC PORTAL GUIDANCE</span><h2 id="blochai-assistant-title">BlochAI for ${portal.name}</h2></div><button type="button" class="blochai-assistant__close" aria-label="Close BlochAI">×</button></header><p class="blochai-assistant__scope">${portal.scope}</p><p class="blochai-assistant__note">Choose a portal question for a GPU-generated explanation. This guidance does not inspect the current page or live records.</p><form class="blochai-assistant__form"><label for="blochai-assistant-question">Portal question</label><select id="blochai-assistant-question" name="question_id">${Object.entries(portal.questions).map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select><button class="blochai-assistant__submit" type="submit">Ask BlochAI <span aria-hidden="true">→</span></button></form><p class="blochai-assistant__status" role="status" aria-live="polite">Only questions about this portal are available.</p><div class="blochai-assistant__output" tabindex="0" aria-label="BlochAI response" hidden></div><p class="blochai-assistant__meta" hidden></p><footer class="blochai-assistant__footer"><span>6 requests/min · 20/day per connection</span><a class="blochai-public-link" href="https://blochai.xyz/" rel="noreferrer">About BlochAI ↗</a></footer></section></div><script src="/blochai-assistant.js" defer></script>`;
+  const portal=publicPortals[host],topics=Object.entries(portal.topics),catalog=topics.map(([id,topic])=>({id,title:topic.title,question:topic.question,keywords:topic.keywords||[]}));
+  return `<div class="blochai-assistant" data-blochai-portal="${portal.id}" data-blochai-name="${portal.name}" data-blochai-catalog="${escape(JSON.stringify(catalog))}">
+<button class="blochai-assistant__trigger" type="button" aria-controls="blochai-assistant-panel" aria-expanded="false">BlochAI <span aria-hidden="true">↗</span></button>
+<section id="blochai-assistant-panel" class="blochai-assistant__panel" role="dialog" aria-labelledby="blochai-assistant-title" hidden>
+<header class="blochai-assistant__header"><div><span class="blochai-assistant__eyebrow">YOUR PORTAL COMPANION</span><h2 id="blochai-assistant-title">BlochAI for ${portal.name}</h2></div><button type="button" class="blochai-assistant__close" aria-label="Close BlochAI">×</button></header>
+<p class="blochai-assistant__scope">${portal.scope}</p>
+<p class="blochai-assistant__note">Find a topic in your own words, then explore public records. Topic matching happens on this device; your typed topic text is never sent.</p>
+<div class="blochai-assistant__toolbar"><span class="blochai-assistant__count">0 / 12 explanations</span><button type="button" class="blochai-assistant__export" disabled>Download PDF</button><button type="button" class="blochai-assistant__clear" disabled>Clear</button></div>
+<div class="blochai-assistant__history" aria-label="Conversation"></div>
+<form class="blochai-assistant__form">
+<label for="blochai-assistant-search">What would you like to understand?</label><input id="blochai-assistant-search" class="blochai-assistant__search" type="text" maxlength="240" autocomplete="off" placeholder="Try a topic in English or Portuguese">
+<p class="blochai-assistant__match" role="status">Choose a topic below, or type to find one.</p>
+<div class="blochai-assistant__topics" aria-label="Portal topics">${topics.map(([id,topic])=>`<button type="button" class="blochai-assistant__topic" data-topic="${escape(id)}" aria-pressed="false">${escape(topic.title)}</button>`).join('')}</div>
+<label for="blochai-assistant-question">Matched topic</label><select id="blochai-assistant-question" name="question_id"><option value="">Choose a portal topic</option>${topics.map(([id,topic])=>`<option value="${escape(id)}">${escape(topic.question)}</option>`).join('')}</select>
+<div class="blochai-assistant__options"><div><label for="blochai-assistant-mode">Response style</label><select id="blochai-assistant-mode" name="mode"><option value="explain">Explain</option><option value="summary">Quick summary</option><option value="checklist">Checklist</option><option value="example">Worked example</option></select></div><div${portal.id==='explorer'?' hidden':''}><label for="blochai-assistant-network">Network context</label><select id="blochai-assistant-network" name="network"><option value="bloch">Bloch</option>${portal.id==='explorer'?'':'<option value="bitcoin">Bitcoin</option><option value="ethereum">Ethereum</option>'}</select></div></div>
+<label for="blochai-assistant-subject">Public data to explore</label><select id="blochai-assistant-subject" name="subject_kind"><option value="network">Network overview</option><option value="address">Address / script reference</option><option value="transaction">Transaction</option></select>
+<div class="blochai-assistant__reference-input" hidden><label for="blochai-assistant-reference">Public reference</label><input id="blochai-assistant-reference" name="subject_value" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Enter a public address or transaction hash"><p class="blochai-assistant__note">This reference is sent to the public source for the selected network. Connections do not identify a person or establish ownership.</p></div>
+<button class="blochai-assistant__submit" type="submit" disabled>Explore this topic <span aria-hidden="true">→</span></button></form>
+<p class="blochai-assistant__status" role="status" aria-live="polite">Choose a topic to begin. This conversation stays in this tab.</p>
+<footer class="blochai-assistant__footer"><span>10 requests/min · 60/day per connection. Up to 12 explanations per conversation.</span><span>Public observations only. Source timestamps and coverage limit every explanation.</span><a class="blochai-public-link" href="https://blochai.xyz/" rel="noreferrer">About BlochAI ↗</a></footer>
+</section></div><script src="/blochai-assistant.js?v=${ASSISTANT_ASSET_VERSION}" defer></script>`;
 }

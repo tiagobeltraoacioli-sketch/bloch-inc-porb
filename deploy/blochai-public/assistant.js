@@ -1,4 +1,7 @@
 import {publicPortals} from './catalog.js';
+import {fetchChainContext,validateChainQuery} from './chain-data.js';
+import {MODES,compactObservations,buildPublicGuide} from './chain-guide.js';
+import {sourceBasedAnswer} from './source-answer.js';
 
 const taskId=/^[a-f0-9]{64}$/,ticketPattern=/^[a-f0-9]{64}$/,states=new Set(['PENDING','ASSIGNED','READY','COMPLETED','FAILED']);
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; frame-ancestors 'none'"};
@@ -25,10 +28,10 @@ async function addressHash(request,env,day){
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.PUBLIC_BLOCHAI_IP_HASH_KEY),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   return hex(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`${day}:${address}`)));
 }
-function task(data,expectedId){
+function task(data,expectedId,guide){
   requireValue(taskId.test(data.task_id)&&(!expectedId||data.task_id===expectedId)&&states.has(data.status)&&typeof data.model==='string'&&data.model.length>0&&data.model.length<=200,'public_backend_unavailable',503);
   requireValue(data.status!=='COMPLETED'||(typeof data.output==='string'&&data.output.length<=16384),'public_backend_unavailable',503);
-  return {task_id:data.task_id,status:data.status,model:data.model,output:data.status==='COMPLETED'?data.output:null,failure_reason:data.status==='FAILED'?'The explanation could not be completed. Please try later.':null,poll_after_ms:2500};
+  return {task_id:data.task_id,status:data.status,model:data.model,answer_kind:'source_summary',output:data.status==='COMPLETED'?sourceBasedAnswer(guide):null,failure_reason:data.status==='FAILED'?'The explanation could not be completed. Please try later.':null,poll_after_ms:2500};
 }
 async function upstream(env,fetcher,path,body){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
@@ -41,7 +44,7 @@ async function upstream(env,fetcher,path,body){
   }finally{clearTimeout(timer);}
 }
 
-export async function handlePublicAssistant({request,env={},fetcher=fetch,now=Date.now()}){
+export async function handlePublicAssistant({request,env={},fetcher=fetch,now=Date.now(),contextLoader=fetchChainContext}){
   try{
     const url=new URL(request.url),portal=publicPortals[url.hostname];
     requireValue(url.protocol==='https:'&&!url.port&&portal,'not_found',404);
@@ -54,24 +57,30 @@ export async function handlePublicAssistant({request,env={},fetcher=fetch,now=Da
     requireValue(env.BLOCHAI_PUBLIC_DB&&typeof env.PUBLIC_BLOCHAI_API_TOKEN==='string'&&env.PUBLIC_BLOCHAI_API_TOKEN.length>=32&&typeof env.PUBLIC_BLOCHAI_IP_HASH_KEY==='string'&&env.PUBLIC_BLOCHAI_IP_HASH_KEY.length>=32&&env.PUBLIC_BLOCHAI_API_URL==='https://blochai-origin.posternlabs.com','public_assistant_unavailable',503);
     const db=env.BLOCHAI_PUBLIC_DB,seconds=Math.floor(now/1000),minute=Math.floor(seconds/60),day=Math.floor(seconds/86400),hash=await addressHash(request,env,day);
     if(submit){
-      const body=await readJson(request,512);
-      requireValue(Object.keys(body).length===1&&Object.hasOwn(body,'question_id')&&typeof body.question_id==='string'&&Object.hasOwn(portal.questions,body.question_id),'approved_question_required');
-      await budget(db,`submit:minute:${hash}:${minute}`,6,(minute+1)*60);
-      await budget(db,`submit:day:${hash}:${day}`,20,(day+1)*86400);
-      const globalLimit=Number(env.PUBLIC_BLOCHAI_DAILY_LIMIT||200);
+      const body=await readJson(request,1024);
+      requireValue(Object.keys(body).every(key=>['question_id','mode','network','subject'].includes(key))&&Object.hasOwn(body,'question_id')&&typeof body.question_id==='string'&&Object.hasOwn(portal.questions,body.question_id),'approved_question_required');
+      const mode=body.mode??'explain',network=body.network??'bloch';
+      requireValue(MODES.has(mode),'invalid_research_mode');
+      let query;try{query=validateChainQuery({portal:portal.id,network,subject:body.subject});}catch{throw new PublicError('invalid_chain_query',400);}
+      await budget(db,`submit:minute:${hash}:${minute}`,10,(minute+1)*60);
+      await budget(db,`submit:day:${hash}:${day}`,60,(day+1)*86400);
+      const globalLimit=Number(env.PUBLIC_BLOCHAI_DAILY_LIMIT||600);
       requireValue(Number.isSafeInteger(globalLimit)&&globalLimit>=1&&globalLimit<=1000,'public_assistant_unavailable',503);
       await budget(db,`submit:global:${day}`,globalLimit,(day+1)*86400);
-      const result=task(await upstream(env,fetcher,'/public/v1/tasks',{portal:portal.id,question_id:body.question_id}));
+      const observations=await contextLoader({...query,fetcher,now:()=>new Date(now)});
+      const guide=buildPublicGuide(portal.id,body.question_id,mode,observations);
+      const result=task(await upstream(env,fetcher,'/public/v1/tasks',{portal:portal.id,question_id:body.question_id,mode,network,observations:compactObservations(observations)}),undefined,guide);
       const ticket=hex(crypto.getRandomValues(new Uint8Array(32)));
-      await db.prepare('INSERT INTO blochai_public_jobs (task_id,portal,ticket_digest,expires_at) VALUES (?,?,?,?)').bind(result.task_id,portal.id,await digest(ticket),seconds+3600).run();
+      await db.prepare('INSERT INTO blochai_public_jobs (task_id,portal,ticket_digest,expires_at,guide_json) VALUES (?,?,?,?,?)').bind(result.task_id,portal.id,await digest(ticket),seconds+3600,JSON.stringify(guide)).run();
       await db.batch([db.prepare('DELETE FROM blochai_public_jobs WHERE expires_at<=?').bind(seconds),db.prepare('DELETE FROM blochai_public_budget WHERE expires_at<=?').bind(seconds)]);
-      return json({...result,portal:portal.id,poll_token:ticket},202);
+      return json({...result,portal:portal.id,poll_token:ticket,guide},202);
     }
     const ticket=request.headers.get('x-blochai-ticket');requireValue(ticketPattern.test(ticket||''),'public_task_not_found',404);
-    const owned=await db.prepare('SELECT task_id FROM blochai_public_jobs WHERE task_id=? AND portal=? AND ticket_digest=? AND expires_at>?').bind(match[1],portal.id,await digest(ticket),seconds).first();
+    const owned=await db.prepare('SELECT task_id,guide_json FROM blochai_public_jobs WHERE task_id=? AND portal=? AND ticket_digest=? AND expires_at>?').bind(match[1],portal.id,await digest(ticket),seconds).first();
     requireValue(owned,'public_task_not_found',404);
     await budget(db,`poll:minute:${hash}:${minute}`,90,(minute+1)*60);
     await db.prepare('DELETE FROM blochai_public_budget WHERE expires_at<=?').bind(seconds).run();
-    return json({...task(await upstream(env,fetcher,`/public/v1/tasks/${match[1]}?portal=${portal.id}`),match[1]),portal:portal.id});
+    const guide=owned.guide_json?JSON.parse(owned.guide_json):null;
+    return json({...task(await upstream(env,fetcher,`/public/v1/tasks/${match[1]}?portal=${portal.id}`),match[1],guide),portal:portal.id,guide});
   }catch(error){return json({error:error instanceof PublicError?error.message:'public_assistant_unavailable'},error instanceof PublicError?error.status:503);}
 }

@@ -12,11 +12,11 @@ export async function handleBlochAI({request,env={},fetcher=fetch}){
       requireValue(['GET','HEAD'].includes(request.method),'method_not_allowed',405);
       requireValue(env.ASSETS,'blochai_assets_unavailable',503);const asset=await env.ASSETS.fetch(request);response=new Response(asset.body,asset);for(const [key,value]of Object.entries(assetHeaders))response.headers.set(key,value);
     }else{
-      requireValue(['/api/porb/v1/blochai/status','/api/porb/v1/blochai/tasks'].includes(url.pathname)||url.pathname.startsWith('/api/porb/v1/blochai/tasks/'),'not_found',404);
-      requireValue(['GET','POST'].includes(request.method),'method_not_allowed',405);requireValue(!url.search,'unexpected_parameters');
+      requireValue(['/api/porb/v1/blochai/status','/api/porb/v1/blochai/tasks','/api/porb/v1/blochai/research'].includes(url.pathname)||['/api/porb/v1/blochai/tasks/','/api/porb/v1/blochai/research/'].some(prefix=>url.pathname.startsWith(prefix)),'not_found',404);
+      requireValue(['GET','POST','DELETE'].includes(request.method),'method_not_allowed',405);requireValue(!url.search,'unexpected_parameters');
       const origin=request.headers.get('origin');requireValue(!origin||origin===url.origin,'cross_origin_request_denied',403);
       requireValue(!request.headers.has('authorization'),'browser_session_required',403);
-      if(request.method==='POST')requireValue(request.headers.get('origin')===url.origin&&request.headers.get('x-porb-action')==='1','same_origin_action_required',403);
+      if(request.method!=='GET')requireValue(request.headers.get('origin')===url.origin&&request.headers.get('x-porb-action')==='1','same_origin_action_required',403);
       requireValue(env.PORB_DB&&typeof env.PORB_AUTH_PEPPER==='string'&&env.PORB_AUTH_PEPPER.length>=32,'portal_unavailable',503);
       const principal=await principalOf(request,env);requireValue(principal,'authentication_required',401);requireValue(principal.type==='session','browser_session_required',403);
       await budget(env,`blochai-requests:${principal.id}`,120,60);

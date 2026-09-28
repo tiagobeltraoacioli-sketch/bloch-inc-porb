@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {handlePublicBlochAI} from '../deploy/blochai-public/worker.js';
 import {handlePublicBlochAILink} from '../deploy/blochai-public-links/worker.js';
+import {ASSISTANT_ASSET_VERSION,assistantMarkup} from '../deploy/blochai-public/catalog.js';
 
 test('public hub serves static assets without credentials, scripts, cookies or connections',async()=>{
   let assetCalls=0;const env={ASSETS:{async fetch(request){assetCalls++;assert.equal(request.headers.has('cookie'),false);assert.equal(request.headers.has('authorization'),false);return new Response('public content',{headers:{'content-type':'text/html','set-cookie':'unexpected=value','access-control-allow-origin':'*'}});}}};
@@ -16,10 +17,20 @@ test('public hub has no inference, session or mutable endpoints and rejects the 
   for(const origin of ['https://rednblue.space','https://blochai.xyz.attacker.test','http://blochai.xyz'])assert.equal((await handlePublicBlochAI({request:new Request(origin+'/'),env})).status,404);
   assert.equal(reads,0);
 });
+test('assistant assets pair a release version with revalidation and reject unknown asset queries',async()=>{
+  let reads=0;const env={ASSETS:{async fetch(request){reads++;assert.equal(new URL(request.url).search,'');assert.equal(request.headers.has('cookie'),false);return new Response('asset');}}};
+  for(const host of ['bloch-graphus.xyz','bloch.space','blochl1.com'])for(const asset of ['/blochai-assistant.css','/blochai-assistant.js']){
+    for(const query of ['',`?v=${ASSISTANT_ASSET_VERSION}`]){const response=await handlePublicBlochAI({request:new Request(`https://${host}${asset}${query}`),env});assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-cache.*max-age=0.*must-revalidate/);}
+    const before=reads;for(const suffix of ['?v=old','?v=20260928-chain-2&extra=1','?v=20260928-chain-2&v=20260928-chain-2','?other=1','.unexpected'])assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}${asset}${suffix}`),env})).status,404);assert.equal(reads,before);
+  }
+  assert.match(assistantMarkup('blochl1.com'),new RegExp(`/blochai-assistant\\.js\\?v=${ASSISTANT_ASSET_VERSION}`));
+  assert.equal((await handlePublicBlochAI({request:new Request(`https://blochl1.com/blochai-pdf/blochai-pdf.js?v=${ASSISTANT_ASSET_VERSION}`),env})).status,404);
+});
 test('public product content keeps private work external and GPU rewards explicitly future',()=>{
   const html=readFileSync(new URL('../site/blochai-public/index.html',import.meta.url),'utf8');
   for(const host of ['bloch-graphus.xyz','bloch.space','blochl1.com','rednblue.space/blochai/'])assert.ok(html.includes(`https://${host}`));
   assert.doesNotMatch(html,/<(?:script|form|input|textarea|iframe)\b/i);assert.doesNotMatch(html,/\/api\/|wallet-connect|BAI\b/);assert.match(html,/Qwen\/Qwen2\.5-0\.5B-Instruct/);assert.match(html,/<strong>13<\/strong>/);assert.match(html,/not an online count/);assert.match(html,/Connect your GPU/);assert.match(html,/Earn BLCH/);assert.match(html,/PLANNED/);assert.match(html,/program is not active/);
+  assert.match(html,/PDF with graphs and sources/);assert.match(html,/CSV and JSON/);assert.match(html,/Typed topic text stays on your device/);assert.match(html,/Ethereum address lookup supplies a balance, not full transaction history/);assert.match(html,/personal research settings/);
   const config=readFileSync(new URL('../deploy/blochai-public/wrangler.toml',import.meta.url),'utf8');assert.doesNotMatch(config,/PORB_DB|binding = "BLOCHAI_API_TOKEN"|rednblue/);assert.match(config,/BLOCHAI_PUBLIC_DB/);assert.match(config,/PUBLIC_BLOCHAI_API_URL/);assert.match(config,/https:\/\/bloch-graphus.xyz\//);assert.match(config,/https:\/\/bloch.space\//);assert.match(config,/https:\/\/blochl1.com\//);
 });
 test('optional public link handler passes through the exact request and response without broadening hosts',async()=>{

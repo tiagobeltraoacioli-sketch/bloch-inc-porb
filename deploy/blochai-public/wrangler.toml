@@ -12,16 +12,19 @@ routes = [
   { pattern = "https://bloch.space/", zone_name = "bloch.space" },
   { pattern = "https://bloch.space/app/*", zone_name = "bloch.space" },
   { pattern = "https://blochl1.com/", zone_name = "blochl1.com" },
-  { pattern = "https://bloch-graphus.xyz/blochai-assistant.js", zone_name = "bloch-graphus.xyz" },
-  { pattern = "https://bloch-graphus.xyz/blochai-assistant.css", zone_name = "bloch-graphus.xyz" },
+  { pattern = "https://bloch-graphus.xyz/blochai-assistant.js*", zone_name = "bloch-graphus.xyz" },
+  { pattern = "https://bloch-graphus.xyz/blochai-pdf/*", zone_name = "bloch-graphus.xyz" },
+  { pattern = "https://bloch-graphus.xyz/blochai-assistant.css*", zone_name = "bloch-graphus.xyz" },
   { pattern = "https://bloch-graphus.xyz/api/blochai/tasks", zone_name = "bloch-graphus.xyz" },
   { pattern = "https://bloch-graphus.xyz/api/blochai/tasks/*", zone_name = "bloch-graphus.xyz" },
-  { pattern = "https://bloch.space/blochai-assistant.js", zone_name = "bloch.space" },
-  { pattern = "https://bloch.space/blochai-assistant.css", zone_name = "bloch.space" },
+  { pattern = "https://bloch.space/blochai-assistant.js*", zone_name = "bloch.space" },
+  { pattern = "https://bloch.space/blochai-pdf/*", zone_name = "bloch.space" },
+  { pattern = "https://bloch.space/blochai-assistant.css*", zone_name = "bloch.space" },
   { pattern = "https://bloch.space/api/blochai/tasks", zone_name = "bloch.space" },
   { pattern = "https://bloch.space/api/blochai/tasks/*", zone_name = "bloch.space" },
-  { pattern = "https://blochl1.com/blochai-assistant.js", zone_name = "blochl1.com" },
-  { pattern = "https://blochl1.com/blochai-assistant.css", zone_name = "blochl1.com" },
+  { pattern = "https://blochl1.com/blochai-assistant.js*", zone_name = "blochl1.com" },
+  { pattern = "https://blochl1.com/blochai-pdf/*", zone_name = "blochl1.com" },
+  { pattern = "https://blochl1.com/blochai-assistant.css*", zone_name = "blochl1.com" },
   { pattern = "https://blochl1.com/api/blochai/tasks", zone_name = "blochl1.com" },
   { pattern = "https://blochl1.com/api/blochai/tasks/*", zone_name = "blochl1.com" }
 ]
@@ -30,7 +33,7 @@ routes = [
 ENABLE_PUBLIC_LINK = "true"
 ENABLE_PUBLIC_ASSISTANT = "true"
 PUBLIC_BLOCHAI_API_URL = "https://blochai-origin.posternlabs.com"
-PUBLIC_BLOCHAI_DAILY_LIMIT = "200"
+PUBLIC_BLOCHAI_DAILY_LIMIT = "600"
 
 [[d1_databases]]
 binding = "BLOCHAI_PUBLIC_DB"

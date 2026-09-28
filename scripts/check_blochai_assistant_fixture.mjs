@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import {assistantMarkup,publicPortals} from '../deploy/blochai-public/catalog.js';
+
+const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+const directory=new URL('../.data/blochai-assistant-fixtures/',import.meta.url);await mkdir(directory,{recursive:true});
+let submits=[],counter=0,behavior='complete';
+const server=createServer(async(request,response)=>{
+  try{
+    const url=new URL(request.url,'http://localhost');
+    if(url.pathname==='/'){
+      const host=url.searchParams.get('host')||'bloch-graphus.xyz';
+      response.setHeader('content-type','text/html; charset=utf-8');response.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/blochai-assistant.css"><style>body{margin:0;background:#eee;font:16px Arial;color-scheme:dark}main{padding:35px}button{width:100%;letter-spacing:2px}button,input,select{background:#111!important;color:#eee!important;-webkit-text-fill-color:#eee}button:hover{background:#222!important;color:#333!important}svg{position:absolute;width:100vw;height:100vh}h3{text-transform:uppercase}article{min-width:600px}</style></head><body><main><h1>Public portal fixture</h1><p>Source content stays outside the assistant.</p></main>${assistantMarkup(host)}</body></html>`);return;
+    }
+    if(['/blochai-assistant.js','/blochai-assistant.css'].includes(url.pathname)){
+      response.setHeader('content-type',url.pathname.endsWith('.js')?'text/javascript':'text/css');response.end(await readFile(new URL(`../site/blochai-public${url.pathname}`,import.meta.url)));return;
+    }
+    if(url.pathname.startsWith('/blochai-pdf/')&&!url.pathname.includes('..')){
+      const path=url.pathname.replace('/blochai-pdf/','');response.setHeader('content-type',path.endsWith('.js')?'text/javascript':'font/ttf');response.end(await readFile(new URL(`../site/blochai-shared/${path}`,import.meta.url)));return;
+    }
+    if(url.pathname==='/api/blochai/tasks'){
+      let raw='';for await(const chunk of request)raw+=chunk;const body=JSON.parse(raw);submits.push(body);
+      const portal=new URL(request.headers.referer).searchParams.get('host')||'bloch-graphus.xyz',id=(++counter).toString(16).padStart(64,'0'),topic=publicPortals[portal].topics[body.question_id];
+      const source={id:'public',title:'Public source fixture',url:`https://${portal}/`,retrieved_at:'2026-09-28T23:00:00Z',coverage:'Synthetic browser test. This is not a live observation.',status:'source_reported'};
+      const guide={question_id:body.question_id,title:topic.title,question:topic.question,mode:behavior==='mismatch'?'bad-mode':body.mode,network:body.network,subject:body.subject||null,knowledge:[{text:'A public connection does not prove ownership.',source_id:'public'}],sources:[source,{id:'bad',title:'Bad URL',url:'javascript:window.bad=true'}],facts:[{label:'Observed records',value:'20'},{label:'Synthetic literal',value:'<img src=x onerror=window.bad=true>'}],status:'source_reported',coverage:source.coverage,transactions:[{hash:'a'.repeat(64),from:'b'.repeat(64),to:'c'.repeat(64),amount:'9007199254740993123',asset:'BLCH',timestamp:'2026-09-28T23:00:00Z',status:'=unsafe-cell'}],graph:{nodes:[{id:'a',label:'a'.repeat(64),kind:'transaction'},{id:'b',label:'b'.repeat(64),kind:'script'},{id:'c',label:'c'.repeat(64),kind:'script'}],edges:[{source:'b',target:'a',label:'input observation'},{source:'a',target:'c',label:'output observation'}]}};
+      response.setHeader('content-type','application/json');response.end(JSON.stringify({task_id:id,poll_token:'e'.repeat(64),status:behavior==='pending'?'PENDING':'COMPLETED',portal:publicPortals[portal].id,model:'synthetic-browser-model',answer_kind:'source_summary',output:'Synthetic explanation. <script>window.bad = true</script> This source does not establish ownership.',guide}));return;
+    }
+    response.statusCode=404;response.end('Not found');
+  }catch(error){response.statusCode=500;response.end(error.message);}
+});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`,browser=await webkit.launch({headless:true}),results=[];
+try{
+  for(const [host,portal] of Object.entries(publicPortals)){
+    const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true}),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(`${origin}/?host=${host}`);const widget=page.locator('.blochai-assistant');await widget.locator('.blochai-assistant__trigger').click();
+    const contrast=await widget.evaluate(root=>{
+      const rgb=value=>(value.match(/[\d.]+/g)||[]).slice(0,3).map(Number),luminance=color=>rgb(color).map(n=>n/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4).reduce((total,n,i)=>total+n*[.2126,.7152,.0722][i],0);
+      return [...root.querySelectorAll('button,input,select')].filter(element=>element.getBoundingClientRect().height).map(element=>{const style=getComputedStyle(element),a=luminance(style.color),b=luminance(style.backgroundColor);return {label:element.textContent.trim().slice(0,50)||element.getAttribute('name')||'search',contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05),opacity:style.opacity,colorScheme:style.colorScheme};});
+    });for(const control of contrast){assert.ok(control.contrast>=4.5,`${portal.id}: ${control.label} contrast ${control.contrast}`);assert.equal(control.opacity,'1');assert.equal(control.colorScheme,'light');}
+    await page.screenshot({path:new URL(`${portal.id}-initial-controls.png`,directory).pathname});
+    const search=widget.locator('.blochai-assistant__search'),submit=widget.locator('.blochai-assistant__submit');assert.equal(await submit.isDisabled(),true);
+    await search.fill('private customer AML records and secret credentials');assert.equal(await submit.isDisabled(),true);assert.match(await widget.locator('.blochai-assistant__match').innerText(),/No single portal topic/);
+    const first=Object.entries(portal.topics)[0],secret='LOCAL_ONLY_TEXT_7F39';await search.fill(`${first[1].title} ${secret}`);assert.equal(await submit.isDisabled(),false);assert.match(await widget.locator('.blochai-assistant__match').innerText(),/Matched topic:/);
+    const before=submits.length;await submit.click();await widget.locator('.blochai-assistant__turn').waitFor();assert.equal(submits.length,before+1);assert.deepEqual(submits.at(-1),{question_id:first[0],mode:'explain',network:'bloch'});assert.ok(!JSON.stringify(submits).includes(secret));assert.equal(await search.inputValue(),'');assert.equal(await page.evaluate(()=>window.bad),undefined);
+    assert.equal(await widget.locator('.blochai-assistant__output script').count(),0);assert.equal(await widget.locator('.blochai-assistant__facts img').count(),0);assert.equal(await widget.locator('a[href^="javascript:"]').count(),0);assert.equal(await widget.locator('.blochai-assistant__graph svg').count(),1);assert.equal(await widget.locator('.blochai-assistant__answer-label').innerText(),'Source-based explanation');assert.equal(await widget.locator('.blochai-assistant__meta').innerText(),'Assembled from reviewed notes and source observations.');
+    const csvEvent=page.waitForEvent('download');await widget.getByRole('button',{name:'Download CSV',exact:true}).first().click();const csv=await csvEvent;await csv.saveAs(new URL(`${portal.id}.csv`,directory).pathname);const csvText=await readFile(new URL(`${portal.id}.csv`,directory),'utf8');assert.match(csvText,/"amount_base_units","amount_unit"/);assert.match(csvText,/"9007199254740993123","sat"/);assert.match(csvText,/'=unsafe-cell/);
+    const jsonEvent=page.waitForEvent('download');await widget.getByRole('button',{name:'Download JSON',exact:true}).first().click();const json=await jsonEvent;await json.saveAs(new URL(`${portal.id}.json`,directory).pathname);const exported=JSON.parse(await readFile(new URL(`${portal.id}.json`,directory),'utf8'));assert.equal(exported.graph.nodes.length,3);assert.equal(exported.sources.length,1);assert.equal(exported.classification,'PUBLIC');assert.deepEqual(exported.amount_units,{BTC:'sat',ETH:'wei',BLCH:'sat'});assert.equal(exported.transactions[0].amount,'9007199254740993123');
+    await widget.locator('[data-followup="checklist"]').first().click();await page.waitForFunction(()=>document.querySelectorAll('.blochai-assistant__turn').length===2);assert.equal(submits.at(-1).mode,'checklist');assert.equal(await widget.locator('.blochai-assistant__turn').count(),2);
+    await widget.locator('[name="subject_kind"]').selectOption('address');await widget.locator('[name="subject_value"]').fill('not-a-valid-reference');const beforeInvalid=submits.length;await submit.click();assert.equal(submits.length,beforeInvalid);assert.match(await widget.locator('.blochai-assistant__status').innerText(),/Check the public reference/);
+    await widget.locator('[name="subject_value"]').fill('d'.repeat(64));await submit.click();await page.waitForFunction(()=>document.querySelectorAll('.blochai-assistant__turn').length===3);assert.deepEqual(submits.at(-1).subject,{kind:'address',value:'d'.repeat(64)});assert.equal(submits.at(-1).question_id,'wallet_summary');
+    const views=[];for(const width of [1440,390,360]){await page.setViewportSize({width,height:width===1440?1000:844});const view=await widget.locator('.blochai-assistant__panel').evaluate(element=>{const rect=element.getBoundingClientRect();return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,panelWidth:element.scrollWidth,clientWidth:element.clientWidth,inside:rect.left>=0&&rect.right<=innerWidth+1&&rect.top>=0&&rect.bottom<=innerHeight+1};});assert.ok(view.documentWidth<=width+1,`${host} page overflow`);assert.ok(view.panelWidth<=view.clientWidth+1,`${host} panel overflow`);assert.ok(view.inside,`${host} panel bounds`);await page.screenshot({path:new URL(`${portal.id}-${width}.png`,directory).pathname});views.push(view);}
+    if(portal.id==='graphus'){
+      const pdfEvent=page.waitForEvent('download');await widget.locator('.blochai-assistant__export').click();const pdf=await pdfEvent;await pdf.saveAs(new URL('public-conversation.pdf',directory).pathname);const bytes=await readFile(new URL('public-conversation.pdf',directory));assert.equal(bytes.subarray(0,5).toString(),'%PDF-');assert.ok(bytes.length>10000);
+    }
+    await widget.locator('.blochai-assistant__clear').click();assert.equal(await widget.locator('.blochai-assistant__turn').count(),0);assert.equal(await widget.locator('[name="subject_value"]').inputValue(),'');assert.equal(await widget.locator('.blochai-assistant__export').isDisabled(),true);
+    behavior='mismatch';await widget.locator(`[data-topic="${first[0]}"]`).click();await submit.click();await page.waitForFunction(()=>document.querySelector('.blochai-assistant__status').textContent.includes('mismatched'));assert.equal(await widget.locator('.blochai-assistant__turn').count(),0);
+    behavior='pending';await submit.click();await page.waitForFunction(()=>document.querySelector('.blochai-assistant__status').textContent.includes('Building an explanation'));await widget.locator('.blochai-assistant__clear').click();await page.waitForTimeout(2700);assert.equal(await widget.locator('.blochai-assistant__turn').count(),0);assert.equal(await submit.isDisabled(),true);behavior='complete';
+    assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>localStorage.length),0);assert.equal(await page.evaluate(()=>sessionStorage.length),0);results.push({portal:portal.id,views,typed_topic_local_only:true,subject_validation:true,followups:true,csv_json:true,pdf:portal.id==='graphus',clear_cancels:true,errors});await page.close();
+  }
+  await writeFile(new URL('report.json',directory),JSON.stringify(results,null,2));console.log(JSON.stringify(results,null,2));
+}finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

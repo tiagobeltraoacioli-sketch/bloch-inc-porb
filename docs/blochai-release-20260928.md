@@ -1,5 +1,9 @@
 # BlochAI web release — 2026-09-28
 
+This document records the initial deployment. The later chain research,
+personalization and export update is recorded in
+[blochai-chain-research-release-20260928.md](blochai-chain-research-release-20260928.md).
+
 BlochAI now has a public product hub at `https://blochai.xyz/` and authenticated
 GPU inference at `https://rednblue.space/blochai/`. Public Graphus, Bloch Space
 and Bloch Explorer entry pages offer a public guide restricted to each portal's
