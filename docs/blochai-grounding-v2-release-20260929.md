@@ -89,3 +89,52 @@ Coordinator archive SHA-256:
 `abb6f2f0d7b06da5ba72e21c6957197a74248b8c937feddf55fd474c98c52944`.
 The training runtime is separately staged and remains unchanged by the transaction
 export correction. The isolated pilot restores its inference worker on exit.
+
+## Live verification
+
+Graphus, Space and Explorer each completed a GPU request and exported PDF/CSV/JSON.
+These snapshots had available public sources: Graphus returned 7 facts and 8
+transactions, Space 10 facts and 1 transaction, and Explorer 25 facts and 20
+transactions. Each summary selected four relevant facts with known source IDs.
+The three browser layouts passed at 1440, 390 and 360 pixels; minimum measured
+control contrast was 5.65:1. A separate Graphus regression covered the original
+Bloch transaction and its exact UTXO records.
+
+Authenticated private verification completed a synthetic 64-token GPU request
+while 12 workers remained available during the isolated training pilot. The
+CONFIDENTIAL two-page PDF preserved 6 facts, 4 derived facts, 4 readings and source
+identifiers. Research preset CRUD, cleanup, mobile layout, logout clearing and
+same-origin-only PDF generation passed. The deliberately short output validates
+execution and export; its truncated prose is not evidence of analytical quality.
+
+Production boundary checks passed token separation, hidden private task IDs,
+public raw-prompt and foreign-origin rejection, private session enforcement and
+preservation of legacy AML routes. The existing private application hash remains
+`f32e94e8b740870e56c8fd8049d9a5bc49f384c4c22b7aca9b57cd4af3768d67`, excluding
+only the provider Insights script injection. No private AML record was used in
+these public tests or in the training corpus.
+
+All 47 pages of the four live portal PDFs were rendered and visually reviewed:
+Graphus 10, Space 5, Explorer 30 and private synthetic research 2. Comparison with
+the public JSON snapshots confirmed 29 transaction records, 96 input/output
+entries and 12 source cards without missing exported values. The separate
+five-page corrected transaction report was also verified. No visual or textual
+export defects were found; no PDF was uploaded to an external service.
+
+## Completed training and fleet audit
+
+The isolated experiment completed 216 steps in 878.80 seconds. Paired exact
+answers improved from 0/54 to 54/54 on the fixed synthetic test and from 0/54 to
+53/54 on separate validation. Observed-fact copying was 24/24 on test and 23/24 on
+validation; a synthetic Bloch hash was copied incorrectly in validation. Correct
+abstentions were 30/30 on both splits. The validation review screen did not pass,
+so the candidate remains a research artifact and the production model is unchanged.
+These narrow English copying/abstention results do not establish open-ended or
+multilingual blockchain expertise. The backend repository records the complete
+sanitized measurements and artifact hashes.
+
+The final audit verified all 13 hosts against the source manifest, with all 13
+GPU runtimes online and ready and no unexpected stop of an unrelated service.
+Each allocated NVIDIA A16-2Q exposes 2,048 MiB VRAM; host RAM is not GPU memory.
+Backend CI `36506688132`, public privacy CI `36506685660` and private portal CI
+`36506685593` passed for the implementation commits.
