@@ -13,7 +13,9 @@ function observation({network = 'bloch', subject = null, now = () => new Date(ba
   return {network, subject, sources: [{id: 'test_public_source', title: 'Synthetic public fixture',
     url: 'https://bloch-graphus.xyz/api/chain/network?asset=BLCH', retrieved_at: now().toISOString(), observed_at: null,
     status: 'available', coverage: 'Synthetic bounded test observation, not a live record.'}],
-    facts: [{label: 'Observed head height', value: '100', unit: 'blocks'}],
+    facts: [{label: 'Observed head height', value: '100', unit: 'blocks', source_id: 'test_public_source'},
+      {label: 'Displayed graph references', value: '2', unit: 'references', source_id: 'test_public_source'},
+      {label: 'Displayed graph records', value: '1', unit: 'records', source_id: 'test_public_source'}],
     transactions: [{hash: txid, asset: 'BLCH', status: 'source-reported'}],
     graph: {nodes: [{id: `bloch:script_hash:${script}`, label: script, kind: 'script_hash'},
       {id: `bloch:transaction:${txid}`, label: txid, kind: 'transaction'}],
@@ -85,7 +87,9 @@ test('approved public research creates scoped tickets and persists a source-back
       customContext: async () => {throw new Error('Polling must reuse the persisted observation');}});
     const result = await polled.json();
     assert.equal(polled.status, 200); assert.equal(result.answer_kind,'source_summary');
-    assert.match(result.output,/Observed head height: 100 blocks/);assert.doesNotMatch(result.output,/window.bad|public explanation/);
+    assert.match(result.output,/Displayed graph references: 2 references/);assert.match(result.output,/Displayed graph records: 1 records/);
+    assert.match(result.output,/Source: Synthetic public fixture \[test_public_source\] \(available\)/);
+    assert.doesNotMatch(result.output,/Observed head height: 100 blocks|window.bad|public explanation/);
     assert.equal(result.tenant_id, undefined); assert.equal(result.node_address, undefined); assert.equal(result.poll_token, undefined);
     assert.deepEqual(result.guide, data.guide);
     assert.equal(s.requests[1].url, `https://blochai-origin.posternlabs.com/public/v1/tasks/${data.task_id}?portal=graphus`);

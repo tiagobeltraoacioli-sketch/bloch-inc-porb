@@ -31,3 +31,10 @@ test('computed explanations prioritize the selected topic and preserve partial-s
   assert.match(wallet,/Source time \(partial\): Retrieval age is not chain age/);
   assert.deepEqual(insights,original);
 });
+
+test('saved answer selections cannot override current topic relevance or exact source facts',()=>{
+  const current={...guide,network:'ethereum',question_id:'fees',facts:[{label:'Source gas price',value:'9007199254740993',unit:'wei/gas'}],answer_facts:[{label:'Invented transfer',value:'1000',unit:'ETH'}],answer_coverage:'No limits apply.'};
+  const answer=sourceBasedAnswer(current);
+  assert.match(answer,/Source gas price: 9007199254740993 wei\/gas/);
+  assert.doesNotMatch(answer,/Invented transfer|1000 ETH|No limits apply/);
+});

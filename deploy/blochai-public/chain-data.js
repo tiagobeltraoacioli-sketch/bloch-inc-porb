@@ -3,6 +3,8 @@ const NETWORKS = Object.freeze({bitcoin: 'BTC', ethereum: 'ETH', bloch: 'BLCH'})
 const PORTALS = new Set(['graphus', 'space', 'explorer', 'rednblue']);
 const MAX_BYTES = 3 * 1024 * 1024;
 const MAX_NODES = 40, MAX_EDGES = 80, MAX_TRANSACTIONS = 20;
+const MAX_TRANSACTION_SIDE = 24, MAX_TRANSACTION_REFERENCES = 80;
+const transactionMetadata = new WeakMap();
 const HASH = /^[a-f0-9]{64}$/i;
 const ETH_ADDRESS = /^0x[a-f0-9]{40}$/i;
 const AMOUNT = /^(0|[1-9][0-9]{0,77})$/;
@@ -107,37 +109,123 @@ function addEdge(result, source, target, amount, unit) {
   result.graph.edges.push({source, target, ...(decimal(amount) ? {label: `${amount} ${unit}`} : {})});
 }
 function addTransaction(result, network, row) {
-  if (!validHash(row.hash) || result.transactions.length >= MAX_TRANSACTIONS) return;
+  if (!validHash(row.hash)) return null;
   const txid = hash(row.hash, network);
-  if (result.transactions.some(item => item.hash === txid)) return;
-  const normalized = {hash: txid, asset: NETWORKS[network], status: ['successful', 'failed', 'confirmed', 'pending'].includes(row.status) ? row.status : 'source-reported'};
-  if (address(row.from, network)) normalized.from = network === 'bitcoin' ? row.from : row.from.toLowerCase();
-  if (address(row.to, network)) normalized.to = network === 'bitcoin' ? row.to : row.to.toLowerCase();
-  if (decimal(row.amount)) normalized.amount = row.amount;
-  if (iso(row.timestamp)) normalized.timestamp = iso(row.timestamp);
-  result.transactions.push(normalized);
+  // A full transaction list must still accept evidence for an existing hash.
+  let normalized = result.transactions.find(item => item.hash === txid);
+  if (!normalized) {
+    if (result.transactions.length >= MAX_TRANSACTIONS) return null;
+    normalized = {hash: txid, asset: NETWORKS[network], status: 'source-reported', record_type: network === 'ethereum' ? 'account' : 'utxo'};
+    if (normalized.record_type === 'utxo') Object.assign(normalized, {inputs: [], outputs: []});
+    result.transactions.push(normalized);
+    transactionMetadata.set(normalized, {conflicts: new Set(), inputs: new Map(), outputs: new Map(), seenInputs: new Set(), seenOutputs: new Set(), graph: false, omitted: false});
+  }
+  const metadata = transactionMetadata.get(normalized);
+  const merge = (key, value) => {
+    if (value === undefined || metadata.conflicts.has(key)) return;
+    if (normalized[key] === undefined || key === 'status' && normalized.status === 'source-reported') normalized[key] = value;
+    else if (normalized[key] !== value) {
+      if (['block_height', 'block_hash', 'slot', 'timestamp'].includes(key)) {
+        // Conflicting anchors cannot support a selectively retained block/time.
+        for (const field of ['block_height', 'block_hash', 'slot', 'timestamp']) {delete normalized[field]; metadata.conflicts.add(field);}
+        normalized.status = 'source-reported'; metadata.conflicts.add('status');
+      } else {delete normalized[key]; metadata.conflicts.add(key);}
+      if (key === 'status') normalized.status = 'source-reported';
+    }
+  };
+  if (['successful', 'failed', 'confirmed', 'pending'].includes(row.status)) merge('status', row.status);
+  if (network === 'ethereum') {
+    for (const key of ['from', 'to']) if (address(row[key], network)) merge(key, row[key].toLowerCase());
+    if (decimal(row.amount)) merge('amount', row.amount);
+  }
+  if (iso(row.timestamp)) merge('timestamp', iso(row.timestamp));
+  for (const key of ['block_height', 'slot']) if (integer(row[key]) || decimal(row[key])) merge(key, String(row[key]));
+  if (validHash(row.block_hash)) merge('block_hash', hash(row.block_hash, network));
+  return normalized;
+}
+
+function addTransactionReference(result, transaction, network, side, row, position) {
+  if (!transaction || transaction.record_type !== 'utxo') return;
+  const metadata = transactionMetadata.get(transaction), fields = {};
+  const outpoint = row.outpoint;
+  if (validHash(outpoint?.txid) && integer(outpoint?.vout) && (side === 'inputs' || hash(outpoint.txid, network) === transaction.hash)) {
+    fields.reference = `${hash(outpoint.txid, network)}:${outpoint.vout}`;
+  } else if (outpoint !== undefined) metadata.omitted = true;
+  if (address(row.address, network)) fields.address = network === 'bitcoin' ? row.address : row.address.toLowerCase();
+  if (decimal(row.amount)) fields.amount = row.amount;
+  const key = fields.reference || `position:${position}`;
+  const seen = side === 'inputs' ? metadata.seenInputs : metadata.seenOutputs;
+  seen.add(key);
+  if (!Object.keys(fields).length) {metadata.omitted = true; return;}
+  const existing = metadata[side].get(key);
+  if (existing) {
+    for (const [field, value] of Object.entries(fields)) {
+      if (existing.conflicts.has(field)) continue;
+      if (existing.row[field] === undefined) existing.row[field] = value;
+      else if (existing.row[field] !== value) {
+        delete existing.row[field]; existing.conflicts.add(field); metadata.conflicts.add(`${side}.${field}`);
+      }
+    }
+    return;
+  }
+  const total = result.transactions.reduce((sum, item) => sum + (item.inputs?.length || 0) + (item.outputs?.length || 0), 0);
+  if (transaction[side].length >= MAX_TRANSACTION_SIDE || total >= MAX_TRANSACTION_REFERENCES) {metadata.omitted = true; return;}
+  transaction[side].push(fields);
+  metadata[side].set(key, {row: fields, conflicts: new Set()});
+}
+
+function transactionCoverage(transaction) {
+  const metadata = transactionMetadata.get(transaction), lines = [];
+  if (transaction.record_type === 'utxo') {
+    lines.push(`UTXO sample: ${transaction.inputs.length}/${metadata.seenInputs.size} input and ${transaction.outputs.length}/${metadata.seenOutputs.size} output source records returned.`,
+      'No single sender, recipient or transfer amount is inferred. Input/output values are not additive transfer volume.',
+      `Caps: ${MAX_TRANSACTION_SIDE} per side; ${MAX_TRANSACTION_REFERENCES} references per snapshot.`);
+    if (metadata.graph) lines.push('The source graph is bounded; complete transaction inputs/outputs are not established.');
+    if (metadata.omitted) lines.push('Some source records or fields were omitted by validation or export limits.');
+  } else lines.push('Native account record; amount is the declared native value, not an ERC-20 transfer. Failed execution does not transfer the declared value.');
+  if (!transaction.timestamp) lines.push('Transaction time is unavailable from this source snapshot.');
+  if (metadata.conflicts.size) lines.push(`Conflicting metadata omitted: ${[...metadata.conflicts].sort().join(', ')}.`);
+  return lines.join(' ').slice(0, 600);
 }
 function projectGraph(result, data, network) {
   if (!Array.isArray(data.nodes) || data.nodes.length > 1200 || !Array.isArray(data.edges) || data.edges.length > 4000) throw new Error('invalid_source');
   const mapping = new Map(), sourceNodes = new Map();
   for (const node of data.nodes) {
-    if (!node || typeof node.id !== 'string' || node.id.length > 200 || mapping.has(node.id)) continue;
+    if (!node || typeof node.id !== 'string' || node.id.length > 200 || sourceNodes.has(node.id)) continue;
     const kind = node.kind === 'transaction' ? 'transaction' : node.kind === 'script_hash' ? 'script_hash' : node.kind === 'address' ? 'address' : null;
     if (!kind) continue;
     const value = kind === 'transaction' ? node.txid : node.address;
     sourceNodes.set(node.id, node);
     const id = addNode(result, network, kind, value);
     if (id) mapping.set(node.id, id);
-    if (kind === 'transaction') addTransaction(result, network, {hash: value, timestamp: node.block?.time});
+    if (kind === 'transaction') {
+      const transaction = addTransaction(result, network, {hash: value, timestamp: node.block?.time,
+        block_height: node.block?.height, block_hash: node.block?.hash, slot: node.block?.slot});
+      if (transaction) transactionMetadata.get(transaction).graph = true;
+    }
   }
-  for (const edge of data.edges) {
+  for (const [index, edge] of data.edges.entries()) {
     if (!edge || typeof edge.from !== 'string' || typeof edge.to !== 'string') continue;
     addEdge(result, mapping.get(edge.from), mapping.get(edge.to), edge.amount_base_units, network === 'ethereum' ? 'wei' : 'sat');
-    if (validHash(edge.txid)) {
-      const from = sourceNodes.get(edge.from), to = sourceNodes.get(edge.to);
-      addTransaction(result, network, {hash: edge.txid, timestamp: edge.block_time || edge.block?.time,
-        ...(network === 'ethereum' && edge.kind === 'native_value' ? {from: from?.address, to: to?.address, amount: edge.amount_base_units} : {})});
-    }
+    if (!validHash(edge.txid)) continue;
+    const from = sourceNodes.get(edge.from), to = sourceNodes.get(edge.to);
+    const native = network === 'ethereum' && edge.kind === 'native_value' && from?.kind === 'address' && to?.kind === 'address' && address(from.address, network) && address(to.address, network);
+    const input = network === 'bitcoin' ? edge.kind === 'observed_input_prevout' : network === 'bloch' && edge.kind === 'observed_spent_outpoint_reference';
+    const output = network === 'bitcoin' ? edge.kind === 'created_output' : network === 'bloch' && edge.kind === 'observed_created_output';
+    const transactionNode = input ? to : output ? from : null, endpoint = input ? from : output ? to : null;
+    const utxo = network !== 'ethereum' && (input || output) && transactionNode?.kind === 'transaction' && validHash(transactionNode.txid) &&
+      hash(transactionNode.txid, network) === hash(edge.txid, network) && ['address', 'script_hash'].includes(endpoint?.kind) && address(endpoint.address, network);
+    if (!native && !utxo) continue;
+    const transaction = addTransaction(result, network, {hash: edge.txid, timestamp: edge.block_time,
+      block_height: edge.block_number, block_hash: edge.block_hash, slot: edge.slot,
+      ...(native ? {from: from.address, to: to.address, amount: edge.amount_base_units} : {})});
+    if (!transaction) continue;
+    transactionMetadata.get(transaction).graph = true;
+    // Both representations may occur; contradictory anchors remain unknown.
+    addTransaction(result, network, {hash: edge.txid, timestamp: edge.block?.time,
+      block_height: edge.block?.height, block_hash: edge.block?.hash, slot: edge.block?.slot});
+    if (utxo) addTransactionReference(result, transaction, network, input ? 'inputs' : 'outputs',
+      {address: endpoint.address, amount: edge.amount_base_units, outpoint: edge.outpoint}, integer(edge.position) ? edge.position : index);
   }
   fact(result, 'Source graph references', data.nodes.length, 'references');
   fact(result, 'Source graph records', data.edges.length, 'records');
@@ -174,7 +262,8 @@ function projectTransaction(result, data, network, subject) {
       quantity(tx.blockNumber)!==null && quantity(data.receipt?.blockNumber)===quantity(tx.blockNumber) ? data.receipt : null;
     const status = receipt && quantity(receipt.status) === '1' ? 'successful' : receipt && quantity(receipt.status) === '0' ? 'failed' : tx.blockNumber === null ? 'pending' : 'source-reported';
     const time = epoch(quantityNumber(tx.blockTimestamp));
-    addTransaction(result, network, {hash: txid, from: tx.from, to: tx.to, amount, status, timestamp: time});
+    addTransaction(result, network, {hash: txid, from: tx.from, to: tx.to, amount, status, timestamp: time,
+      block_height: quantity(tx.blockNumber), block_hash: tx.blockHash});
     addEdge(result, addNode(result, network, 'address', tx.from), txNode, amount, 'wei');
     if (tx.to !== null) addEdge(result, txNode, addNode(result, network, 'address', tx.to), amount, 'wei');
     fact(result, 'Declared transaction value', amount, 'wei');
@@ -197,12 +286,22 @@ function projectTransaction(result, data, network, subject) {
     const inputs = network === 'bitcoin' ? tx.vin : tx.inputs, outputs = network === 'bitcoin' ? tx.vout : tx.outputs;
     if (!Array.isArray(inputs) || !Array.isArray(outputs) || inputs.length > 20000 || outputs.length > 20000) throw new Error('invalid_source');
     const time = network === 'bitcoin' ? epoch(tx.status?.block_time) : null;
-    addTransaction(result, network, {hash: txid, timestamp: time, status: network === 'bitcoin' && typeof tx.status?.confirmed === 'boolean' ? tx.status.confirmed ? 'confirmed' : 'pending' : 'source-reported'});
+    const transaction = addTransaction(result, network, {hash: txid, timestamp: time,
+      block_height: network === 'bitcoin' ? tx.status?.block_height : tx.height,
+      block_hash: network === 'bitcoin' ? tx.status?.block_hash : tx.block_id, slot: network === 'bloch' ? tx.slot : undefined,
+      status: network === 'bitcoin' && typeof tx.status?.confirmed === 'boolean' ? tx.status.confirmed ? 'confirmed' : 'pending' : 'source-reported'});
     for (const [direction, rows] of [['input', inputs], ['output', outputs]]) {
-      for (const item of rows.slice(0, 80)) {
+      for (const [index, item] of rows.entries()) {
         const row = network === 'bitcoin' && direction === 'input' ? item?.prevout : item;
         const value = network === 'bitcoin' ? row?.scriptpubkey_address : row?.script_hash;
         const amount = network === 'bitcoin' && integer(row?.value) ? String(row.value) : row?.value_sat;
+        let outpoint;
+        if (network === 'bitcoin' && direction === 'output') {
+          if (item && typeof item === 'object' && !Array.isArray(item)) outpoint = {txid, vout: index};
+        } else if (item && (item.txid !== undefined || item.vout !== undefined)) outpoint = {txid: item.txid, vout: item.vout};
+        addTransactionReference(result, transaction, network, direction === 'input' ? 'inputs' : 'outputs',
+          {address: value, amount, outpoint}, index);
+        if (index >= 80) continue;
         if (!address(value, network) || !decimal(amount)) continue;
         const node = addNode(result, network, network === 'bloch' ? 'script_hash' : 'address', value);
         addEdge(result, direction === 'input' ? node : txNode, direction === 'input' ? txNode : node, amount, 'sat');
@@ -332,6 +431,8 @@ export async function fetchChainContext({portal, network, subject, fetcher = fet
     try {
       const data = await read(fetcher, plan.url);
       plan.project(result, data);
+      result.facts = result.facts.map(fact => ({...fact, source_id: plan.id}));
+      result.transactions = result.transactions.map(transaction => ({...transaction, source_id: plan.id, coverage: transactionCoverage(transaction)}));
       source.status = 'available';
       source.retrieved_at = iso(data.retrieved_at) || iso(data.observation?.retrieved_at) || source.retrieved_at;
       source.observed_at = result.observed_at;
@@ -349,11 +450,19 @@ export async function fetchChainContext({portal, network, subject, fetcher = fet
   result.sources = observed.flatMap(item => item.sources);
   result.facts = observed.flatMap(item => item.facts).slice(0, 48);
   result.transactions = observed.flatMap(item => item.transactions).slice(0, MAX_TRANSACTIONS);
+  let remainingReferences = MAX_TRANSACTION_REFERENCES;
+  for (const transaction of result.transactions) {
+    for (const side of ['inputs', 'outputs']) if (transaction[side]) {
+      const kept = transaction[side].slice(0, Math.min(MAX_TRANSACTION_SIDE, remainingReferences));
+      if (kept.length !== transaction[side].length) transaction.coverage = `Additional reference records omitted by the ${MAX_TRANSACTION_REFERENCES}-record snapshot limit. ${transaction.coverage}`.slice(0, 600);
+      transaction[side] = kept; remainingReferences -= kept.length;
+    }
+  }
   const graph = observed.find(item => item.graph.nodes.length)?.graph;
   if (graph) result.graph = graph;
   const available = result.sources.filter(source => source.status === 'available').length;
   result.status = available === result.sources.length ? 'available' : available ? 'partial' : 'unavailable';
   result.observed_at = observed.find(item => item.observed_at)?.observed_at || null;
-  result.coverage = `${fixedCoverage} Exports include at most ${MAX_TRANSACTIONS} transactions, ${MAX_NODES} graph references, and ${MAX_EDGES} graph records. ${result.sources.map(source => source.coverage).join(' ')}`;
+  result.coverage = `${fixedCoverage} Exports include at most ${MAX_TRANSACTIONS} transactions, ${MAX_NODES} graph references, and ${MAX_EDGES} graph records. Transaction input/output references are capped at ${MAX_TRANSACTION_SIDE} per side and ${MAX_TRANSACTION_REFERENCES} per snapshot. ${result.sources.map(source => source.coverage).join(' ')}`;
   return result;
 }

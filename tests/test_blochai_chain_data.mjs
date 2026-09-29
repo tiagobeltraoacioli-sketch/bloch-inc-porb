@@ -114,7 +114,7 @@ test('partial network observations preserve unavailable sources and exact Ethere
   assert.equal(context.status, 'partial'); assert.equal(context.subject, null);
   assert.equal(context.sources[1].status, 'unavailable');
   assert.ok(context.facts.some(row => row.label === 'Observed head height' && row.value === '100'));
-  assert.deepEqual(getFact(context, 'Source gas price'), {label: 'Source gas price', value: '9999999999999999999', unit: 'wei/gas'});
+  assert.deepEqual(getFact(context, 'Source gas price'), {label: 'Source gas price', value: '9999999999999999999', unit: 'wei/gas', source_id: 'network_overview'});
   assert.deepEqual(context.transactions, []);
 });
 
@@ -180,9 +180,9 @@ test('Ethereum receipt fees use exact BigInt arithmetic and keep execution and b
   Object.assign(data.receipt, {blobGasUsed: '0x20000', blobGasPrice: '0x7', logs: [{data: 'PRIVATE LOG'}, {address: 'PRIVATE CONTRACT'}]});
   const context = await txContext('ethereum', data);
   assert.equal(context.status, 'available');
-  assert.deepEqual(getFact(context, 'Effective execution gas price'), {label: 'Effective execution gas price', value: '9007199254740993', unit: 'wei/gas'});
-  assert.deepEqual(getFact(context, 'Derived execution gas fee'), {label: 'Derived execution gas fee', value: '189151184349560853000', unit: 'wei'});
-  assert.deepEqual(getFact(context, 'Derived blob gas fee'), {label: 'Derived blob gas fee', value: '917504', unit: 'wei'});
+  assert.deepEqual(getFact(context, 'Effective execution gas price'), {label: 'Effective execution gas price', value: '9007199254740993', unit: 'wei/gas', source_id: 'transaction_observation'});
+  assert.deepEqual(getFact(context, 'Derived execution gas fee'), {label: 'Derived execution gas fee', value: '189151184349560853000', unit: 'wei', source_id: 'transaction_observation'});
+  assert.deepEqual(getFact(context, 'Derived blob gas fee'), {label: 'Derived blob gas fee', value: '917504', unit: 'wei', source_id: 'transaction_observation'});
   assert.equal(getFact(context, 'Execution gas used').value, '21000');
   assert.equal(getFact(context, 'Transaction gas limit').value, '21000');
   assert.equal(getFact(context, 'Transaction nonce').value, '7');
@@ -328,7 +328,7 @@ test('Bitcoin replacement sequence signal requires every sequence and is not rep
 test('Bitcoin outspends count only complete boolean observations, without spending identifiers', async () => {
   const data = bitcoinTransaction(); data.outspends[0].txid = 'PRIVATE SPENDING ID';
   const context = await txContext('bitcoin', data);
-  assert.deepEqual(getFact(context, 'Outputs reported spent'), {label: 'Outputs reported spent', value: '1', unit: 'outputs'});
+  assert.deepEqual(getFact(context, 'Outputs reported spent'), {label: 'Outputs reported spent', value: '1', unit: 'outputs', source_id: 'transaction_observation'});
   assert.doesNotMatch(JSON.stringify(context), /PRIVATE SPENDING ID/);
   for (const outspends of [undefined, [], [{spent: true}], [{spent: true}, {spent: 'false'}], [{spent: true}, null]]) {
     const sample = bitcoinTransaction(); sample.outspends = outspends;
@@ -344,12 +344,12 @@ test('Bitcoin rich overview keeps fee estimates separate from block and mempool 
   const context = await fetchChainContext({portal: 'space', network: 'bitcoin', now,
     fetcher: async url => url.includes('/overview') ? response(overview) : unavailable()});
   assert.equal(context.status, 'partial');
-  assert.deepEqual(getFact(context, 'Source fee estimate for 3 blocks'), {label: 'Source fee estimate for 3 blocks', value: '1.25', unit: 'sat/vbyte'});
-  assert.deepEqual(getFact(context, 'Source fee estimate for 6 blocks'), {label: 'Source fee estimate for 6 blocks', value: '0.8', unit: 'sat/vbyte'});
+  assert.deepEqual(getFact(context, 'Source fee estimate for 3 blocks'), {label: 'Source fee estimate for 3 blocks', value: '1.25', unit: 'sat/vbyte', source_id: 'network_overview'});
+  assert.deepEqual(getFact(context, 'Source fee estimate for 6 blocks'), {label: 'Source fee estimate for 6 blocks', value: '0.8', unit: 'sat/vbyte', source_id: 'network_overview'});
   assert.equal(getFact(context, 'Source fee estimate for 1 blocks'), undefined);
   for (const [label, value, unit] of [['Observed mempool transactions', '123', 'transactions'], ['Observed mempool virtual size', '45678', 'vbytes'],
     ['Observed mempool total fees', '999', 'sat'], ['Head block weight', '3999000', 'weight units'], ['Head block size', '1700000', 'bytes']]) {
-    assert.deepEqual(getFact(context, label), {label, value, unit});
+    assert.deepEqual(getFact(context, label), {label, value, unit, source_id: 'network_overview'});
   }
   assert.match(context.coverage, /do not guarantee confirmation/);
   for (const estimate of [-1, '1.25', null, 1000000001]) {
@@ -367,7 +367,7 @@ test('Ethereum overview uses gas, wei per gas and transaction counts without rec
       gasUsed: '0x5208', gasLimit: '0x1c9c380', baseFeePerGas: '0x20000000000001', transactions: ['0x' + txid]},
       gas_price_wei: '9007199254740993', finalized: {number: '0x60'}}) : unavailable()});
   assert.equal(getFact(context, 'Head block gas used').unit, 'gas');
-  assert.deepEqual(getFact(context, 'Head block base fee'), {label: 'Head block base fee', value: '9007199254740993', unit: 'wei/gas'});
+  assert.deepEqual(getFact(context, 'Head block base fee'), {label: 'Head block base fee', value: '9007199254740993', unit: 'wei/gas', source_id: 'network_overview'});
   assert.equal(getFact(context, 'Source gas price').unit, 'wei/gas');
   assert.equal(getFact(context, 'Head block transaction IDs').value, '1');
   assert.equal(getFact(context, 'Derived execution gas fee'), undefined);
@@ -386,11 +386,132 @@ test('rich Bloch context preserves more than 24 supported facts under the 48-fac
   assert.equal(context.status, 'available');
   assert.ok(context.facts.length > 24 && context.facts.length <= 48);
   assert.equal(getFact(context, 'Source active stake').value, '9007199254740993');
-  assert.deepEqual(getFact(context, 'Source next base fee'), {label: 'Source next base fee', value: '1500', unit: 'millisat/gas'});
+  assert.deepEqual(getFact(context, 'Source next base fee'), {label: 'Source next base fee', value: '1500', unit: 'millisat/gas', source_id: 'network_overview'});
   assert.equal(getFact(context, 'Observed head epoch').value, '4');
   assert.equal(getFact(context, 'Indexer checkpoint slot').value, '148');
   assert.equal(getFact(context, 'Observed mempool capacity').value, '100');
   assert.ok(context.facts.every(fact => typeof fact.value === 'string' && fact.value.length <= 256));
   assert.equal(context.sources[0].observed_at, new Date(1790000000000).toISOString());
   assert.equal(context.sources[2].observed_at, new Date(1790000000 * 1000).toISOString());
+});
+
+test('each projected fact records its own source rather than inferring it from labels', async () => {
+  const context = await fetchChainContext({portal: 'graphus', network: 'ethereum', now,
+    fetcher: async url => url.includes('/overview') ? response({network: 'ethereum', head: {number: '0x64', timestamp: '0x1'}, gas_price_wei: '9999999999999999999'}) :
+      response({network: 'ethereum-mainnet', asset: 'ETH', anchor: {height: 96}, scope: {transactions_returned: 0}, nodes: [], edges: []})});
+  assert.equal(context.status, 'available');
+  assert.equal(context.facts.find(fact => fact.label === 'Observed head height').source_id, 'network_overview');
+  assert.equal(context.facts.find(fact => fact.label === 'Graph source height').source_id, 'network_graph');
+  for (const fact of context.facts) assert.ok(context.sources.some(source => source.id === fact.source_id && source.status === 'available'));
+  assert.equal(context.facts.find(fact => fact.label === 'Source gas price').value, '9999999999999999999');
+});
+
+const graphContext = (network, data) => fetchChainContext({portal: 'graphus', network, now,
+  fetcher: async url => url.includes('/network?') ? response({network: network + '-mainnet', asset: {bitcoin: 'BTC', ethereum: 'ETH', bloch: 'BLCH'}[network], anchor: {height: 100}, scope: {}, ...data}) : unavailable()});
+
+test('Bitcoin graph edges enrich transaction time and anchors even after the twenty-record cap', async () => {
+  const nodes = Array.from({length: 20}, (_, index) => ({id: `tx-${index}`, kind: 'transaction', txid: (index + 1).toString(16).padStart(64, '0')}));
+  nodes.push({id: 'address', kind: 'address', address: btc});
+  const context = await graphContext('bitcoin', {nodes, edges: [{from: 'tx-0', to: 'address', kind: 'created_output',
+    txid: nodes[0].txid, amount_base_units: '9007199254740993', outpoint: {txid: nodes[0].txid, vout: 0},
+    block_number: 99, block_hash: block, block_time: '2026-09-28T21:00:00Z'}]});
+  assert.equal(context.transactions.length, 20);
+  const transaction = context.transactions[0];
+  assert.equal(transaction.timestamp, '2026-09-28T21:00:00.000Z');
+  assert.equal(transaction.block_height, '99'); assert.equal(transaction.block_hash, block);
+  assert.equal(transaction.record_type, 'utxo'); assert.equal(transaction.source_id, 'network_graph');
+  assert.deepEqual(transaction.outputs, [{reference: nodes[0].txid + ':0', address: btc, amount: '9007199254740993'}]);
+});
+
+test('Bloch graph records retain block anchors and exact separate references without inventing a sender or time', async () => {
+  const context = await graphContext('bloch', {
+    nodes: [{id: 'tx', kind: 'transaction', txid}, {id: 'input', kind: 'script_hash', address: script}, {id: 'output', kind: 'script_hash', address: 'd'.repeat(64)}],
+    edges: [{from: 'input', to: 'tx', kind: 'observed_spent_outpoint_reference', txid, amount_base_units: '354099998999980506', outpoint: {txid: 'e'.repeat(64), vout: 1}, block_number: 102217, block_hash: block},
+      {from: 'tx', to: 'output', kind: 'observed_created_output', txid, amount_base_units: '10000000000000000', outpoint: {txid, vout: 0}, block_number: 102217, block_hash: block}],
+  });
+  const transaction = context.transactions[0];
+  assert.equal(transaction.block_height, '102217'); assert.equal(transaction.block_hash, block);
+  assert.equal(transaction.timestamp, undefined); assert.equal(transaction.slot, undefined);
+  assert.equal(transaction.from, undefined); assert.equal(transaction.to, undefined); assert.equal(transaction.amount, undefined);
+  assert.deepEqual(transaction.inputs, [{reference: 'e'.repeat(64) + ':1', address: script, amount: '354099998999980506'}]);
+  assert.deepEqual(transaction.outputs, [{reference: txid + ':0', address: 'd'.repeat(64), amount: '10000000000000000'}]);
+  assert.match(transaction.coverage, /No single sender, recipient or transfer amount/);
+  assert.match(transaction.coverage, /time is unavailable/); assert.match(transaction.coverage, /complete transaction inputs\/outputs are not established/);
+  assert.doesNotMatch(transaction.coverage, /364099998999980506/);
+});
+
+test('individual UTXO lookups retain supplied slot, outpoints and partial reference fields', async () => {
+  const transaction = {txid, height: 99, slot: 123, block_id: block, inputs: [
+    {txid: 'e'.repeat(64), vout: 1, script_hash: script, value_sat: '9007199254740993'},
+    {txid: 'f'.repeat(64), vout: 2}], outputs: [{txid, vout: 0, script_hash: script, value_sat: '1'}]};
+  const context = await txContext('bloch', {network: 'bloch', transaction}), row = context.transactions[0];
+  assert.equal(row.slot, '123'); assert.equal(row.block_height, '99'); assert.equal(row.block_hash, block);
+  assert.equal(row.timestamp, undefined); assert.equal(row.source_id, 'transaction_observation');
+  assert.deepEqual(row.inputs[1], {reference: 'f'.repeat(64) + ':2'});
+  assert.equal(row.inputs[0].amount, '9007199254740993');
+  assert.match(row.coverage, /2\/2 input and 1\/1 output/);
+  assert.doesNotMatch(row.coverage, /source graph/);
+  const bitcoin = bitcoinTransaction(); bitcoin.transaction.vin[0].txid = 'f'.repeat(64); bitcoin.transaction.vin[0].vout = 3;
+  const btcRow = (await txContext('bitcoin', bitcoin)).transactions[0];
+  assert.equal(btcRow.inputs[0].reference, 'f'.repeat(64) + ':3');
+  assert.equal(btcRow.outputs[0].reference, txid + ':0');
+});
+
+test('native account graph evidence enriches a previously inserted transaction hash', async () => {
+  const context = await graphContext('ethereum', {nodes: [{id: 'tx', kind: 'transaction', txid: '0x' + txid},
+    {id: 'from', kind: 'address', address: eth}, {id: 'to', kind: 'address', address: otherEth}],
+    edges: [{from: 'from', to: 'to', kind: 'native_value', txid: '0x' + txid, amount_base_units: '9007199254740993123456789',
+      block_number: 99, block_hash: '0x' + block, block_time: '2026-09-28T21:00:00Z'}]});
+  const row = context.transactions[0];
+  assert.equal(row.record_type, 'account'); assert.equal(row.from, eth); assert.equal(row.to, otherEth);
+  assert.equal(row.amount, '9007199254740993123456789'); assert.equal(row.block_hash, '0x' + block);
+  assert.equal(row.timestamp, '2026-09-28T21:00:00.000Z'); assert.equal(row.inputs, undefined); assert.equal(row.outputs, undefined);
+  assert.match(row.coverage, /declared native value, not an ERC-20 transfer/);
+});
+
+test('conflicting account values and block anchors remain omitted after later repeated evidence', async () => {
+  const nodes = [{id: 'tx', kind: 'transaction', txid: '0x' + txid, block: {height: 99, hash: '0x' + block, time: '2026-09-28T21:00:00Z'}},
+    {id: 'first', kind: 'address', address: eth}, {id: 'second', kind: 'address', address: '0x' + 'f'.repeat(40)}, {id: 'to', kind: 'address', address: otherEth}];
+  const first = {from: 'first', to: 'to', kind: 'native_value', txid: '0x' + txid, amount_base_units: '1', block_number: 99, block_hash: '0x' + block, block_time: '2026-09-28T21:00:00Z'};
+  const conflicting = {...first, from: 'second', amount_base_units: '2', block_hash: '0x' + script};
+  const row = (await graphContext('ethereum', {nodes, edges: [first, conflicting, first]})).transactions[0];
+  for (const field of ['from', 'amount', 'block_height', 'block_hash', 'slot', 'timestamp']) assert.equal(row[field], undefined, field);
+  assert.equal(row.to, otherEth); assert.equal(row.status, 'source-reported');
+  assert.match(row.coverage, /Conflicting metadata omitted/); assert.match(row.coverage, /amount/); assert.match(row.coverage, /block_hash/);
+  assert.ok(row.coverage.length <= 600);
+});
+
+test('UTXO records require the correct transaction endpoint and direction and omit unvalidated fields', async () => {
+  const nodes = [{id: 'tx', kind: 'transaction', txid}, {id: 'script', kind: 'script_hash', address: script}, {id: 'private', kind: 'script_hash', address: 'PRIVATE NAME'}];
+  const input = {from: 'script', to: 'tx', kind: 'observed_spent_outpoint_reference', txid, amount_base_units: '123', outpoint: {txid: 'e'.repeat(64), vout: 0}};
+  const row = (await graphContext('bloch', {nodes, edges: [
+    {...input, from: 'tx', to: 'script'}, {...input, txid: 'f'.repeat(64)}, {...input, kind: 'arbitrary'}, {...input, from: 'private'},
+    {...input, amount_base_units: '-1', block_number: '1e3', block_hash: 'PRIVATE BLOCK', slot: -1, block_time: 'PRIVATE TIME', outpoint: {txid: 'PRIVATE OUTPOINT', vout: 0}},
+  ]})).transactions[0];
+  assert.deepEqual(row.inputs, [{address: script}]); assert.deepEqual(row.outputs, []);
+  assert.equal(row.block_height, undefined); assert.equal(row.timestamp, undefined); assert.equal(row.block_hash, undefined); assert.equal(row.slot, undefined);
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE|1e3|"amount":"-1"/);
+  assert.match(row.coverage, /omitted by validation/);
+});
+
+test('per-side and aggregate reference caps still permit conflict detection on retained outpoints', async () => {
+  const nodes = [{id: 'script', kind: 'script_hash', address: script}], edges = [];
+  for (let number = 1; number <= 3; number++) {
+    const id = number.toString(16).padStart(64, '0'); nodes.push({id: `tx-${number}`, kind: 'transaction', txid: id});
+    for (const side of ['input', 'output']) for (let index = 0; index < 30; index++) edges.push({
+      from: side === 'input' ? 'script' : `tx-${number}`, to: side === 'input' ? `tx-${number}` : 'script',
+      kind: side === 'input' ? 'observed_spent_outpoint_reference' : 'observed_created_output', txid: id,
+      outpoint: {txid: side === 'input' ? 'e'.repeat(64) : id, vout: index}, amount_base_units: '1', position: index,
+    });
+  }
+  edges.push({...edges[0], amount_base_units: '2'});
+  const context = await graphContext('bloch', {nodes, edges});
+  assert.equal(context.transactions.reduce((sum, tx) => sum + tx.inputs.length + tx.outputs.length, 0), 80);
+  assert.ok(context.transactions.every(tx => tx.inputs.length <= 24 && tx.outputs.length <= 24 && tx.coverage.length <= 600));
+  assert.equal(context.transactions[0].inputs.length, 24); assert.equal(context.transactions[0].outputs.length, 24);
+  assert.equal(context.transactions[1].inputs.length, 24); assert.equal(context.transactions[1].outputs.length, 8);
+  assert.equal(context.transactions[2].inputs.length, 0); assert.equal(context.transactions[2].outputs.length, 0);
+  assert.equal(context.transactions[0].inputs[0].amount, undefined);
+  assert.match(context.transactions[0].coverage, /inputs.amount/); assert.match(context.transactions[2].coverage, /0\/30 input and 0\/30 output/);
+  assert.match(context.coverage, /24 per side and 80 per snapshot/);
 });

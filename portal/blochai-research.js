@@ -55,7 +55,9 @@ export async function prepareResearch(prompt,research,fetcher){
   }
   const derived=deriveChainInsights(guide);
   guide.derived_facts=derived.facts;guide.insights=derived.insights;
-  const facts=guide.facts.map(f=>`${f.label}: ${f.value}${f.unit?' '+f.unit:''}`).join('\n').slice(0,400);
+  const factLines=[];let factSize=0;
+  for(const fact of guide.facts){const line=`${fact.label}: ${fact.value}${fact.unit?' '+fact.unit:''}${fact.source_id?` [source: ${fact.source_id}]`:''}`;if(factSize+line.length+(factLines.length?1:0)>400)break;factLines.push(line);factSize+=line.length+(factLines.length>1?1:0);}
+  const facts=factLines.join('\n');
   const sources=guide.sources.map(source=>`${source.id}: ${source.status}; observed ${source.observed_at||'unknown'}; retrieved ${source.retrieved_at||'unknown'}; ${source.coverage.slice(0,guide.sources.length===1?240:100)}`).join('\n');
   const composed=`You are BlochAI, a private blockchain research assistant. Do not infer identity or ownership. Use bounded source data and disclose gaps. Style: ${research.mode}. Network: ${research.network}. Status: ${guide.status}.\nQuestion: ${prompt}\nResearch instructions: ${research.instructions}\n${research.subject?`Subject: ${research.subject.kind} ${research.subject.value}\n`:''}Dates: ${research.from||'none'} to ${research.to||'none'}, returned dated transactions only, not a historical scan. Balances/network facts remain at source time.\nFacts:\n${facts||'Unavailable.'}\nSource coverage and times:\n${sources}`;
   requireValue(composed.length<=4000,'blochai_research_prompt_too_long');

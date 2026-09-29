@@ -5,13 +5,22 @@ const MAX_EXCHANGES=12,MAX_CHARACTERS=96000,MAX_PAGES=90;
 const FONT_URL=new URL('./BlochAI-DejaVuSans.ttf',import.meta.url);
 const text=(value,limit=16000)=>String(value??'').normalize('NFC').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g,'').slice(0,limit);
 const safeURL=value=>{try{const url=new URL(String(value));return url.protocol==='https:'&&!url.username&&!url.password?url.href:null;}catch{return null;}};
-const dateText=value=>{const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString():'Not recorded';};
+const dateText=value=>{if(value===undefined||value===null||typeof value==='string'&&!value.trim())return 'Not recorded';const date=new Date(value);return Number.isFinite(date.getTime())?date.toISOString():'Not recorded';};
+const observedDateText=value=>{
+  const match=typeof value==='string'&&value.match(/^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/);
+  if(!match)return 'Not recorded';
+  const [,year,month,day]=match.map(Number),days=[31,year%4===0&&(year%100!==0||year%400===0)?29:28,31,30,31,30,31,31,30,31,30,31];
+  if(month<1||month>12||day<1||day>days[month-1])return 'Not recorded';
+  return dateText(value);
+};
 
 function prepare(input){
   if(!input||!['PUBLIC','CONFIDENTIAL'].includes(input.classification))throw new Error('A PDF classification is required.');
   if(!Array.isArray(input.exchanges)||!input.exchanges.length||input.exchanges.length>MAX_EXCHANGES)throw new Error('Export between 1 and 12 completed interactions.');
   let length=0;
   const bounded=(value,limit)=>{const result=text(value,limit);length+=result.length;if(length>MAX_CHARACTERS)throw new Error('This export is too large. Export fewer interactions.');return result;};
+  // Keep source references intact; truncating an identifier would invent a different reference.
+  const sourceId=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,64}$/.test(value)?bounded(value,64):'';
   const graph=value=>{
     if(!value)return null;
     if(!Array.isArray(value.nodes)||!Array.isArray(value.edges)||value.nodes.length>40||value.edges.length>80)throw new Error('Export graphs with at most 40 nodes and 80 edges.');
@@ -24,12 +33,25 @@ function prepare(input){
   const transactions=value=>{
     if(!value)return [];
     if(!Array.isArray(value)||value.length>20)throw new Error('Export at most 20 transaction records.');
-    return value.map(row=>Object.fromEntries(['hash','from','to','amount','asset','timestamp','status'].map(key=>[key,bounded(row[key]===undefined||row[key]===null||row[key]===''?'Not recorded':row[key],key==='hash'||key==='from'||key==='to'?220:140)])));
+    let references=0;
+    const entries=value=>{
+      if(value===undefined||value===null)return [];
+      if(!Array.isArray(value)||value.length>24)throw new Error('Export at most 24 input or output records per transaction side.');
+      references+=value.length;if(references>80)throw new Error('Export at most 80 input and output records per transaction snapshot.');
+      return value.map(entry=>({reference:bounded(entry.reference,160),address:bounded(entry.address,160),amount:typeof entry.amount==='string'&&/^(0|[1-9][0-9]{0,77})$/.test(entry.amount)?bounded(entry.amount,78):''}));
+    };
+    return value.map(row=>{
+      const result=Object.fromEntries(['hash','from','to','amount','asset','timestamp','status','block_height','block_hash','slot'].map(key=>[key,bounded(row[key]==='Not recorded'?'':row[key],['hash','from','to','block_hash'].includes(key)?220:140)]));
+      return {...result,record_type:row.record_type==='utxo'||!row.record_type&&['BTC','BLCH'].includes(result.asset)?'utxo':'account',source_id:sourceId(row.source_id),coverage:bounded(row.coverage,600),inputs:entries(row.inputs),outputs:entries(row.outputs)};
+    });
   };
   const facts=value=>{
     if(!value)return [];
     if(!Array.isArray(value)||value.length>60)throw new Error('Export at most 60 observed facts.');
-    return value.map(row=>({label:bounded(row.label,180),value:bounded(row.value,600),unit:bounded(row.unit,60)}));
+    return value.map(row=>{
+      if(row.source_ids!==undefined&&(!Array.isArray(row.source_ids)||row.source_ids.length>6))throw new Error('Export at most 6 source references per fact.');
+      return {label:bounded(row.label,180),value:bounded(row.value,600),unit:bounded(row.unit,60),source_id:sourceId(row.source_id),source_ids:(row.source_ids||[]).map(sourceId).filter(Boolean)};
+    });
   };
   const research=value=>{
     if(!value)return null;
@@ -42,7 +64,7 @@ function prepare(input){
   result.exchanges=input.exchanges.map(exchange=>{
     if(typeof exchange.question!=='string'||!exchange.question.trim()||typeof exchange.answer!=='string'||!exchange.answer.trim())throw new Error('Only completed questions and answers can be exported.');
     if(exchange.question.length>8000||exchange.answer.length>16000)throw new Error('An interaction exceeds the PDF content limit.');
-    return {question:bounded(exchange.question,8000),answer:bounded(exchange.answer,16000),model:bounded(exchange.model||result.model,200),createdAt:dateText(exchange.createdAt||result.generatedAt),research:research(exchange.research),graph:graph(exchange.graph),transactions:transactions(exchange.transactions),facts:facts(exchange.facts),coverage:bounded(exchange.coverage,2400),sources:(Array.isArray(exchange.sources)?exchange.sources:[]).slice(0,12).map(source=>({title:bounded(source.title||source.id||'Source',200),url:safeURL(bounded(source.url,2000)),retrieved:dateText(source.retrieved_at||source.retrievedAt),coverage:bounded(source.coverage,1400),status:bounded(source.status,100)}))};
+    return {question:bounded(exchange.question,8000),answer:bounded(exchange.answer,16000),model:bounded(exchange.model||result.model,200),createdAt:dateText(exchange.createdAt||result.generatedAt),research:research(exchange.research),graph:graph(exchange.graph),transactions:transactions(exchange.transactions),facts:facts(exchange.facts),coverage:bounded(exchange.coverage,2400),sources:(Array.isArray(exchange.sources)?exchange.sources:[]).slice(0,12).map(source=>({id:sourceId(source.id),title:bounded(source.title||source.id||'Source',200),url:safeURL(bounded(source.url,2000)),retrieved:dateText(source.retrieved_at||source.retrievedAt),observed:Object.hasOwn(source,'observed_at')?observedDateText(source.observed_at):null,coverage:bounded(source.coverage,1400),status:bounded(source.status,100)}))};
   });
   return result;
 }
@@ -113,24 +135,53 @@ export async function buildBlochAiPdf(input,{fontBytes}={}){
     if(graph.edges.length){heading('Observed edges');for(const edge of graph.edges)write(`${positions.get(edge.source).index} -> ${positions.get(edge.target).index}${edge.label?` | ${edge.label}`:''}`,{size:8.5,leading:13});}
   }
   function drawTransactions(rows){
-    if(!rows?.length)return;heading('Transaction records');write('Public or organization-authorized observations supplied with this export. Missing fields remain unrecorded; these records do not prove wallet ownership. Transaction amounts are integer base units: BTC/BLCH in sat; ETH in wei. Values are preserved without conversion.',{size:9,tint:muted,leading:14});
+    if(!rows?.length)return;heading('Transaction records');write('Public or organization-authorized observations supplied with this export. Records do not prove wallet ownership. Values remain integer base units: BTC/BLCH in sat; ETH in wei. Inputs and outputs are separate records and are not added into a transfer total.',{size:9,tint:muted,leading:14});
     for(const [index,row]of rows.entries()){
-      const fields=[['Hash','hash'],['From','from'],['To','to'],['Amount (base units)','amount'],['Asset','asset'],['Timestamp','timestamp'],['Status','status']];
-      ensure(fields.reduce((height,[label,key])=>height+wrap(`${label}: ${row[key]}`,9).length*14+8,32));
-      heading(`Transaction ${index+1}`);
-      for(const [label,key]of fields){
-        const lines=wrap(`${label}: ${row[key]}`,9),height=lines.length*14+8;ensure(height);
+      const title=`Transaction ${index+1}`,unit={BTC:'sat',BLCH:'sat',ETH:'wei'}[row.asset]||'base units';
+      const fields=[['Hash',row.hash],['Asset',row.asset],['Block height',row.block_height],['Block hash',row.block_hash],['Slot',row.slot],['Source ID',row.source_id],['Status',row.status],['Timestamp',row.timestamp]];
+      if(row.record_type==='account')fields.push(['From',row.from],['To',row.to],['Declared amount (base units)',row.amount?`${row.amount} ${unit}`:'']);
+      const recorded=fields.filter(([,value])=>value);
+      const field=(label,value)=>{
+        const line=`${label}: ${value}`,height=wrap(line,9).length*14+8;ensure(height);
         page.drawRectangle({x:M-5,y:y-height+8,width:W-M*2+10,height,color:index%2?rgb(.965,.975,.987):rgb(.98,.983,.99)});
-        write(`${label}: ${row[key]}`,{size:9,leading:14});y-=8;
+        write(line,{size:9,leading:14});y-=8;
+      };
+      ensure(Math.min(recorded.reduce((height,[label,value])=>height+wrap(`${label}: ${value}`,9).length*14+8,32),H-170));
+      heading(`${title}${row.record_type==='utxo'?' / UTXO records':' / Account transaction'}`);
+      for(const [label,value]of recorded)field(label,value);
+      if(!row.timestamp)write('Transaction time was not supplied by this source.',{size:9,tint:muted,leading:14});
+      if(row.record_type==='utxo'){
+        if(!row.inputs.length&&!row.outputs.length)write('Input/output details were not included in this snapshot; inspect the observed graph records or run a new transaction lookup.',{size:9,tint:muted,leading:14});
+        else for(const [name,entries]of [['Input',row.inputs],['Output',row.outputs]]){
+          if(!entries.length){heading(`${title} / ${name}s`);write(`No ${name.toLowerCase()} records were included in this snapshot.`,{size:9,tint:muted,leading:14});}
+          for(const [entryIndex,entry]of entries.entries()){
+            const details=[['Outpoint / reference',entry.reference],['Address / script hash',entry.address],['Amount',entry.amount?`${entry.amount} ${unit}`:'']].filter(([,value])=>value);
+            const entryHeight=details.reduce((height,[label,value])=>height+wrap(`${label}: ${value}`,9).length*14+8,22),previous=page;
+            if(entryIndex===0){ensure(entryHeight+32);heading(`${title} / ${name}s`);}
+            else{ensure(entryHeight);if(previous!==page)heading(`${title} / ${name}s (continued)`);}
+            write(`${name} ${entryIndex+1}`,{size:9,tint:blue,leading:14});
+            for(const [label,value]of details)field(label,value);
+            if(!details.length)write('Record details were not supplied by this source.',{size:9,tint:muted,leading:14});
+          }
+        }
+      }else{
+        const missing=[!row.from&&'sender',!row.to&&'recipient',!row.amount&&'declared amount'].filter(Boolean);
+        if(missing.length)write(`Not supplied for this account transaction: ${missing.join(', ')}.`,{size:9,tint:muted,leading:14});
       }
+      if(row.coverage)write(`Coverage: ${row.coverage}`,{size:9,tint:muted,leading:14});y-=8;
     }
   }
   function drawFacts(rows,coverage){
     if(!rows?.length&&!coverage)return;heading('Observed facts and coverage');
     if(coverage)write(coverage,{size:9,tint:muted,leading:14});
-    for(const fact of rows)write(`${fact.label}: ${fact.value}${fact.unit?` ${fact.unit}`:''}`,{size:9,leading:14});
+    for(const fact of rows){
+      const value=`${fact.label}: ${fact.value}${fact.unit?` ${fact.unit}`:''}`,references=[fact.source_id?`Source ID: ${fact.source_id}`:'',fact.source_ids.length?`Source IDs: ${fact.source_ids.join(', ')}`:''].filter(Boolean);
+      ensure(wrap(value,9).length*14+references.reduce((height,reference)=>height+wrap(reference,8).length*12,0));
+      write(value,{size:9,leading:14});
+      for(const reference of references)write(reference,{size:8,tint:muted,leading:12});
+    }
   }
-  function sourceHeight(source){return wrap(`12. ${source.title}`,9).length*14+(source.url?wrap(source.url,8).length*12:0)+wrap(`Retrieved: ${source.retrieved}${source.status?` | Status: ${source.status}`:''}`,8).length*12+(source.coverage?wrap(`Coverage: ${source.coverage}`,8.5).length*13:0)+10;}
+  function sourceHeight(source){return wrap(`12. ${source.title}`,9).length*14+(source.id?wrap(`Source ID: ${source.id}`,8).length*12:0)+(source.url?wrap(source.url,8).length*12:0)+wrap(`Retrieved: ${source.retrieved}${source.status?` | Status: ${source.status}`:''}`,8).length*12+(source.observed?wrap(`Observed: ${source.observed}`,8).length*12:0)+(source.coverage?wrap(`Coverage: ${source.coverage}`,8.5).length*13:0)+10;}
   newPage();write(report.portal,{size:20,leading:27});
   write(`Exported ${report.generatedAt}`,{size:8.5,tint:muted,leading:13});
   if(report.organization)write(`Organization: ${report.organization}`,{size:9,tint:muted});
@@ -146,8 +197,10 @@ export async function buildBlochAiPdf(input,{fontBytes}={}){
     if(!exchange.sources.length)write('No external source citations were recorded for this response. Treat it as model-generated text, not a verified source report.',{size:9,tint:muted,leading:14});
     for(const [index,source]of exchange.sources.entries()){
       ensure(Math.min(sourceHeight(source),H-170));write(`${index+1}. ${source.title}`,{size:9,leading:14});
+      if(source.id)write(`Source ID: ${source.id}`,{size:8,tint:muted,leading:12});
       if(source.url)write(source.url,{size:8,tint:blue,leading:12,link:source.url});
       write(`Retrieved: ${source.retrieved}${source.status?` | Status: ${source.status}`:''}`,{size:8,tint:muted,leading:12});
+      if(source.observed)write(`Observed: ${source.observed}`,{size:8,tint:muted,leading:12});
       if(source.coverage)write(`Coverage: ${source.coverage}`,{size:8.5,tint:muted,leading:13});y-=6;
     }
     drawTransactions(exchange.transactions);drawGraph(exchange.graph);

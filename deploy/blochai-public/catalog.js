@@ -1,6 +1,6 @@
 import {KNOWLEDGE} from './knowledge.js';
 
-export const ASSISTANT_ASSET_VERSION='20260928-chain-3';
+export const ASSISTANT_ASSET_VERSION='20260928-chain-4';
 
 const configurations = {
   'bloch-graphus.xyz': {id:'graphus',name:'Graphus',scope:'Explore public graphs, connections, provenance and coverage.'},
