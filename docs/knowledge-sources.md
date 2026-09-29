@@ -133,4 +133,3 @@ The links below are the primary references actually reviewed from official docum
 | `block_commitments` | bloch |
 | `reorgs` | bloch |
 | `upgrade_status` | bloch |
-

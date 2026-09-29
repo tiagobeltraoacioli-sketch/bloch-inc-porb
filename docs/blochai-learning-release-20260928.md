@@ -128,8 +128,9 @@ The final isolated run completed 40 optimizer steps in 128.12 seconds and restor
 its worker. It retained every training example and all nine scenarios. On the
 same 18 held-out synthetic cases, complete exact answers improved from 0/18 to 4/18,
 valid schema answers from 0/18 to 10/18 and exact facts/units/source identifiers
-from 0/18 to 8/18. Correct abstentions improved from 0/10 to 4/10. This is a measured
-improvement on a small closed-schema task, with accuracy still too low for
+from 0/18 to 8/18. Correct abstentions improved from 0/10 to 4/10. All four correct answers concern missing or unavailable evidence. Observed-fact
+copying remains 0/8, and ownership, private-AML and off-topic decisions still fail.
+This is a limited improvement in missing-data abstention; it is insufficient for
 production. The candidate was preserved without promotion; the public
 source-summary guard and the production model remain in place.
 
@@ -148,3 +149,6 @@ and an explicitly unavailable overview: 12 source facts, 4 derived facts, 5 read
 widths, Clear and PDF/CSV/JSON downloads passed. Its partial status is intentional;
 missing network-overview facts are not reconstructed from other observations.
 The original outage record and the first two portal results were preserved.
+
+The final Explorer PDF had 14 pages; every page was rendered and inspected,
+with no text outside the page, clipping or overlap.
