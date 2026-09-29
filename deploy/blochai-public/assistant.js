@@ -61,6 +61,7 @@ export async function handlePublicAssistant({request,env={},fetcher=fetch,now=Da
       requireValue(Object.keys(body).every(key=>['question_id','mode','network','subject'].includes(key))&&Object.hasOwn(body,'question_id')&&typeof body.question_id==='string'&&Object.hasOwn(portal.questions,body.question_id),'approved_question_required');
       const mode=body.mode??'explain',network=body.network??'bloch';
       requireValue(MODES.has(mode),'invalid_research_mode');
+      requireValue(!portal.topics[body.question_id].networks||portal.topics[body.question_id].networks.includes(network),'approved_network_topic_required');
       let query;try{query=validateChainQuery({portal:portal.id,network,subject:body.subject});}catch{throw new PublicError('invalid_chain_query',400);}
       await budget(db,`submit:minute:${hash}:${minute}`,10,(minute+1)*60);
       await budget(db,`submit:day:${hash}:${day}`,60,(day+1)*86400);
@@ -68,7 +69,7 @@ export async function handlePublicAssistant({request,env={},fetcher=fetch,now=Da
       requireValue(Number.isSafeInteger(globalLimit)&&globalLimit>=1&&globalLimit<=1000,'public_assistant_unavailable',503);
       await budget(db,`submit:global:${day}`,globalLimit,(day+1)*86400);
       const observations=await contextLoader({...query,fetcher,now:()=>new Date(now)});
-      const guide=buildPublicGuide(portal.id,body.question_id,mode,observations);
+      const guide=buildPublicGuide(portal.id,body.question_id,mode,observations,{now});
       const result=task(await upstream(env,fetcher,'/public/v1/tasks',{portal:portal.id,question_id:body.question_id,mode,network,observations:compactObservations(observations)}),undefined,guide);
       const ticket=hex(crypto.getRandomValues(new Uint8Array(32)));
       await db.prepare('INSERT INTO blochai_public_jobs (task_id,portal,ticket_digest,expires_at,guide_json) VALUES (?,?,?,?,?)').bind(result.task_id,portal.id,await digest(ticket),seconds+3600,JSON.stringify(guide)).run();

@@ -2,7 +2,7 @@
 
 `blochai.xyz` is a static product hub linking Graphus, Bloch Space and Bloch Explorer. The canonical Graphus hostname is `bloch-graphus.xyz`. Private prompts, saved personal research, organization data and AML workflows belong only in the authenticated `rednblue.space` workspace. Public assistants cannot access that workspace's database, sessions, private inference credential or records.
 
-Each public portal offers chain-specific explanations with a bounded public source snapshot. Graphus covers graphs, connections, address observations and provenance; Space covers Bitcoin, Ethereum and Bloch network research; Explorer covers Bloch only. The public catalog has 11 Graphus, 13 Space and 11 Explorer topics. `knowledge.js` mirrors the backend's reviewed `chain_knowledge.json`; keep IDs, notes and references synchronized during a release.
+Each public portal offers chain-specific explanations with a bounded public source snapshot. Graphus covers graphs, connections, address observations and provenance; Space covers Bitcoin, Ethereum and Bloch network research; Explorer covers Bloch only. The public catalog has 20 topics per portal, with topics filtered to their supported networks. `knowledge.js` mirrors the backend's reviewed `chain_knowledge.json`; keep IDs, notes, network constraints and references synchronized during a release.
 
 ## Interaction and data boundaries
 
@@ -21,6 +21,8 @@ Source coverage remains visible:
 - A transaction lookup describes one returned transaction and bounded input/output references. Execution, confirmation depth and finality are distinct observations. UTXO/eUTXO inputs and outputs are not added into a supposed transfer volume.
 
 The browser renders up to 20 transaction records and a graph of at most 40 references and 80 observed connections. Graph layout is an illustration of the returned relationships, not proof of ownership, risk or continuity of value. The model receives a compact facts/context projection within its 2048-token context budget. Its public draft is not trusted for factual presentation: the edge assembles the displayed explanation from reviewed notes, exact source facts and coverage, with `answer_kind: "source_summary"`. The interface labels it "Source-based explanation". Unchecked model prose is withheld, including from public exports.
+
+Up to 48 normalized source facts are preserved. A separate "Computed readings" panel adds exact sat/wei-to-coin notation, directed graph sample statistics, transaction/fee consistency readings and source ages. It retains source IDs and evidence limitations. Original facts are not overwritten or summed into purported transaction volume. See `docs/blochai-chain-insights.md` for formulas, bounds and tests. These deterministic readings are separate from model training.
 
 Up to 12 completed exchanges remain in tab memory. Follow-ups repeat the selected topic and public target with a new response mode; prior model output is not supplied as trusted evidence. Clear and page exit erase local history and abort polling. Clearing does not cancel an already accepted GPU task or delete its protected backend record.
 

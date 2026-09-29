@@ -7,6 +7,18 @@ import {ASSISTANT_ASSET_VERSION} from '../deploy/blochai-public/catalog.js';
 const {webkit}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const directory=new URL('../.data/blochai-public-research-live/',import.meta.url);await mkdir(directory,{recursive:true});
 const selected=process.env.BLOCHAI_TEST_SITE;
+function parseCSV(csv){
+  const rows=[];let row=[],cell='',quoted=false;csv=csv.replace(/^\uFEFF/,'');
+  for(let i=0;i<csv.length;i++){
+    const char=csv[i];
+    if(char==='"'){if(quoted&&csv[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}
+    else if(char===','&&!quoted){row.push(cell);cell='';}
+    else if(char==='\n'&&!quoted){row.push(cell.replace(/\r$/,''));rows.push(row);row=[];cell='';}
+    else cell+=char;
+  }
+  assert.equal(quoted,false,'CSV quotations must close');if(cell||row.length){row.push(cell.replace(/\r$/,''));rows.push(row);}
+  const fields=rows.shift();assert.ok(fields?.length);return {fields,records:rows.map(values=>{assert.equal(values.length,fields.length);return Object.fromEntries(fields.map((field,index)=>[field,values[index]]));})};
+}
 async function graphSample(asset){
   const url=`https://bloch-graphus.xyz/api/chain/network?asset=${asset}`;
   const response=await fetch(url,{redirect:'error',credentials:'omit',signal:AbortSignal.timeout(20000),headers:{accept:'application/json','user-agent':'BlochAI-Live-Verification/1.0'}});
@@ -44,17 +56,25 @@ try{
         const downloadEvent=page.waitForEvent('download',{timeout:45000});await widget.getByRole('button',{name:`Download ${kind}`,exact:true}).click();const download=await downloadEvent;assert.equal(await download.failure(),null);await download.saveAs(new URL(`${item.name}.${kind.toLowerCase()}`,directory).pathname);
       }
       const exported=JSON.parse(await readFile(new URL(`${item.name}.json`,directory),'utf8'));assert.equal(exported.portal,item.name);assert.equal(exported.classification,'PUBLIC');assert.equal(exported.question_id,item.question);assert.equal(exported.network,item.network);assert.equal(exported.output,result.output);assert.equal(exported.answer_kind,'source_summary');assert.equal(await widget.locator('.blochai-assistant__answer-label').innerText(),'Source-based explanation');assert.deepEqual(exported.amount_units,{BTC:'sat',ETH:'wei',BLCH:'sat'});for(const fact of exported.facts.slice(0,4))assert.ok(result.output.includes(`${fact.label}: ${fact.value}${fact.unit?' '+fact.unit:''}.`),`${item.name}: explanation preserves exact observed fact`);assert.doesNotMatch(result.output,/\$|verified by the curator/i);
-      assert.ok(exported.sources.some(source=>source.status==='available'),`${item.name}: a real source must be available`);assert.ok(exported.facts.length>0,`${item.name}: nonempty public facts`);assert.ok(exported.transactions.length<=20);assert.ok(exported.graph.nodes.length<=40);assert.ok(exported.graph.edges.length<=80);assert.ok(exported.graph.nodes.length>0,`${item.name}: public graph is present`);
+      assert.ok(exported.sources.some(source=>source.status==='available'),`${item.name}: a real source must be available`);assert.ok(exported.facts.length>0&&exported.facts.length<=48,`${item.name}: bounded nonempty public facts`);assert.ok(exported.transactions.length<=20);assert.ok(exported.graph.nodes.length<=40);assert.ok(exported.graph.edges.length<=80);assert.ok(exported.graph.nodes.length>0,`${item.name}: public graph is present`);
+      assert.equal(exported.derived_facts.length,4,`${item.name}: graph-derived facts are exported`);assert.ok(exported.insights.length>0&&exported.insights.length<=8);
+      assert.equal(await widget.locator('.blochai-assistant__insight').count(),exported.insights.length);
+      const readingText=await widget.locator('.blochai-assistant__insights').innerText();
+      for(const insight of exported.insights){assert.ok(readingText.includes(insight.title));assert.ok(readingText.includes(insight.text));assert.ok(insight.source_ids.length>0);assert.ok(insight.source_ids.every(id=>exported.sources.some(source=>source.id===id)));}
+      assert.ok(exported.insights.some(insight=>insight.id==='graph_structure'));assert.ok(exported.insights.some(insight=>insight.id==='source_freshness'));
       if(item.subject)assert.deepEqual(exported.subject,item.subject);for(const source of exported.sources){assert.equal(new URL(source.url).protocol,'https:');assert.ok(!source.url.includes('rednblue.space'));}
       if(item.name==='space'){assert.equal(exported.transactions.length,1);assert.equal(exported.transactions[0].hash.toLowerCase(),item.subject.value.toLowerCase());assert.ok(/^\d+$/.test(exported.transactions[0].amount));}
-      const csv=await readFile(new URL(`${item.name}.csv`,directory),'utf8');assert.match(csv,/amount_base_units/);assert.match(csv,/source_url/);if(exported.transactions.some(tx=>tx.amount))assert.match(csv,/"(?:sat|wei)"/);
-      const pdf=await readFile(new URL(`${item.name}.pdf`,directory));assert.equal(pdf.subarray(0,5).toString(),'%PDF-');assert.ok(pdf.length>10000);result.downloads={json:true,csv:true,pdf:true,pdfBytes:pdf.length};result.snapshot={facts:exported.facts.length,transactions:exported.transactions.length,nodes:exported.graph.nodes.length,edges:exported.graph.edges.length,sourceStatus:exported.source_status,sources:exported.sources};
+      const csv=await readFile(new URL(`${item.name}.csv`,directory),'utf8'),parsed=parseCSV(csv);for(const field of ['amount_base_units','source_url','source_id','observed_at'])assert.ok(parsed.fields.includes(field),`${item.name}: CSV ${field}`);if(exported.transactions.some(tx=>tx.amount))assert.match(csv,/"(?:sat|wei)"/);
+      for(const source of exported.sources){const row=parsed.records.find(row=>row.record_type==='source'&&row.source_id===source.id);assert.ok(row,`${item.name}: CSV source ID preserved`);assert.equal(row.source_url,source.url);assert.equal(row.observed_at,source.observed_at||'');assert.equal(row.retrieved_at,source.retrieved_at||'');}
+      for(const insight of exported.insights){const row=parsed.records.find(row=>row.record_type==='insight'&&row.label===insight.title);assert.ok(row);assert.equal(row.value,insight.text);assert.equal(row.source_ids,insight.source_ids.join(' '));for(const id of insight.source_ids)assert.ok(parsed.records.some(source=>source.record_type==='source'&&source.source_id===id));}
+      assert.equal(parsed.records.filter(row=>row.record_type==='derived_fact').length,exported.derived_facts.length);
+      const pdf=await readFile(new URL(`${item.name}.pdf`,directory));assert.equal(pdf.subarray(0,5).toString(),'%PDF-');assert.ok(pdf.length>10000);result.downloads={json:true,csv:true,pdf:true,pdfBytes:pdf.length,csvSourceIdentityAndTimes:true,csvInsightSourceLinks:true};result.snapshot={facts:exported.facts.length,derivedFacts:exported.derived_facts.length,insights:exported.insights.length,transactions:exported.transactions.length,nodes:exported.graph.nodes.length,edges:exported.graph.edges.length,sourceStatus:exported.source_status,sources:exported.sources};
       for(const width of [1440,390,360]){
         await page.setViewportSize({width,height:width===1440?1000:844});await panel.evaluate(element=>{element.scrollTop=0;});
         const view=await panel.evaluate(element=>{const r=element.getBoundingClientRect();return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,panelWidth:element.scrollWidth,clientWidth:element.clientWidth,inside:r.left>=0&&r.right<=innerWidth+1&&r.top>=0&&r.bottom<=innerHeight+1};});assert.ok(view.documentWidth<=width+1,`${item.name}: page overflow at ${width}`);assert.ok(view.panelWidth<=view.clientWidth+1,`${item.name}: panel overflow at ${width}`);assert.ok(view.inside);result.views.push(view);await page.screenshot({path:new URL(`${item.name}-${width}.png`,directory).pathname});
       }
       await widget.locator('.blochai-assistant__clear').click();assert.equal(await widget.locator('.blochai-assistant__turn').count(),0);assert.equal(await widget.locator('.blochai-assistant__export').isDisabled(),true);assert.equal(await widget.locator('[name="subject_value"]').inputValue(),'');result.clear=true;assert.deepEqual(errors,[]);
-      console.log(JSON.stringify({portal:item.name,status:'verified',downloads:result.downloads,snapshot:{facts:result.snapshot.facts,transactions:result.snapshot.transactions,nodes:result.snapshot.nodes,edges:result.snapshot.edges},output:result.output}));results.push(result);await writeFile(new URL('report.json',directory),JSON.stringify(results,null,2));
+      console.log(JSON.stringify({portal:item.name,status:'verified',downloads:result.downloads,snapshot:{facts:result.snapshot.facts,derivedFacts:result.snapshot.derivedFacts,insights:result.snapshot.insights,transactions:result.snapshot.transactions,nodes:result.snapshot.nodes,edges:result.snapshot.edges}}));results.push(result);await writeFile(new URL('report.json',directory),JSON.stringify(results,null,2));
     }catch(error){await page.screenshot({path:new URL(`${item.name}-failure.png`,directory).pathname});await writeFile(new URL(`${item.name}-failure.html`,directory),await page.content());throw error;}finally{await page.close();}
   }
 }finally{await browser.close();}

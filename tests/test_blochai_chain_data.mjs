@@ -9,6 +9,22 @@ const btc = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
 const response = value => new Response(JSON.stringify(value), {headers: {'content-type': 'application/json'}});
 const unavailable = () => new Response('{}', {status: 503, headers: {'content-type': 'application/json'}});
 const run = (network, subject, data) => fetchChainContext({portal: 'graphus', network, subject, now, fetcher: async () => response(data)});
+const getFact = (context, label) => context.facts.find(fact => fact.label === label);
+const txContext = (network, data) => run(network, {kind: 'transaction', value: txid}, data);
+function ethereumTransaction() {
+  const transaction = {hash: '0x' + txid, from: eth, to: otherEth, value: '0xffffffffffffffff', gas: '0x5208', nonce: '0x7',
+    blockHash: '0x' + block, blockNumber: '0x64', blockTimestamp: '0x1'};
+  return {network: 'ethereum', transaction, receipt_status: 'available', receipt: {
+    transactionHash: transaction.hash, blockHash: transaction.blockHash, blockNumber: transaction.blockNumber,
+    status: '0x1', gasUsed: '0x5208', effectiveGasPrice: '0x20000000000001', logs: []}};
+}
+function bitcoinTransaction() {
+  return {network: 'bitcoin', transaction: {txid,
+    vin: [{prevout: {scriptpubkey_address: btc, value: 7000}, sequence: 0xfffffffd}, {prevout: {scriptpubkey_address: btc, value: 3000}, sequence: 0xffffffff}],
+    vout: [{scriptpubkey_address: btc, value: 6000}, {scriptpubkey_address: btc, value: 3500}],
+    fee: 500, weight: 801, status: {confirmed: true, block_height: 99, block_time: 1790000000}},
+    outspends: [{spent: true}, {spent: false}]};
+}
 function wallet(network, value) {
   return {network: network + '-mainnet', asset: {bitcoin: 'BTC', ethereum: 'ETH', bloch: 'BLCH'}[network], address: value,
     balance: {base_units: '1000000000000000001', block: network === 'ethereum' ? {height: 100, time: '2026-09-28T21:00:00Z'} : null},
@@ -98,7 +114,7 @@ test('partial network observations preserve unavailable sources and exact Ethere
   assert.equal(context.status, 'partial'); assert.equal(context.subject, null);
   assert.equal(context.sources[1].status, 'unavailable');
   assert.ok(context.facts.some(row => row.label === 'Observed head height' && row.value === '100'));
-  assert.ok(context.facts.some(row => row.value === '9999999999999999999'));
+  assert.deepEqual(getFact(context, 'Source gas price'), {label: 'Source gas price', value: '9999999999999999999', unit: 'wei/gas'});
   assert.deepEqual(context.transactions, []);
 });
 
@@ -130,7 +146,7 @@ test('Bitcoin and Bloch transactions keep input and output references separate',
 
 test('Ethereum transaction status requires a matching receipt and exact native value', async () => {
   const transaction = {hash: '0x' + txid, from: eth, to: otherEth, value: '0xffffffffffffffff', blockHash: '0x' + block, blockNumber: '0x64', blockTimestamp: '0x1'};
-  const data = {network: 'ethereum', transaction, receipt_status: 'available', receipt: {transactionHash: transaction.hash, blockHash: transaction.blockHash, status: '0x1'}, position: {confirmations: 5, finalized_height: 90}};
+  const data = {network: 'ethereum', transaction, receipt_status: 'available', receipt: {transactionHash: transaction.hash, blockHash: transaction.blockHash, blockNumber: transaction.blockNumber, status: '0x1'}, position: {confirmations: 5, finalized_height: 90}};
   const context = await run('ethereum', {kind: 'transaction', value: txid}, data);
   assert.equal(context.status, 'available'); assert.equal(context.transactions[0].status, 'successful');
   assert.equal(context.transactions[0].amount, '18446744073709551615');
@@ -157,4 +173,224 @@ test('Bloch validator context publishes counts and preserves unavailable pages w
   assert.equal(context.sources.find(source => source.id === 'validator_counts').observed_at, new Date(1790000000 * 1000).toISOString());
   assert.equal(JSON.stringify(context).includes(script), false);
   assert.doesNotMatch(JSON.stringify(context), /PRIVATE VALIDATOR|private node message|pubkey_hash/);
+});
+
+test('Ethereum receipt fees use exact BigInt arithmetic and keep execution and blob fees separate', async () => {
+  const data = ethereumTransaction();
+  Object.assign(data.receipt, {blobGasUsed: '0x20000', blobGasPrice: '0x7', logs: [{data: 'PRIVATE LOG'}, {address: 'PRIVATE CONTRACT'}]});
+  const context = await txContext('ethereum', data);
+  assert.equal(context.status, 'available');
+  assert.deepEqual(getFact(context, 'Effective execution gas price'), {label: 'Effective execution gas price', value: '9007199254740993', unit: 'wei/gas'});
+  assert.deepEqual(getFact(context, 'Derived execution gas fee'), {label: 'Derived execution gas fee', value: '189151184349560853000', unit: 'wei'});
+  assert.deepEqual(getFact(context, 'Derived blob gas fee'), {label: 'Derived blob gas fee', value: '917504', unit: 'wei'});
+  assert.equal(getFact(context, 'Execution gas used').value, '21000');
+  assert.equal(getFact(context, 'Transaction gas limit').value, '21000');
+  assert.equal(getFact(context, 'Transaction nonce').value, '7');
+  assert.equal(getFact(context, 'Receipt log records').value, '2');
+  assert.equal(context.transactions[0].amount, '18446744073709551615');
+  assert.doesNotMatch(JSON.stringify(context), /PRIVATE LOG|PRIVATE CONTRACT/);
+  assert.match(context.coverage, /Logs are not automatically token transfers/);
+});
+
+test('failed Ethereum execution retains charged gas and labels value as declared, not transferred', async () => {
+  const data = ethereumTransaction(); data.receipt.status = '0x0';
+  const context = await txContext('ethereum', data);
+  assert.equal(context.transactions[0].status, 'failed');
+  assert.equal(getFact(context, 'Derived execution gas fee').value, '189151184349560853000');
+  assert.equal(getFact(context, 'Declared transaction value').value, '18446744073709551615');
+  assert.equal(getFact(context, 'Receipt log records').value, '0');
+  assert.match(context.coverage, /failed execution does not transfer the declared value/);
+  assert.equal(context.facts.some(fact => /transferred value|successful transfer/i.test(fact.label)), false);
+});
+
+test('missing, unbound, or malformed Ethereum receipts cannot supply status, fees, or logs', async () => {
+  const modifications = [
+    data => {delete data.receipt;},
+    data => {data.receipt_status = 'unavailable';},
+    data => {delete data.receipt.blockNumber;},
+    data => {data.receipt.blockNumber = '0x65';},
+    data => {data.receipt.blockHash = '0x' + script;},
+    data => {data.receipt.transactionHash = '0x' + script;},
+    data => {data.receipt.transactionHash = {text: 'PRIVATE HASH'};},
+    data => {data.receipt.blockHash = 123;},
+    data => {data.transaction.blockHash = null;},
+    data => {data.transaction.blockNumber = null;},
+  ];
+  for (const modify of modifications) {
+    const data = ethereumTransaction(); modify(data);
+    const context = await txContext('ethereum', data);
+    assert.equal(context.status, 'available');
+    assert.equal(context.transactions[0].status, data.transaction.blockNumber === null ? 'pending' : 'source-reported');
+    assert.equal(getFact(context, 'Declared transaction value').value, '18446744073709551615');
+    for (const label of ['Execution gas used', 'Effective execution gas price', 'Derived execution gas fee', 'Derived blob gas fee', 'Receipt log records']) {
+      assert.equal(getFact(context, label), undefined, label);
+    }
+    assert.doesNotMatch(JSON.stringify(context), /PRIVATE HASH/);
+  }
+});
+
+test('Ethereum partial or noncanonical fee quantities do not become zero fees', async () => {
+  for (const [field, value] of [['gasUsed', undefined], ['effectiveGasPrice', undefined], ['gasUsed', '0x00'], ['effectiveGasPrice', 12], ['gasUsed', '-0x1']]) {
+    const data = ethereumTransaction(); data.receipt[field] = value;
+    const context = await txContext('ethereum', data);
+    assert.equal(context.transactions[0].status, 'successful');
+    assert.equal(getFact(context, 'Derived execution gas fee'), undefined);
+  }
+  for (const fields of [{blobGasUsed: '0x20000'}, {blobGasPrice: '0x7'}, {blobGasUsed: '0x20000', blobGasPrice: '0x00'}]) {
+    const data = ethereumTransaction(); Object.assign(data.receipt, fields);
+    const context = await txContext('ethereum', data);
+    assert.equal(getFact(context, 'Derived blob gas fee'), undefined);
+    assert.equal(getFact(context, 'Derived execution gas fee').value, '189151184349560853000');
+  }
+  const zero = ethereumTransaction(); zero.receipt.effectiveGasPrice = '0x0';
+  assert.equal(getFact(await txContext('ethereum', zero), 'Derived execution gas fee').value, '0');
+});
+
+test('Bitcoin complete prevouts support fee arithmetic without adding input and output volume', async () => {
+  const context = await txContext('bitcoin', bitcoinTransaction());
+  for (const [label, value] of [['Complete input record total', '10000'], ['Complete output record total', '9500'], ['Derived input-output fee', '500'],
+    ['Derived fee matches reported fee', 'true'], ['Transaction weight', '801'], ['Transaction virtual size', '201'], ['Coinbase transaction', 'false']]) {
+    assert.equal(getFact(context, label)?.value, value, label);
+  }
+  assert.equal(getFact(context, 'Derived input-output fee').unit, 'sat');
+  assert.equal(getFact(context, 'Transaction virtual size').unit, 'vbytes');
+  assert.equal(context.transactions[0].amount, undefined);
+  assert.match(context.coverage, /totals are separate record totals, not transfer volume/);
+  const mismatch = bitcoinTransaction(); mismatch.transaction.fee = 501;
+  const mismatchContext = await txContext('bitcoin', mismatch);
+  assert.equal(getFact(mismatchContext, 'Derived input-output fee').value, '500');
+  assert.equal(getFact(mismatchContext, 'Transaction fee').value, '501');
+  assert.equal(getFact(mismatchContext, 'Derived fee matches reported fee').value, 'false');
+});
+
+test('Bitcoin record totals remain exact when sums exceed JavaScript safe integer range', async () => {
+  const data = bitcoinTransaction();
+  data.transaction.vin.forEach(input => {input.prevout.value = Number.MAX_SAFE_INTEGER;});
+  const context = await txContext('bitcoin', data);
+  assert.equal(getFact(context, 'Complete input record total').value, '18014398509481982');
+  assert.equal(getFact(context, 'Derived input-output fee').value, '18014398509472482');
+});
+
+test('Bitcoin coinbase outputs do not imply ordinary input value or fee derivation', async () => {
+  const data = bitcoinTransaction();
+  data.transaction.vin = [{is_coinbase: true, sequence: 0xffffffff}];
+  const context = await txContext('bitcoin', data);
+  assert.equal(getFact(context, 'Coinbase transaction').value, 'true');
+  assert.equal(getFact(context, 'Complete output record total').value, '9500');
+  for (const label of ['Complete input record total', 'Derived input-output fee', 'Derived fee matches reported fee', 'Input sequence replacement signal']) {
+    assert.equal(getFact(context, label), undefined, label);
+  }
+});
+
+test('Bitcoin incomplete, unsafe, empty, or negative input totals cannot derive a fee', async () => {
+  const modifications = [
+    data => {delete data.transaction.vin[0].prevout;},
+    data => {data.transaction.vin[0].prevout.value = null;},
+    data => {data.transaction.vin[0].prevout.value = '7000';},
+    data => {data.transaction.vin[0].prevout.value = Number.MAX_SAFE_INTEGER + 1;},
+    data => {data.transaction.vin[0].prevout.value = -1;},
+    data => {data.transaction.vin = [];},
+  ];
+  for (const modify of modifications) {
+    const data = bitcoinTransaction(); modify(data);
+    const context = await txContext('bitcoin', data);
+    assert.equal(context.status, 'available');
+    assert.equal(getFact(context, 'Complete input record total'), undefined);
+    assert.equal(getFact(context, 'Derived input-output fee'), undefined);
+    assert.equal(getFact(context, 'Derived fee matches reported fee'), undefined);
+    assert.equal(getFact(context, 'Complete output record total').value, '9500');
+  }
+  for (const outputs of [[], [{value: Number.MAX_SAFE_INTEGER + 1}], [{value: null}]]) {
+    const data = bitcoinTransaction(); data.transaction.vout = outputs;
+    const context = await txContext('bitcoin', data);
+    assert.equal(getFact(context, 'Complete output record total'), undefined);
+    assert.equal(getFact(context, 'Derived input-output fee'), undefined);
+  }
+  const negative = bitcoinTransaction(); negative.transaction.vout[0].value = 10000;
+  const context = await txContext('bitcoin', negative);
+  assert.equal(getFact(context, 'Complete input record total').value, '10000');
+  assert.equal(getFact(context, 'Complete output record total').value, '13500');
+  assert.equal(getFact(context, 'Derived input-output fee'), undefined);
+});
+
+test('Bitcoin replacement sequence signal requires every sequence and is not replacement policy', async () => {
+  assert.equal(getFact(await txContext('bitcoin', bitcoinTransaction()), 'Input sequence replacement signal').value, 'true');
+  for (const sequence of [0xfffffffe, 0xffffffff]) {
+    const data = bitcoinTransaction(); data.transaction.vin.forEach(input => {input.sequence = sequence;});
+    assert.equal(getFact(await txContext('bitcoin', data), 'Input sequence replacement signal').value, 'false');
+  }
+  for (const sequence of [undefined, -1, 0x100000000, '4294967293']) {
+    const data = bitcoinTransaction(); data.transaction.vin[0].sequence = sequence;
+    assert.equal(getFact(await txContext('bitcoin', data), 'Input sequence replacement signal'), undefined);
+  }
+});
+
+test('Bitcoin outspends count only complete boolean observations, without spending identifiers', async () => {
+  const data = bitcoinTransaction(); data.outspends[0].txid = 'PRIVATE SPENDING ID';
+  const context = await txContext('bitcoin', data);
+  assert.deepEqual(getFact(context, 'Outputs reported spent'), {label: 'Outputs reported spent', value: '1', unit: 'outputs'});
+  assert.doesNotMatch(JSON.stringify(context), /PRIVATE SPENDING ID/);
+  for (const outspends of [undefined, [], [{spent: true}], [{spent: true}, {spent: 'false'}], [{spent: true}, null]]) {
+    const sample = bitcoinTransaction(); sample.outspends = outspends;
+    assert.equal(getFact(await txContext('bitcoin', sample), 'Outputs reported spent'), undefined);
+  }
+  data.outspends = [{spent: false}, {spent: false}];
+  assert.equal(getFact(await txContext('bitcoin', data), 'Outputs reported spent').value, '0');
+});
+
+test('Bitcoin rich overview keeps fee estimates separate from block and mempool measurements', async () => {
+  const overview = {network: 'bitcoin', head: {height: 99, timestamp: 1790000000, tx_count: 2010, weight: 3999000, size: 1700000},
+    mempool: {count: 123, vsize: 45678, total_fee: 999}, fee_estimates_sat_vbyte: {'3': 1.25, '6': 0.8, '1': 99}};
+  const context = await fetchChainContext({portal: 'space', network: 'bitcoin', now,
+    fetcher: async url => url.includes('/overview') ? response(overview) : unavailable()});
+  assert.equal(context.status, 'partial');
+  assert.deepEqual(getFact(context, 'Source fee estimate for 3 blocks'), {label: 'Source fee estimate for 3 blocks', value: '1.25', unit: 'sat/vbyte'});
+  assert.deepEqual(getFact(context, 'Source fee estimate for 6 blocks'), {label: 'Source fee estimate for 6 blocks', value: '0.8', unit: 'sat/vbyte'});
+  assert.equal(getFact(context, 'Source fee estimate for 1 blocks'), undefined);
+  for (const [label, value, unit] of [['Observed mempool transactions', '123', 'transactions'], ['Observed mempool virtual size', '45678', 'vbytes'],
+    ['Observed mempool total fees', '999', 'sat'], ['Head block weight', '3999000', 'weight units'], ['Head block size', '1700000', 'bytes']]) {
+    assert.deepEqual(getFact(context, label), {label, value, unit});
+  }
+  assert.match(context.coverage, /do not guarantee confirmation/);
+  for (const estimate of [-1, '1.25', null, 1000000001]) {
+    overview.fee_estimates_sat_vbyte['3'] = estimate;
+    const invalid = await fetchChainContext({portal: 'space', network: 'bitcoin', now,
+      fetcher: async url => url.includes('/overview') ? response(overview) : unavailable()});
+    assert.equal(getFact(invalid, 'Source fee estimate for 3 blocks'), undefined);
+    assert.equal(getFact(invalid, 'Source fee estimate for 6 blocks').value, '0.8');
+  }
+});
+
+test('Ethereum overview uses gas, wei per gas and transaction counts without receipt assumptions', async () => {
+  const context = await fetchChainContext({portal: 'space', network: 'ethereum', now,
+    fetcher: async url => url.includes('/overview') ? response({network: 'ethereum', head: {number: '0x64', timestamp: '0x1',
+      gasUsed: '0x5208', gasLimit: '0x1c9c380', baseFeePerGas: '0x20000000000001', transactions: ['0x' + txid]},
+      gas_price_wei: '9007199254740993', finalized: {number: '0x60'}}) : unavailable()});
+  assert.equal(getFact(context, 'Head block gas used').unit, 'gas');
+  assert.deepEqual(getFact(context, 'Head block base fee'), {label: 'Head block base fee', value: '9007199254740993', unit: 'wei/gas'});
+  assert.equal(getFact(context, 'Source gas price').unit, 'wei/gas');
+  assert.equal(getFact(context, 'Head block transaction IDs').value, '1');
+  assert.equal(getFact(context, 'Derived execution gas fee'), undefined);
+});
+
+test('rich Bloch context preserves more than 24 supported facts under the 48-fact contract', async () => {
+  const overview = {network: 'bloch', head: {height: 100, slot: 150, finalized_height: 90, epoch: 4},
+    health: {lag_slots: 2, transactions: 1000, indexed_to_slot: 148}, peers: {reporting_nodes: 3},
+    mempool_details: {size: 7, max: 100, bytes: 2000, next_base_fee_millisat_per_gas: 1500}, network_diagnostics: {sampled_at: 1790000000000}};
+  const graph = {network: 'bloch-mainnet', asset: 'BLCH', anchor: {height: 100, finalized_height: 90},
+    scope: {transactions_returned: 0, endpoint_records_omitted: 0}, nodes: [], edges: []};
+  const validators = {offset: 0, limit: 32, counts: {total: 2, active: 1, total_active_stake_sat: '9007199254740993'},
+    validators: [], returned: 0, head: {height: 100, slot: 150, block_id: block}, generated_at: 1790000000};
+  const context = await fetchChainContext({portal: 'explorer', network: 'bloch', now,
+    fetcher: async url => response(url.includes('/overview') ? overview : url.includes('/network?') ? graph : validators)});
+  assert.equal(context.status, 'available');
+  assert.ok(context.facts.length > 24 && context.facts.length <= 48);
+  assert.equal(getFact(context, 'Source active stake').value, '9007199254740993');
+  assert.deepEqual(getFact(context, 'Source next base fee'), {label: 'Source next base fee', value: '1500', unit: 'millisat/gas'});
+  assert.equal(getFact(context, 'Observed head epoch').value, '4');
+  assert.equal(getFact(context, 'Indexer checkpoint slot').value, '148');
+  assert.equal(getFact(context, 'Observed mempool capacity').value, '100');
+  assert.ok(context.facts.every(fact => typeof fact.value === 'string' && fact.value.length <= 256));
+  assert.equal(context.sources[0].observed_at, new Date(1790000000000).toISOString());
+  assert.equal(context.sources[2].observed_at, new Date(1790000000 * 1000).toISOString());
 });

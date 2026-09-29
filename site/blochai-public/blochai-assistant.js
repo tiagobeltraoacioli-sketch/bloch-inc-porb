@@ -5,10 +5,11 @@
   let topics;try{topics=JSON.parse(root.dataset.blochaiCatalog);}catch{return;}
   if(!Array.isArray(topics)||topics.length>32)return;
   const topicById=new Map(topics.map(topic=>[topic.id,topic])),modeNames={summary:'Quick summary',explain:'Explanation',checklist:'Checklist',example:'Worked example'},networkNames={bitcoin:'Bitcoin',ethereum:'Ethereum',bloch:'Bloch'},amountUnits={BTC:'sat',ETH:'wei',BLCH:'sat'};
+  const supportsNetwork=topic=>topic&&(!Array.isArray(topic.networks)||topic.networks.includes(network.value));
   let ticket=null,job=null,timer=null,polls=0,busy=false,exporting=false,activeController=null,generation=0,current=null,history=[];
   const stop=()=>{clearTimeout(timer);timer=null;};
   function controls(){
-    const full=history.length>=12;submit.disabled=busy||full||!topicById.has(question.value);for(const field of [question,mode,network,subjectKind,subjectValue,search])field.disabled=busy;
+    const full=history.length>=12;submit.disabled=busy||full||!supportsNetwork(topicById.get(question.value));for(const field of [question,mode,network,subjectKind,subjectValue,search])field.disabled=busy;
     root.querySelectorAll('[data-topic],[data-followup]').forEach(button=>{button.disabled=busy||full;});
     clear.disabled=!busy&&!history.length&&!search.value&&!subjectValue.value;exportButton.disabled=busy||exporting||!history.length;count.textContent=`${history.length} / 12 explanations`;
   }
@@ -18,8 +19,8 @@
   const normalize=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   function resolveTopic(value){
     const input=normalize(value);if(!input)return null;
-    const exact=topics.filter(topic=>[topic.title,topic.question].some(text=>normalize(text)===input));if(exact.length===1)return exact[0];
-    const scored=topics.map(topic=>{
+    const eligible=topics.filter(supportsNetwork),exact=eligible.filter(topic=>[topic.title,topic.question].some(text=>normalize(text)===input));if(exact.length===1)return exact[0];
+    const scored=eligible.map(topic=>{
       const phrases=[...(topic.keywords||[]),topic.title].map(normalize).filter(phrase=>phrase.length>=3);
       const score=[...new Set(phrases)].reduce((total,phrase)=>` ${input} `.includes(` ${phrase} `)?total+Math.min(3,phrase.split(' ').length):total,0);
       return {topic,score};
@@ -27,11 +28,19 @@
     return scored[0]?.score>0&&scored[0].score>(scored[1]?.score||0)?scored[0].topic:null;
   }
   function choose(id,{typed=false}={}){
-    const topic=topicById.get(id);question.value=topic?id:'';if(!typed)search.value='';
-    root.querySelectorAll('[data-topic]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.topic===id)));
-    match.textContent=topic?`Matched topic: ${topic.question}`:search.value?'No single portal topic matched. Choose a topic below; only that topic will be sent.':'Choose a topic below, or type to find one.';
+    const candidate=topicById.get(id),topic=supportsNetwork(candidate)?candidate:null;question.value=topic?id:'';if(!typed)search.value='';
+    root.querySelectorAll('[data-topic]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.topic===question.value)));
+    match.textContent=topic?`Matched topic: ${topic.question}`:search.value?'No single topic matched this network. Choose a topic below; only that topic will be sent.':`Choose a ${networkNames[network.value]} topic below, or type to find one.`;
     controls();
   }
+  function filterTopics(){
+    const previous=question.value;
+    root.querySelectorAll('[data-topic]').forEach(button=>{button.hidden=!supportsNetwork(topicById.get(button.dataset.topic));});
+    for(const option of question.options){if(!option.value)continue;option.hidden=!supportsNetwork(topicById.get(option.value));option.disabled=option.hidden;}
+    if(previous&&!supportsNetwork(topicById.get(previous))){choose('');return;}
+    choose(search.value?resolveTopic(search.value)?.id||'':question.value,{typed:true});
+  }
+  network.addEventListener('change',filterTopics);
   search.addEventListener('input',()=>choose(resolveTopic(search.value)?.id||'',{typed:true}));question.addEventListener('change',()=>choose(question.value));
   root.querySelectorAll('[data-topic]').forEach(button=>button.addEventListener('click',()=>choose(button.dataset.topic)));
   subjectKind.addEventListener('change',()=>{referenceInput.hidden=subjectKind.value==='network';subjectValue.required=!referenceInput.hidden;if(subjectKind.value==='address'&&topicById.has('wallet_summary'))choose('wallet_summary');if(subjectKind.value==='transaction'&&topicById.has('transaction_analysis'))choose('transaction_analysis');controls();});subjectValue.addEventListener('input',controls);
@@ -50,14 +59,16 @@
   function safeSource(source){
     if(!source||typeof source!=='object')return null;
     let url;try{url=new URL(source.url);if(url.protocol!=='https:'||url.username||url.password||url.port||url.hostname==='rednblue.space'||url.hostname.endsWith('.rednblue.space'))return null;}catch{return null;}
-    return {id:bounded(source.id,100),title:bounded(source.title,200),url:url.href,retrieved_at:bounded(source.retrieved_at,80),coverage:bounded(source.coverage,2000),status:bounded(source.status,100)};
+    return {id:bounded(source.id,100),title:bounded(source.title,200),url:url.href,retrieved_at:bounded(source.retrieved_at,80),observed_at:bounded(source.observed_at,80),coverage:bounded(source.coverage,2000),status:bounded(source.status,100)};
   }
   function guidance(data){
     const guide=data.guide;if(!guide||typeof guide!=='object'||guide.question_id!==current.question_id||guide.mode!==current.mode||guide.network!==current.network)throw new Error('The public assistant returned mismatched topic context.');
     const identity=value=>current.network==='bitcoin'&&current.subject?.kind!=='transaction'?value:String(value).toLowerCase();
     if(current.subject?guide.subject?.kind!==current.subject.kind||identity(guide.subject?.value)!==identity(current.subject.value):guide.subject!=null)throw new Error('The public assistant returned mismatched reference context.');
     const sources=Array.isArray(guide.sources)?guide.sources.slice(0,8).map(safeSource).filter(Boolean):[];
-    const facts=Array.isArray(guide.facts)?guide.facts.slice(0,24).filter(fact=>fact&&typeof fact.label==='string'&&['string','number','boolean'].includes(typeof fact.value)).map(fact=>({label:bounded(fact.label,100),value:String(fact.value).slice(0,256),unit:bounded(fact.unit,80)})):[];
+    const projectFacts=(items,limit)=>Array.isArray(items)?items.slice(0,limit).filter(fact=>fact&&typeof fact.label==='string'&&['string','number','boolean'].includes(typeof fact.value)).map(fact=>({label:bounded(fact.label,100),value:String(fact.value).slice(0,256),unit:bounded(fact.unit,60)})):[];
+    const facts=projectFacts(guide.facts,48),derived_facts=projectFacts(guide.derived_facts,4);
+    const insights=Array.isArray(guide.insights)?guide.insights.slice(0,8).filter(item=>item&&typeof item.id==='string'&&typeof item.title==='string'&&typeof item.text==='string'&&['available','partial','unavailable'].includes(item.status)&&Array.isArray(item.source_ids)&&item.source_ids.every(id=>sources.some(source=>source.id===id))).map(item=>({id:bounded(item.id,80),title:bounded(item.title,120),text:bounded(item.text,600),source_ids:item.source_ids.slice(0,6),status:item.status})):[];
     const knowledge=Array.isArray(guide.knowledge)?guide.knowledge.slice(0,8).filter(item=>item&&typeof item.text==='string').map(item=>({text:bounded(item.text),source_id:bounded(item.source_id,100)})):[];
     const transactions=Array.isArray(guide.transactions)?guide.transactions.slice(0,20).filter(item=>item&&typeof item==='object').map(item=>Object.fromEntries(['hash','from','to','amount','asset','timestamp','status'].map(key=>[key,String(item[key]??'').slice(0,200)]))):[];
     const graph={title:'Public observation graph',nodes:[],edges:[],coverage:bounded(guide.coverage)};
@@ -66,7 +77,7 @@
       graph.edges=guide.graph.edges.slice(0,80).filter(item=>item&&ids.has(item.source)&&ids.has(item.target)).map(item=>({source:item.source,target:item.target,label:bounded(item.label,100)}));
       graph.title=bounded(guide.graph.title,200)||graph.title;graph.coverage=bounded(guide.graph.coverage)||graph.coverage;
     }
-    return {sources,facts,knowledge,transactions,graph,coverage:bounded(guide.coverage),observed_at:bounded(guide.observed_at,80),source_status:bounded(guide.status,100)};
+    return {sources,facts,derived_facts,insights,knowledge,transactions,graph,coverage:bounded(guide.coverage),observed_at:bounded(guide.observed_at,80),source_status:bounded(guide.status,100)};
   }
   function drawGraph(graph){
     const figure=node('figure','blochai-assistant__graph'),namespace='http://www.w3.org/2000/svg',svg=document.createElementNS(namespace,'svg');svg.setAttribute('viewBox','0 0 320 270');svg.setAttribute('role','img');svg.setAttribute('aria-label',`${graph.nodes.length} public references and ${graph.edges.length} observed connections`);
@@ -80,8 +91,8 @@
   function exportData(turn,index,format){
     const filename=`blochai-${root.dataset.blochaiPortal}-${index+1}`;
     if(format==='json'){saveBlob(JSON.stringify({portal:root.dataset.blochaiPortal,classification:'PUBLIC',amount_units:amountUnits,transaction_amount_encoding:'Exact decimal integer strings in the base unit identified by asset; never whole-coin amounts.',...turn},null,2),'application/json',`${filename}.json`);return;}
-    const fields=['record_type','label','value','unit','hash','from','to','amount_base_units','amount_unit','asset','timestamp','status','source_title','source_url','retrieved_at','coverage'];
-    const rows=[...turn.facts.map(fact=>({record_type:'fact',...fact})),...turn.transactions.map(tx=>({record_type:'transaction',...tx,amount_base_units:tx.amount,amount_unit:tx.amount?amountUnits[tx.asset]||'base units':''})),...turn.sources.map(source=>({record_type:'source',source_title:source.title,source_url:source.url,retrieved_at:source.retrieved_at,coverage:source.coverage,status:source.status}))];
+    const fields=['record_type','label','value','unit','hash','from','to','amount_base_units','amount_unit','asset','timestamp','status','source_ids','source_id','source_title','source_url','observed_at','retrieved_at','coverage'];
+    const rows=[...turn.facts.map(fact=>({record_type:'fact',...fact})),...turn.derived_facts.map(fact=>({record_type:'derived_fact',...fact})),...turn.insights.map(item=>({record_type:'insight',label:item.title,value:item.text,status:item.status,source_ids:item.source_ids.join(' '),coverage:item.source_ids.map(id=>turn.sources.find(source=>source.id===id)).filter(Boolean).map(source=>`${source.id}: ${source.coverage}`).join(' | ')})),...turn.transactions.map(tx=>({record_type:'transaction',...tx,amount_base_units:tx.amount,amount_unit:tx.amount?amountUnits[tx.asset]||'base units':''})),...turn.sources.map(source=>({record_type:'source',source_id:source.id,source_title:source.title,source_url:source.url,observed_at:source.observed_at,retrieved_at:source.retrieved_at,coverage:source.coverage,status:source.status}))];
     const cell=value=>{let text=String(value??'');if(/^[\s]*[=+@-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
     saveBlob('\uFEFF'+[fields,...rows.map(row=>fields.map(field=>row[field]??''))].map(row=>row.map(cell).join(',')).join('\r\n'),'text/csv;charset=utf-8',`${filename}.csv`);
   }
@@ -90,15 +101,16 @@
     article.append(node('p','blochai-assistant__turn-meta',`${modeNames[turn.mode]} · ${networkNames[turn.network]} · ${new Date(turn.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`));
     if(turn.subject)article.append(node('p','blochai-assistant__subject',`${turn.subject.kind}: ${turn.subject.value}`));if(turn.answer_kind==='source_summary')article.append(node('p','blochai-assistant__answer-label','Source-based explanation'));article.append(node('div','blochai-assistant__output',turn.output));
     if(turn.facts.length){const details=node('details','blochai-assistant__context');details.open=true;details.append(node('summary','','Public source observations'));const list=node('dl','blochai-assistant__facts');for(const fact of turn.facts)list.append(node('dt','',fact.label),node('dd','',`${fact.value}${fact.unit?' '+fact.unit:''}`));details.append(list);article.append(details);}
+    if(turn.insights.length){const details=node('details','blochai-assistant__context blochai-assistant__insights');details.open=true;details.append(node('summary','',`Computed readings (${turn.insights.length})`));for(const insight of turn.insights){const card=node('div','blochai-assistant__insight');card.append(node('h4','',insight.title),node('p','',insight.text));const titles=insight.source_ids.map(id=>turn.sources.find(source=>source.id===id)?.title||id);card.append(node('p','blochai-assistant__insight-source',`${insight.status==='available'?'Derived from the displayed sample':insight.status==='partial'?'Partial evidence':'Unavailable evidence'}${titles.length?' · '+titles.join('; '):''}`));details.append(card);}article.append(details);}
     if(turn.graph.nodes.length)article.append(drawGraph(turn.graph));
     if(turn.transactions.length){const details=node('details','blochai-assistant__context');details.append(node('summary','',`Transaction observations (${turn.transactions.length})`));for(const tx of turn.transactions){const row=node('dl','blochai-assistant__transaction');for(const field of ['hash','from','to','amount','asset','timestamp','status'])if(tx[field])row.append(node('dt','',field==='amount'?'Amount (base units)':field),node('dd','',field==='amount'?`${tx[field]} ${amountUnits[tx.asset]||'base units'}`:tx[field]));details.append(row);}article.append(details);}
     if(turn.knowledge.length){const details=node('details','blochai-assistant__context');details.append(node('summary','','Reference notes'));const list=node('ul','');for(const item of turn.knowledge){const point=node('li','',item.text),source=turn.sources.find(source=>source.id===item.source_id);if(source)point.append(node('span','blochai-assistant__reference',` Source: ${source.title}.`));list.append(point);}details.append(list);article.append(details);}
     if(turn.coverage)article.append(node('p','blochai-assistant__coverage',turn.coverage));
-    if(turn.sources.length){const details=node('details','blochai-assistant__context');details.append(node('summary','',`Sources & coverage (${turn.sources.length})`));for(const source of turn.sources){const card=node('div','blochai-assistant__source'),link=node('a','',source.title||'Public source');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';card.append(link);if(source.status)card.append(node('span','blochai-assistant__source-status',source.status.replace(/_/g,' ')));if(source.retrieved_at)card.append(node('p','',`Retrieved: ${source.retrieved_at}`));if(source.coverage)card.append(node('p','',source.coverage));details.append(card);}article.append(details);}
+    if(turn.sources.length){const details=node('details','blochai-assistant__context');details.append(node('summary','',`Sources & coverage (${turn.sources.length})`));for(const source of turn.sources){const card=node('div','blochai-assistant__source'),link=node('a','',source.title||'Public source');link.href=source.url;link.target='_blank';link.rel='noopener noreferrer';card.append(link);if(source.status)card.append(node('span','blochai-assistant__source-status',source.status.replace(/_/g,' ')));if(source.retrieved_at)card.append(node('p','',`Retrieved: ${source.retrieved_at}`));if(source.observed_at)card.append(node('p','',`Observed: ${source.observed_at}`));if(source.coverage)card.append(node('p','',source.coverage));details.append(card);}article.append(details);}
     article.append(node('p','blochai-assistant__meta',turn.answer_kind==='source_summary'?'Assembled from reviewed notes and source observations.':`Model: ${turn.model}. Generated explanation; check the source observations and coverage.`));
     const dataActions=node('div','blochai-assistant__data-actions');for(const format of ['csv','json']){const button=node('button','',`Download ${format.toUpperCase()}`);button.type='button';button.addEventListener('click',()=>exportData(turn,index,format));dataActions.append(button);}article.append(dataActions);
     const followups=node('div','blochai-assistant__followups');followups.setAttribute('aria-label','Explore this topic further');
-    for(const [style,label] of [['explain','Explain further'],['checklist','Make a checklist'],['example','Show an example'],['summary','Summarize']]){if(style===turn.mode)continue;const button=node('button','',label);button.type='button';button.dataset.followup=style;button.addEventListener('click',()=>{if(busy||history.length>=12)return;choose(turn.question_id);mode.value=style;network.value=turn.network;subjectKind.value=turn.subject?.kind||'network';subjectValue.value=turn.subject?.value||'';referenceInput.hidden=!turn.subject;subjectValue.required=!!turn.subject;start();});followups.append(button);}article.append(followups);return article;
+    for(const [style,label] of [['explain','Explain further'],['checklist','Make a checklist'],['example','Show an example'],['summary','Summarize']]){if(style===turn.mode)continue;const button=node('button','',label);button.type='button';button.dataset.followup=style;button.addEventListener('click',()=>{if(busy||history.length>=12)return;network.value=turn.network;filterTopics();choose(turn.question_id);mode.value=style;subjectKind.value=turn.subject?.kind||'network';subjectValue.value=turn.subject?.value||'';referenceInput.hidden=!turn.subject;subjectValue.required=!!turn.subject;start();});followups.append(button);}article.append(followups);return article;
   }
   function show(data,version){
     if(version!==generation)return;
@@ -116,7 +128,7 @@
     return kind==='transaction'?/^[a-fA-F0-9]{64}$/.test(value):/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(value)||(/^bc1[ac-hj-np-z02-9]{11,87}$/i.test(value)&&(value===value.toLowerCase()||value===value.toUpperCase()));
   }
   async function start(){
-    if(busy||history.length>=12||!topicById.has(question.value))return;const value=subjectValue.value.trim();if(!validSubject(subjectKind.value,value)){status.textContent='Check the public reference format and selected network.';subjectValue.focus();return;}
+    if(busy||history.length>=12||!supportsNetwork(topicById.get(question.value)))return;const value=subjectValue.value.trim();if(!validSubject(subjectKind.value,value)){status.textContent='Check the public reference format and selected network.';subjectValue.focus();return;}
     stop();busy=true;polls=0;job=null;ticket=null;search.value='';current={question_id:question.value,mode:mode.value,network:network.value,...(subjectKind.value!=='network'?{subject:{kind:subjectKind.value,value}}:{})};const version=generation;controls();status.textContent='Retrieving public context for your selected topic…';
     try{const data=await request('/api/blochai/tasks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(current)},version);if(!/^[a-f0-9]{64}$/.test(data.poll_token))throw new Error('The public assistant returned an invalid response.');job=data.task_id;ticket=data.poll_token;show(data,version);}catch(error){fail(error,version);}
   }
@@ -126,9 +138,9 @@
   exportButton.addEventListener('click',async()=>{
     if(!history.length||busy||exporting)return;const version=generation,snapshot=history.slice();exporting=true;controls();status.textContent='Preparing your PDF on this device…';
     try{const {downloadBlochAiPdf}=await import('/blochai-pdf/blochai-pdf.js');if(version!==generation)return;
-      await downloadBlochAiPdf({portal:root.dataset.blochaiName,classification:'PUBLIC',generatedAt:new Date().toISOString(),exchanges:snapshot.map(turn=>({question:`${turn.question} (${modeNames[turn.mode]}; ${networkNames[turn.network]})${turn.subject?' · '+turn.subject.value:''}`,answer:turn.output,model:turn.answer_kind==='source_summary'?undefined:turn.model,createdAt:turn.created_at,sources:turn.sources,facts:turn.facts,coverage:turn.coverage,graph:turn.graph,transactions:turn.transactions})),provenance:'Public portal explanations use reviewed notes and bounded public observations. No private AML context is included. Source timestamps and coverage apply. This report does not independently verify records.'},{isCurrent:()=>version===generation&&history.length===snapshot.length});
+      await downloadBlochAiPdf({portal:root.dataset.blochaiName,classification:'PUBLIC',generatedAt:new Date().toISOString(),exchanges:snapshot.map(turn=>({question:`${turn.question} (${modeNames[turn.mode]}; ${networkNames[turn.network]})${turn.subject?' · '+turn.subject.value:''}`,answer:turn.output,model:turn.answer_kind==='source_summary'?undefined:turn.model,createdAt:turn.created_at,sources:turn.sources,facts:[...turn.facts,...turn.derived_facts,...turn.insights.map(item=>({label:`Derived: ${item.title} (${item.status})`,value:item.text}))],coverage:turn.coverage,graph:turn.graph,transactions:turn.transactions})),provenance:'Public portal explanations use reviewed notes and bounded public observations. Computed readings describe the displayed sample and are separate from source observations. No private AML context is included. Source timestamps and coverage apply. This report does not independently verify records.'},{isCurrent:()=>version===generation&&history.length===snapshot.length});
       if(version===generation)status.textContent='PDF downloaded. It was created locally from this conversation.';
     }catch(error){if(version===generation)status.textContent='The PDF could not be created. Please try again.';}finally{exporting=false;controls();}
   });
-  window.addEventListener('pagehide',reset);controls();
+  window.addEventListener('pagehide',reset);filterTopics();controls();
 })();

@@ -59,8 +59,12 @@ function context() {
   return {sources: [], facts: [], transactions: [], graph: {nodes: [], edges: []}, status: 'unavailable', coverage: fixedCoverage, observed_at: null};
 }
 function fact(result, label, value, unit) {
-  if (result.facts.length >= 24 || !(integer(value) || decimal(value) || typeof value === 'boolean')) return;
+  if (result.facts.length >= 48 || !(integer(value) || decimal(value) || typeof value === 'boolean')) return;
   result.facts.push({label, value: String(value), ...(unit ? {unit} : {})});
+}
+function rateFact(result,label,value,unit){
+  if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>1e9||result.facts.length>=48)return;
+  result.facts.push({label,value:String(value),unit});
 }
 function emptySource(id, title, url, retrievedAt, coverage) {
   return {id, title, url, retrieved_at: retrievedAt, observed_at: null, status: 'unavailable', coverage};
@@ -68,7 +72,7 @@ function emptySource(id, title, url, retrievedAt, coverage) {
 
 async function read(fetcher, url) {
   const response = await fetcher(url, {method: 'GET', redirect: 'manual', credentials: 'omit',
-    headers: {Accept: 'application/json', 'User-Agent': 'BlochAI-Public-Context/1.0'}, signal: AbortSignal.timeout(7000)});
+    headers: {Accept: 'application/json', 'User-Agent': 'BlochAI-Public-Context/1.0'}, signal: AbortSignal.timeout(12000)});
   if (!response.ok || response.status >= 300 || !response.headers.get('content-type')?.toLowerCase().includes('application/json') ||
       Number(response.headers.get('content-length')) > MAX_BYTES || response.url && response.url !== url) throw new Error('source_unavailable');
   const reader = response.body?.getReader();
@@ -165,14 +169,26 @@ function projectTransaction(result, data, network, subject) {
   if (network === 'ethereum') {
     const amount = quantity(tx.value);
     if (!address(tx.from, network) || tx.to !== null && !address(tx.to, network) || amount === null) throw new Error('invalid_source');
-    const receipt = data.receipt_status === 'available' && data.receipt?.transactionHash?.toLowerCase() === txid.toLowerCase() &&
-      validHash(tx.blockHash) && data.receipt?.blockHash?.toLowerCase() === tx.blockHash.toLowerCase() ? data.receipt : null;
+    const receipt = data.receipt_status === 'available' && validHash(data.receipt?.transactionHash) && data.receipt.transactionHash.toLowerCase() === txid.toLowerCase() &&
+      validHash(tx.blockHash) && validHash(data.receipt?.blockHash) && data.receipt.blockHash.toLowerCase() === tx.blockHash.toLowerCase() &&
+      quantity(tx.blockNumber)!==null && quantity(data.receipt?.blockNumber)===quantity(tx.blockNumber) ? data.receipt : null;
     const status = receipt && quantity(receipt.status) === '1' ? 'successful' : receipt && quantity(receipt.status) === '0' ? 'failed' : tx.blockNumber === null ? 'pending' : 'source-reported';
     const time = epoch(quantityNumber(tx.blockTimestamp));
     addTransaction(result, network, {hash: txid, from: tx.from, to: tx.to, amount, status, timestamp: time});
     addEdge(result, addNode(result, network, 'address', tx.from), txNode, amount, 'wei');
     if (tx.to !== null) addEdge(result, txNode, addNode(result, network, 'address', tx.to), amount, 'wei');
     fact(result, 'Declared transaction value', amount, 'wei');
+    fact(result, 'Transaction gas limit', quantity(tx.gas), 'gas');
+    fact(result, 'Transaction nonce', quantity(tx.nonce), 'nonce');
+    if(receipt){
+      const used=quantity(receipt.gasUsed),price=quantity(receipt.effectiveGasPrice);
+      fact(result,'Execution gas used',used,'gas');
+      fact(result,'Effective execution gas price',price,'wei/gas');
+      if(used!==null&&price!==null)fact(result,'Derived execution gas fee',(BigInt(used)*BigInt(price)).toString(),'wei');
+      const blobUsed=quantity(receipt.blobGasUsed),blobPrice=quantity(receipt.blobGasPrice);
+      if(blobUsed!==null&&blobPrice!==null)fact(result,'Derived blob gas fee',(BigInt(blobUsed)*BigInt(blobPrice)).toString(),'wei');
+      if(Array.isArray(receipt.logs)&&receipt.logs.length<=20000)fact(result,'Receipt log records',receipt.logs.length,'logs');
+    }
     fact(result, 'Transaction height', quantityNumber(tx.blockNumber), 'blocks');
     fact(result, 'Reported confirmations', data.position?.confirmations, 'blocks');
     fact(result, 'Reported finalized height', data.position?.finalized_height, 'blocks');
@@ -198,6 +214,23 @@ function projectTransaction(result, data, network, subject) {
     fact(result, 'Transaction height', network === 'bitcoin' ? tx.status?.block_height : tx.height, 'blocks');
     fact(result, 'Transaction slot', network === 'bloch' ? tx.slot : null, 'slots');
     fact(result, 'Transaction fee', network === 'bitcoin' ? tx.fee : tx.fee_sat, 'sat');
+    if(network==='bitcoin'){
+      const coinbase=inputs.some(input=>input?.is_coinbase===true);
+      fact(result,'Coinbase transaction',coinbase);
+      if(integer(tx.weight)&&tx.weight>0){fact(result,'Transaction weight',tx.weight,'weight units');fact(result,'Transaction virtual size',Math.ceil(tx.weight/4),'vbytes');}
+      const inputValues=inputs.map(input=>input?.prevout?.value),outputValues=outputs.map(output=>output?.value);
+      const inputTotal=!coinbase&&inputValues.length&&inputValues.every(integer)?inputValues.reduce((sum,value)=>sum+BigInt(value),0n):null;
+      const outputTotal=outputValues.length&&outputValues.every(integer)?outputValues.reduce((sum,value)=>sum+BigInt(value),0n):null;
+      if(inputTotal!==null)fact(result,'Complete input record total',inputTotal.toString(),'sat');
+      if(outputTotal!==null)fact(result,'Complete output record total',outputTotal.toString(),'sat');
+      if(inputTotal!==null&&outputTotal!==null&&inputTotal>=outputTotal){
+        fact(result,'Derived input-output fee',(inputTotal-outputTotal).toString(),'sat');
+        if(integer(tx.fee))fact(result,'Derived fee matches reported fee',inputTotal-outputTotal===BigInt(tx.fee));
+      }
+      // RBF is an observed sequence signal, not a guarantee of replacement policy.
+      if(!coinbase&&inputs.length&&inputs.every(input=>integer(input?.sequence)&&input.sequence<=0xffffffff))fact(result,'Input sequence replacement signal',inputs.some(input=>input.sequence<0xfffffffe));
+      if(Array.isArray(data.outspends)&&data.outspends.length===outputs.length&&data.outspends.every(row=>typeof row?.spent==='boolean'))fact(result,'Outputs reported spent',data.outspends.filter(row=>row.spent).length,'outputs');
+    }
     fact(result, 'Reported finalized height', data.position?.finalized_height, 'blocks');
     result.observed_at = time;
   }
@@ -213,12 +246,18 @@ function projectOverview(result, data, network) {
     fact(result, 'Transactions in head block', head.tx_count, 'transactions');
     fact(result, 'Observed mempool transactions', data.mempool?.count, 'transactions');
     fact(result, 'Observed mempool virtual size', data.mempool?.vsize, 'vbytes');
+    fact(result, 'Observed mempool total fees', data.mempool?.total_fee, 'sat');
+    fact(result, 'Head block weight', head.weight, 'weight units');
+    fact(result, 'Head block size', head.size, 'bytes');
+    for(const target of ['3','6'])rateFact(result,`Source fee estimate for ${target} blocks`,data.fee_estimates_sat_vbyte?.[target],'sat/vbyte');
     result.observed_at = epoch(head.timestamp);
   } else if (network === 'ethereum') {
     fact(result, 'Reported finalized height', quantityNumber(data.finalized?.number), 'blocks');
-    fact(result, 'Source gas price', data.gas_price_wei, 'wei');
+    fact(result, 'Source gas price', data.gas_price_wei, 'wei/gas');
     fact(result, 'Head block gas used', quantity(head.gasUsed), 'gas');
     fact(result, 'Head block gas limit', quantity(head.gasLimit), 'gas');
+    fact(result, 'Head block base fee', quantity(head.baseFeePerGas), 'wei/gas');
+    if(Array.isArray(head.transactions)&&head.transactions.length<=20000)fact(result,'Head block transaction IDs',head.transactions.length,'transactions');
     result.observed_at = epoch(quantityNumber(head.timestamp));
   } else {
     fact(result, 'Observed head slot', head.slot, 'slots');
@@ -226,6 +265,12 @@ function projectOverview(result, data, network) {
     fact(result, 'Indexer lag', data.health?.lag_slots, 'slots');
     fact(result, 'Reporting nodes', data.peers?.reporting_nodes, 'nodes');
     fact(result, 'Observed mempool transactions', data.mempool_details?.size, 'transactions');
+    fact(result, 'Observed mempool capacity', data.mempool_details?.max, 'transactions');
+    fact(result, 'Observed mempool bytes', data.mempool_details?.bytes, 'bytes');
+    fact(result, 'Source next base fee', data.mempool_details?.next_base_fee_millisat_per_gas, 'millisat/gas');
+    fact(result, 'Observed head epoch', head.epoch, 'epochs');
+    fact(result, 'Indexer transaction records', data.health?.transactions, 'transactions');
+    fact(result, 'Indexer checkpoint slot', data.health?.indexed_to_slot, 'slots');
     result.observed_at = epoch(data.network_diagnostics?.sampled_at, 1);
   }
 }
@@ -262,11 +307,11 @@ function plans(query) {
     project: (result, data) => projectWallet(result, data, network, subject)}];
   if (subject?.kind === 'transaction') return [{id: 'transaction_observation', title: 'Public transaction observation',
     url: `https://bloch.space/api/tx?${new URLSearchParams({network, query: subject.value})}`,
-    coverage: 'One transaction with bounded input/output references. Execution, source checkpoints, and confirmation counts are separate observations. A reference does not prove ownership.',
+    coverage: network==='ethereum'?'One transaction with a matching receipt when available. Execution gas and blob gas fees are separate; failed execution does not transfer the declared value. Logs are not automatically token transfers. References do not prove ownership.':'One transaction with bounded input/output references. Input and output totals are separate record totals, not transfer volume. Fee arithmetic requires complete non-coinbase input values. Outspends and checkpoints are separate observations, not ownership evidence.',
     project: (result, data) => projectTransaction(result, data, network, subject)}];
   return [{id: 'network_overview', title: 'Public network overview',
     url: `https://bloch.space/api/overview?network=${network}`,
-    coverage: 'Source-reported network overview. Head, finalized checkpoint, mempool, and indexer values may have different observation times.',
+    coverage: 'Source-reported network overview. Head, finalized checkpoint, mempool, and indexer values may have different observation times. Fee estimates are source observations and do not guarantee confirmation.',
     project: (result, data) => projectOverview(result, data, network)},
   {id: 'network_graph', title: 'Bounded public network graph',
     url: `https://bloch-graphus.xyz/api/chain/network?asset=${asset}`,
@@ -302,7 +347,7 @@ export async function fetchChainContext({portal, network, subject, fetcher = fet
   result.network = query.network;
   result.subject = query.subject || null;
   result.sources = observed.flatMap(item => item.sources);
-  result.facts = observed.flatMap(item => item.facts).slice(0, 24);
+  result.facts = observed.flatMap(item => item.facts).slice(0, 48);
   result.transactions = observed.flatMap(item => item.transactions).slice(0, MAX_TRANSACTIONS);
   const graph = observed.find(item => item.graph.nodes.length)?.graph;
   if (graph) result.graph = graph;

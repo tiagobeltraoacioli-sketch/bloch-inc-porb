@@ -21,7 +21,7 @@ test('assistant assets pair a release version with revalidation and reject unkno
   let reads=0;const env={ASSETS:{async fetch(request){reads++;assert.equal(new URL(request.url).search,'');assert.equal(request.headers.has('cookie'),false);return new Response('asset');}}};
   for(const host of ['bloch-graphus.xyz','bloch.space','blochl1.com'])for(const asset of ['/blochai-assistant.css','/blochai-assistant.js']){
     for(const query of ['',`?v=${ASSISTANT_ASSET_VERSION}`]){const response=await handlePublicBlochAI({request:new Request(`https://${host}${asset}${query}`),env});assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-cache.*max-age=0.*must-revalidate/);}
-    const before=reads;for(const suffix of ['?v=old','?v=20260928-chain-2&extra=1','?v=20260928-chain-2&v=20260928-chain-2','?other=1','.unexpected'])assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}${asset}${suffix}`),env})).status,404);assert.equal(reads,before);
+    const before=reads;for(const suffix of ['?v=old',`?v=${ASSISTANT_ASSET_VERSION}&extra=1`,`?v=${ASSISTANT_ASSET_VERSION}&v=${ASSISTANT_ASSET_VERSION}`,'?other=1','.unexpected'])assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}${asset}${suffix}`),env})).status,404);assert.equal(reads,before);
   }
   assert.match(assistantMarkup('blochl1.com'),new RegExp(`/blochai-assistant\\.js\\?v=${ASSISTANT_ASSET_VERSION}`));
   assert.equal((await handlePublicBlochAI({request:new Request(`https://blochl1.com/blochai-pdf/blochai-pdf.js?v=${ASSISTANT_ASSET_VERSION}`),env})).status,404);

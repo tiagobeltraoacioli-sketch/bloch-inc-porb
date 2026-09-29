@@ -14,3 +14,20 @@ test('unavailable facts stay unknown and examples do not invent transactions',()
   assert.match(sourceBasedAnswer({...guide,mode:'checklist'}),/1\. A public address/);
   assert.match(sourceBasedAnswer(null),/saved source context is unavailable/);
 });
+test('computed explanations prioritize the selected topic and preserve partial-source qualifications',()=>{
+  const insights=[
+    {id:'exact_amount',title:'Exact units',text:'34.63000859 BTC; no price conversion.',status:'available'},
+    {id:'source_freshness',title:'Source time',text:'Retrieval age is not chain age.',status:'partial'},
+    {id:'graph_structure',title:'Sampled graph',text:'Two unique directed connections in the bounded sample.',status:'partial'},
+    {id:'graph_degrees',title:'Sampled degrees',text:'No ownership or risk is inferred.',status:'available'},
+  ];
+  const original=structuredClone(insights);
+  const graph=sourceBasedAnswer({...guide,question_id:'graph_analysis',insights});
+  assert.match(graph,/Sampled graph \(partial\): Two unique directed connections/);
+  assert.match(graph,/Sampled degrees: No ownership or risk is inferred/);
+  assert.doesNotMatch(graph,/Exact units:/);
+  const wallet=sourceBasedAnswer({...guide,question_id:'wallet_summary',insights});
+  assert.match(wallet,/Exact units: 34\.63000859 BTC/);
+  assert.match(wallet,/Source time \(partial\): Retrieval age is not chain age/);
+  assert.deepEqual(insights,original);
+});

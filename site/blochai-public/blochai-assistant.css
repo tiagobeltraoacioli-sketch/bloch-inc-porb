@@ -69,3 +69,4 @@
 .blochai-assistant .blochai-assistant__data-actions button{background:transparent!important;color:#294d31!important}
 .blochai-assistant a,.blochai-assistant a:visited{color:#254b30!important}
 .blochai-assistant .blochai-assistant__answer-label{font-size:10px;font-weight:700;letter-spacing:.3px;color:#47623c;margin:0 0 7px}
+.blochai-assistant__network-field label{display:block;margin-bottom:7px}.blochai-assistant__insight{border-top:1px solid #dde4d6;padding:12px}.blochai-assistant__insight h4{font:600 12px/1.4 Arial,Helvetica,sans-serif;color:#233f2b;margin:0 0 7px;text-transform:none;letter-spacing:0}.blochai-assistant__insight p{font-size:11px;line-height:1.6;margin:0 0 8px;overflow-wrap:anywhere}.blochai-assistant__insight .blochai-assistant__insight-source{font-size:10px;color:#53654c;margin:0}

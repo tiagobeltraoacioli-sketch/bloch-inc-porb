@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-09-28",
+  "knowledge_topics": 60,
+  "bloch_reference_commit": "35d8c3029e3c7ee5417502d6c2b728184dd17b0e",
+  "portal_reference_commit": "42cac3e1bfda682ba7df92371eb26ac341d81ea6",
+  "sources": [
+    {
+      "id": "bloch_admission",
+      "title": "Bloch funded-validator admission and release boundaries",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/docs/specs/BLOCH-FUNDED-VALIDATOR-ADMISSION.md"
+    },
+    {
+      "id": "bloch_fee",
+      "title": "Bloch reviewed gas and fee arithmetic",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/crates/bloch-pos-committee/src/fee_market.rs"
+    },
+    {
+      "id": "bloch_finality",
+      "title": "Bloch reviewed checkpoint finality implementation",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/crates/bloch-pos-committee/src/finality.rs"
+    },
+    {
+      "id": "bloch_params",
+      "title": "Bloch reviewed epoch and activation parameters",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/crates/bloch-pos-committee/src/params.rs"
+    },
+    {
+      "id": "bloch_reference",
+      "title": "Bloch reviewed protocol and capability reference",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/README.md"
+    },
+    {
+      "id": "bloch_rpc",
+      "title": "Bloch reviewed RPC field definitions",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/crates/bloch-pos-node/src/rpc.rs"
+    },
+    {
+      "id": "bloch_transition",
+      "title": "Bloch reviewed state transition and output rules",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-sis-pow/blob/35d8c3029e3c7ee5417502d6c2b728184dd17b0e/crates/bloch-pos-committee/src/transition.rs"
+    },
+    {
+      "id": "btc_chain",
+      "title": "Bitcoin chain selection and confirmations",
+      "url": "https://developer.bitcoin.org/devguide/block_chain.html"
+    },
+    {
+      "id": "btc_headers",
+      "title": "Bitcoin block header fields",
+      "url": "https://developer.bitcoin.org/reference/block_chain.html"
+    },
+    {
+      "id": "btc_mempool",
+      "title": "Bitcoin node mempool measurements",
+      "url": "https://developer.bitcoin.org/reference/rpc/getmempoolinfo.html"
+    },
+    {
+      "id": "btc_payment",
+      "title": "Bitcoin payment and confirmation observations",
+      "url": "https://developer.bitcoin.org/devguide/payment_processing.html"
+    },
+    {
+      "id": "btc_tx",
+      "title": "Bitcoin transaction structure",
+      "url": "https://developer.bitcoin.org/devguide/transactions.html"
+    },
+    {
+      "id": "btc_wallet",
+      "title": "Bitcoin wallet and change handling",
+      "url": "https://developer.bitcoin.org/devguide/wallets.html"
+    },
+    {
+      "id": "btc_weight",
+      "title": "BIP141 transaction weight and virtual size",
+      "url": "https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki"
+    },
+    {
+      "id": "eth_accounts",
+      "title": "Ethereum account state",
+      "url": "https://ethereum.org/developers/docs/accounts/"
+    },
+    {
+      "id": "eth_blocks",
+      "title": "Ethereum execution and consensus block fields",
+      "url": "https://ethereum.org/developers/docs/blocks/"
+    },
+    {
+      "id": "eth_erc20",
+      "title": "ERC20 token balances, events and allowance",
+      "url": "https://github.com/ethereum/ERCs/blob/master/ERCS/erc-20.md"
+    },
+    {
+      "id": "eth_gas",
+      "title": "Ethereum gas and fee accounting",
+      "url": "https://ethereum.org/developers/docs/gas/"
+    },
+    {
+      "id": "eth_pos",
+      "title": "Ethereum proof of stake and checkpoint finality",
+      "url": "https://ethereum.org/developers/docs/consensus-mechanisms/pos/"
+    },
+    {
+      "id": "eth_receipt_status",
+      "title": "EIP658 receipt execution status",
+      "url": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-658.md"
+    },
+    {
+      "id": "eth_rewards",
+      "title": "Ethereum validator rewards and penalties",
+      "url": "https://ethereum.org/developers/docs/consensus-mechanisms/pos/rewards-and-penalties/"
+    },
+    {
+      "id": "eth_rpc",
+      "title": "Ethereum JSON-RPC transaction and receipt fields",
+      "url": "https://ethereum.org/developers/docs/apis/json-rpc/"
+    },
+    {
+      "id": "eth_tokens",
+      "title": "Ethereum ERC20 token overview",
+      "url": "https://ethereum.org/developers/docs/standards/tokens/erc-20/"
+    },
+    {
+      "id": "eth_tx",
+      "title": "Ethereum transaction fields",
+      "url": "https://ethereum.org/developers/docs/transactions/"
+    },
+    {
+      "id": "explorer",
+      "title": "Bloch public explorer",
+      "url": "https://blochl1.com/"
+    },
+    {
+      "id": "graphus",
+      "title": "Graphus public observations",
+      "url": "https://bloch-graphus.xyz/"
+    },
+    {
+      "id": "graphus_bloch",
+      "title": "Graphus Bloch script-history adapter at the reviewed release",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/blob/42cac3e1bfda682ba7df92371eb26ac341d81ea6/graphus/chain/bloch-chain.js"
+    },
+    {
+      "id": "graphus_collection",
+      "title": "Graphus observation and collection contract",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/blob/42cac3e1bfda682ba7df92371eb26ac341d81ea6/docs/graphus-real-network-feed.md"
+    },
+    {
+      "id": "graphus_network",
+      "title": "Graphus bounded network adapter at the reviewed release",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/blob/42cac3e1bfda682ba7df92371eb26ac341d81ea6/graphus/chain/network-graph.js"
+    },
+    {
+      "id": "space",
+      "title": "Bloch Space public chain workspace",
+      "url": "https://bloch.space/app/"
+    },
+    {
+      "id": "space_adapter",
+      "title": "Bloch Space public observation and transaction contracts",
+      "url": "https://github.com/tiagobeltraoacioli-sketch/bloch-inc-porb/blob/42cac3e1bfda682ba7df92371eb26ac341d81ea6/space/chain/explorer.js"
+    }
+  ],
+  "knowledge_sha256": "a6935ee70f184a54aac596435d30325d3c0ebc43581a3a0818ab5a16d5dc3ad3"
+}

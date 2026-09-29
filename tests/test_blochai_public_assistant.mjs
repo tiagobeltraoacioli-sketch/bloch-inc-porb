@@ -117,6 +117,7 @@ test('free text, foreign topics, malformed subjects and unexpected controls fail
       {question_id: '__proto__'}, {question_id: 'constructor'}, {question_id: 'connections', tenant_id: 'private'},
       {question_id: 'connections', model: 'other'}, {question_id: 'connections', mode: 'arbitrary'},
       {question_id: 'connections', network: 'https://127.0.0.1/'},
+      {question_id: 'token_approvals', network: 'bitcoin'},
       {question_id: 'connections', subject: {kind: 'address', value: 'https://rednblue.space/portal/'}},
       {question_id: 'connections', subject: {kind: 'transaction', value: '../private'}},
       {question_id: 'connections', subject: {kind: 'address', value: script, url: 'https://attacker.test'}},

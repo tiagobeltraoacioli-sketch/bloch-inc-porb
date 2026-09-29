@@ -1,6 +1,7 @@
 import {PortalError,requireValue,bodyOf,authorize,budget,json,audit,statement} from './security.js';
 import {fetchChainContext,validateChainQuery} from '../deploy/blochai-public/chain-data.js';
 import {MODES,compactObservations} from '../deploy/blochai-public/chain-guide.js';
+import {deriveChainInsights} from '../deploy/blochai-public/chain-insights.js';
 
 const record=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const date=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -52,6 +53,8 @@ export async function prepareResearch(prompt,research,fetcher){
     guide.graph={nodes:[],edges:[]};
     guide.coverage+=' Date limits apply only to returned transactions with timestamps; undated records remain. The graph is omitted. Balances and network facts retain their source observation time; this is not a historical scan.';
   }
+  const derived=deriveChainInsights(guide);
+  guide.derived_facts=derived.facts;guide.insights=derived.insights;
   const facts=guide.facts.map(f=>`${f.label}: ${f.value}${f.unit?' '+f.unit:''}`).join('\n').slice(0,400);
   const sources=guide.sources.map(source=>`${source.id}: ${source.status}; observed ${source.observed_at||'unknown'}; retrieved ${source.retrieved_at||'unknown'}; ${source.coverage.slice(0,guide.sources.length===1?240:100)}`).join('\n');
   const composed=`You are BlochAI, a private blockchain research assistant. Do not infer identity or ownership. Use bounded source data and disclose gaps. Style: ${research.mode}. Network: ${research.network}. Status: ${guide.status}.\nQuestion: ${prompt}\nResearch instructions: ${research.instructions}\n${research.subject?`Subject: ${research.subject.kind} ${research.subject.value}\n`:''}Dates: ${research.from||'none'} to ${research.to||'none'}, returned dated transactions only, not a historical scan. Balances/network facts remain at source time.\nFacts:\n${facts||'Unavailable.'}\nSource coverage and times:\n${sources}`;
