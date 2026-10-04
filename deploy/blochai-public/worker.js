@@ -1,6 +1,7 @@
 import {handlePublicBlochAILink} from '../blochai-public-links/worker.js';
 import {handlePublicAssistant} from './assistant.js';
 import {ASSISTANT_ASSET_VERSION} from './catalog.js';
+import {handleWorkspaceProxy} from './workspace-proxy.js';
 
 const pdfAssets=new Set(['blochai-pdf.js','blochai-pdf-lib.js','blochai-fontkit.js','BlochAI-DejaVuSans.ttf','pdf-lib-LICENSE.txt','fontkit-LICENSE.txt','DejaVu-LICENSE.txt'].map(name=>'/blochai-pdf/'+name));
 const paths=new Set(['/','/index.html','/blochai-public.css','/favicon.svg','/bloch-symbol.svg','/bloch-inc-logo-dark.png']);
@@ -11,6 +12,7 @@ const plain=(message,status)=>new Response(message,{status,headers:{'content-typ
 
 export async function handlePublicBlochAI({request,env={},fetcher=fetch,createRewriter}){
   const url=new URL(request.url);
+  if(url.origin==='https://qentl.ai'&&env.ENABLE_QENTL_WORKSPACE==='true')return handleWorkspaceProxy({request,env,fetcher});
   if(url.protocol==='https:'&&!url.port&&ecosystemHosts.has(url.hostname)){
     if(url.pathname.startsWith('/api/blochai/'))return handlePublicAssistant({request,env,fetcher});
     if(['/blochai-assistant.js','/blochai-assistant.css'].includes(url.pathname)||pdfAssets.has(url.pathname)){

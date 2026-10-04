@@ -29,7 +29,8 @@ test('assistant assets pair a release version with revalidation and reject unkno
 });
 test('Qentl domains share the brand hub and preserve private data boundaries',async()=>{
   const html=readFileSync(new URL('../site/blochai-public/index.html',import.meta.url),'utf8');
-  for(const host of ['qentl.com','qentl.ai','blochai.xyz','bloch-graphus.xyz','bloch.space','blochl1.com','rednblue.space/portal/'])assert.ok(html.includes(`https://${host}`));
+  for(const host of ['qentl.com','qentl.ai','blochai.xyz','bloch-graphus.xyz','bloch.space','blochl1.com'])assert.ok(html.includes(`https://${host}`));
+  assert.doesNotMatch(html,/rednblue\.space|Rednblue/);
   assert.match(html,/<title>Qentl — Quantum Entanglement, by Bloch Inc\.<\/title>/);
   assert.match(html,/<link rel="canonical" href="https:\/\/qentl.com\/">/);
   assert.doesNotMatch(html,/<(?:script|form|input|textarea|iframe)\b/i);
