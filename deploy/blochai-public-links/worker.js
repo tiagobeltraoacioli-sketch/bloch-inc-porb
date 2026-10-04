@@ -12,7 +12,7 @@ export async function handlePublicBlochAILink({request,env={},fetcher=fetch,crea
   if(!response.ok)return marked(response,'passthrough-status');
   if(!response.headers.get('content-type')?.toLowerCase().includes('text/html'))return marked(response,'passthrough-content');
   const assistant=env.ENABLE_PUBLIC_ASSISTANT==='true';
-  const content=assistant?assistantMarkup(url.hostname):'<aside class="blochai-public-entry" aria-label="BlochAI"><a class="blochai-public-link" href="https://blochai.xyz/" rel="noreferrer">BlochAI</a></aside>';
+  const content=assistant?assistantMarkup(url.hostname):'<aside class="blochai-public-entry" aria-label="Qentl.ai"><a class="blochai-public-link" href="https://qentl.ai/" rel="noreferrer">Qentl.ai</a></aside>';
   const style=`<link rel="stylesheet" href="/blochai-assistant.css?v=${ASSISTANT_ASSET_VERSION}">`;
   let inserted=false,styled=false;
   const transformed=createRewriter().on('head',{element(element){element.append(style,{html:true});styled=true;}}).on('body',{element(element){element.onEndTag(end=>{if(!inserted){end.before(`${styled?'':style}${content}`,{html:true});inserted=true;}});}}).onDocument({end(end){if(!inserted){end.append(`${styled?'':style}${content}`,{html:true});inserted=true;}}}).transform(response);

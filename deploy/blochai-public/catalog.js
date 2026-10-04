@@ -16,9 +16,9 @@ const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&l
 export function assistantMarkup(host){
   const portal=publicPortals[host],topics=Object.entries(portal.topics),catalog=topics.map(([id,topic])=>({id,title:topic.title,question:topic.question,keywords:topic.keywords||[],networks:topic.networks||(portal.id==='explorer'?['bloch']:['bitcoin','ethereum','bloch'])}));
   return `<div class="blochai-assistant" data-blochai-portal="${portal.id}" data-blochai-name="${portal.name}" data-blochai-catalog="${escape(JSON.stringify(catalog))}">
-<button class="blochai-assistant__trigger" type="button" aria-controls="blochai-assistant-panel" aria-expanded="false">BlochAI <span aria-hidden="true">↗</span></button>
+<button class="blochai-assistant__trigger" type="button" aria-controls="blochai-assistant-panel" aria-expanded="false">Qentl.ai <span aria-hidden="true">↗</span></button>
 <section id="blochai-assistant-panel" class="blochai-assistant__panel" role="dialog" aria-labelledby="blochai-assistant-title" hidden>
-<header class="blochai-assistant__header"><div><span class="blochai-assistant__eyebrow">YOUR PORTAL COMPANION</span><h2 id="blochai-assistant-title">BlochAI for ${portal.name}</h2></div><button type="button" class="blochai-assistant__close" aria-label="Close BlochAI">×</button></header>
+<header class="blochai-assistant__header"><div><span class="blochai-assistant__eyebrow">YOUR PORTAL COMPANION</span><h2 id="blochai-assistant-title">Qentl.ai for ${portal.name}</h2></div><button type="button" class="blochai-assistant__close" aria-label="Close Qentl.ai">×</button></header>
 <p class="blochai-assistant__scope">${portal.scope}</p>
 <p class="blochai-assistant__note">Find a topic in your own words, then explore public records. Topic matching happens on this device; your typed topic text is never sent.</p>
 <div class="blochai-assistant__toolbar"><span class="blochai-assistant__count">0 / 12 explanations</span><button type="button" class="blochai-assistant__export" disabled>Download PDF</button><button type="button" class="blochai-assistant__clear" disabled>Clear</button></div>
@@ -34,6 +34,6 @@ export function assistantMarkup(host){
 <div class="blochai-assistant__reference-input" hidden><label for="blochai-assistant-reference">Public reference</label><input id="blochai-assistant-reference" name="subject_value" type="text" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Enter a public address or transaction hash"><p class="blochai-assistant__note">This reference is sent to the public source for the selected network. Connections do not identify a person or establish ownership.</p></div>
 <button class="blochai-assistant__submit" type="submit" disabled>Explore this topic <span aria-hidden="true">→</span></button></form>
 <p class="blochai-assistant__status" role="status" aria-live="polite">Choose a topic to begin. This conversation stays in this tab.</p>
-<footer class="blochai-assistant__footer"><span>10 requests/min · 60/day per connection. Up to 12 explanations per conversation.</span><span>Public observations only. Source timestamps and coverage limit every explanation.</span><a class="blochai-public-link" href="https://blochai.xyz/" rel="noreferrer">About BlochAI ↗</a></footer>
+<footer class="blochai-assistant__footer"><span>10 requests/min · 60/day per connection. Up to 12 explanations per conversation.</span><span>Public observations only. Source timestamps and coverage limit every explanation.</span><a class="blochai-public-link" href="https://qentl.ai/" rel="noreferrer">About Qentl.ai ↗</a></footer>
 </section></div><script src="/blochai-assistant.js?v=${ASSISTANT_ASSET_VERSION}" defer></script>`;
 }

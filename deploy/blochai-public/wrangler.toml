@@ -8,6 +8,8 @@ preview_urls = false
 
 routes = [
   { pattern = "blochai.xyz", custom_domain = true },
+  { pattern = "qentl.com", custom_domain = true },
+  { pattern = "qentl.ai", custom_domain = true },
   { pattern = "https://bloch-graphus.xyz/", zone_name = "bloch-graphus.xyz" },
   { pattern = "https://bloch.space/", zone_name = "bloch.space" },
   { pattern = "https://bloch.space/app/*", zone_name = "bloch.space" },

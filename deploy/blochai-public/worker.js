@@ -3,7 +3,8 @@ import {handlePublicAssistant} from './assistant.js';
 import {ASSISTANT_ASSET_VERSION} from './catalog.js';
 
 const pdfAssets=new Set(['blochai-pdf.js','blochai-pdf-lib.js','blochai-fontkit.js','BlochAI-DejaVuSans.ttf','pdf-lib-LICENSE.txt','fontkit-LICENSE.txt','DejaVu-LICENSE.txt'].map(name=>'/blochai-pdf/'+name));
-const paths=new Set(['/','/index.html','/blochai-public.css','/favicon.svg']);
+const paths=new Set(['/','/index.html','/blochai-public.css','/favicon.svg','/bloch-symbol.svg','/bloch-inc-logo-dark.png']);
+const productHosts=new Set(['blochai.xyz','qentl.com','qentl.ai']);
 const ecosystemHosts=new Set(['bloch-graphus.xyz','bloch.space','blochl1.com']);
 const securityHeaders={'x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY','permissions-policy':'camera=(), microphone=(), geolocation=()','content-security-policy':"default-src 'none'; img-src 'self'; style-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"};
 const plain=(message,status)=>new Response(message,{status,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store',...securityHeaders}});
@@ -23,7 +24,7 @@ export async function handlePublicBlochAI({request,env={},fetcher=fetch,createRe
     if(url.pathname.startsWith('/blochai-assistant.js')||url.pathname.startsWith('/blochai-assistant.css'))return plain('Not found',404);
     return handlePublicBlochAILink({request,env,fetcher,createRewriter});
   }
-  if(url.protocol!=='https:'||url.hostname!=='blochai.xyz'||url.port)return plain('Not found',404);
+  if(url.protocol!=='https:'||!productHosts.has(url.hostname)||url.port)return plain('Not found',404);
   if(!['GET','HEAD'].includes(request.method))return plain('Method not allowed',405);
   if(!paths.has(url.pathname))return plain('Not found',404);
   if(!env.ASSETS)return plain('Site unavailable',503);

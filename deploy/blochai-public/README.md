@@ -1,6 +1,6 @@
-# Public BlochAI hub and chain guide
+# Qentl public hub and chain guide
 
-`blochai.xyz` is a static product hub linking Graphus, Bloch Space and Bloch Explorer. The canonical Graphus hostname is `bloch-graphus.xyz`. Private prompts, saved personal research, organization data and AML workflows belong only in the authenticated `rednblue.space` workspace. Public assistants cannot access that workspace's database, sessions, private inference credential or records.
+`qentl.com`, `qentl.ai` and `blochai.xyz` serve the same Qentl product hub, with `qentl.com` as its canonical URL. The public hub links Graphus, Bloch Space and Bloch Explorer. Their embedded assistant button and panel are branded **Qentl.ai**, including the Bloch Space `/app/` view. Its About link opens `https://qentl.ai/`. Internal API paths and resource names retain `blochai` for compatibility. The canonical Graphus hostname is `bloch-graphus.xyz`. Private prompts, saved personal research, organization data and AML workflows belong only in the authenticated `rednblue.space` workspace. Public assistants cannot access that workspace's database, sessions, private inference credential or records.
 
 Each public portal offers chain-specific explanations with a bounded public source snapshot. Graphus covers graphs, connections, address observations and provenance; Space covers Bitcoin, Ethereum and Bloch network research; Explorer covers Bloch only. The public catalog has 20 topics per portal, with topics filtered to their supported networks. `knowledge.js` mirrors the backend's reviewed `chain_knowledge.json`; keep IDs, notes, network constraints and references synchronized during a release.
 
