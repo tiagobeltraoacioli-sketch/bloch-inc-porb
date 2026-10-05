@@ -36,18 +36,18 @@ test('Qentl domains share the brand hub and preserve private data boundaries',as
   assert.match(html,/<link rel="canonical" href="https:\/\/qentl.com\/">/);
   assert.doesNotMatch(html,/<(?:script|form|input|textarea|iframe)\b/i);
   assert.match(html,/macOS and Windows builds are in validation/);
-  assert.match(html,/id="cli"/);assert.match(html,/pipx install https:\/\/qentl\.ai\/cli\/qentl-0\.6\.1\.post2-py3-none-any\.whl/);assert.match(html,/curl -fsSL https:\/\/qentl\.ai\/cli\/install\.sh \| sh/);assert.match(html,/class="header-link" href="https:\/\/qentl\.ai\/workspace">Workspace/);
-  const sums=readFileSync(new URL('../site/blochai-public/cli/SHA256SUMS.txt',import.meta.url),'utf8'),wheel=readFileSync(new URL('../site/blochai-public/cli/qentl-0.6.1.post2-py3-none-any.whl',import.meta.url));
-  const digest=createHash('sha256').update(wheel).digest('hex');assert.ok(sums.split('\n').includes(digest+'  qentl-0.6.1.post2-py3-none-any.whl'));
+  assert.match(html,/id="cli"/);assert.match(html,/pipx install https:\/\/qentl\.ai\/cli\/qentl-0\.6\.1\.post3-py3-none-any\.whl/);assert.match(html,/curl -fsSL https:\/\/qentl\.ai\/cli\/install\.sh \| sh/);assert.match(html,/class="header-link" href="https:\/\/qentl\.ai\/workspace">Workspace/);
+  const sums=readFileSync(new URL('../site/blochai-public/cli/SHA256SUMS.txt',import.meta.url),'utf8'),wheel=readFileSync(new URL('../site/blochai-public/cli/qentl-0.6.1.post3-py3-none-any.whl',import.meta.url));
+  const digest=createHash('sha256').update(wheel).digest('hex');assert.ok(sums.split('\n').includes(digest+'  qentl-0.6.1.post3-py3-none-any.whl'));
   const installer=readFileSync(new URL('../site/blochai-public/cli/install.sh',import.meta.url),'utf8');
-  assert.ok(installer.includes('SHA256='+digest+'\n'));assert.ok(installer.includes('VERSION=0.6.1.post2\n'));assert.match(installer,/--only-binary=:all:/);assert.doesNotMatch(installer,/sudo |[^\x00-\x7f]/);
+  assert.ok(installer.includes('SHA256='+digest+'\n'));assert.ok(installer.includes('VERSION=0.6.1.post3\n'));assert.match(installer,/--only-binary=:all:/);assert.doesNotMatch(installer,/sudo |[^\x00-\x7f]/);
   assert.match(html,/Qwen3.5/);assert.match(html,/14B/);assert.match(html,/PLANNED/);assert.match(html,/program is not active/);
   assert.match(html,/not an online count/);assert.match(html,/out of shared training/);
   const env={ASSETS:{fetch:async()=>new Response(html)}};
   for(const host of ['qentl.com','qentl.ai','blochai.xyz']){
     const response=await handlePublicBlochAI({request:new Request(`https://${host}/`),env});
     assert.equal(response.status,200);assert.equal(await response.text(),html);
-    assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}/cli/qentl-0.6.1.post2-py3-none-any.whl`),env})).status,200);
+    assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}/cli/qentl-0.6.1.post3-py3-none-any.whl`),env})).status,200);
     assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}/api/jobs`),env})).status,404);
     assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}/`,{method:'POST'}),env})).status,405);
   }
