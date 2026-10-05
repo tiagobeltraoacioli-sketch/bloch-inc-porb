@@ -2,9 +2,9 @@
 # Qentl CLI installer for macOS and Linux. Installs into a private environment
 # under ~/.qentl/cli and links the command at ~/.local/bin/qentl. No sudo.
 set -eu
-VERSION=0.6.1.post3
+VERSION=0.6.1.post4
 WHEEL="qentl-$VERSION-py3-none-any.whl"
-SHA256=ddd74a1018c6370f56c38ef3cd777a11accddfb2e033cfe773d162b85d25565c
+SHA256=6461c5f1136cdc7685cbeb2de21f7de343a3c54e3062c39ef01e75475205cc27
 URL="https://qentl.ai/cli/$WHEEL"
 HOME_DIR="$HOME/.qentl/cli"
 BIN_DIR="$HOME/.local/bin"
