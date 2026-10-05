@@ -34,7 +34,7 @@ test('enabling workspace does not change other product domains or accept similar
 
 test('missing or malformed origin secrets fail closed without a backend request',async()=>{
   for(const value of [undefined,'','short','g'.repeat(64),secret+'\n']){
-    const response=await proxy(new Request('https://qentl.ai/'),()=>{throw new Error('Unexpected request');},{...env,QENTL_ORIGIN_SECRET:value});
+    const response=await proxy(new Request('https://qentl.ai/workspace'),()=>{throw new Error('Unexpected request');},{...env,QENTL_ORIGIN_SECRET:value});
     assert.equal(response.status,503);assert.equal((await response.json()).error,'Qentl workspace is temporarily unavailable.');
   }
 });
@@ -84,7 +84,7 @@ test('unsupported methods and connection upgrades never reach the backend',async
     assert.equal(response.status,405);assert.equal(response.headers.get('allow'),'GET, HEAD, POST');
   }
   for(const headers of [{upgrade:'websocket'},{'sec-websocket-key':'synthetic'}]){
-    assert.equal((await proxy(new Request('https://qentl.ai/',{headers}),()=>{throw new Error('No upgrade');})).status,400);
+    assert.equal((await proxy(new Request('https://qentl.ai/workspace',{headers}),()=>{throw new Error('No upgrade');})).status,400);
   }
 });
 
@@ -145,7 +145,7 @@ test('same-site redirects are returned without following and internal-origin red
 test('external or credential-bearing redirects are rejected without forwarding origin secrets',async()=>{
   for(const location of ['https://evil.test/','//evil.test/','http://qentl.ai/','https://user:pass@qentl.ai/','https://qentl.ai/?leak='+secret]){
     let count=0;
-    const response=await proxy(new Request('https://qentl.ai/'),async()=>{count++;return new Response('do not leak',{status:302,headers:{location}});});
+    const response=await proxy(new Request('https://qentl.ai/workspace'),async()=>{count++;return new Response('do not leak',{status:302,headers:{location}});});
     assert.equal(response.status,503);assert.equal(count,1);assert.equal(response.headers.has('location'),false);assert(!((await response.text()).includes(secret)));
   }
 });
@@ -163,4 +163,40 @@ test('backend errors and exceptions produce a generic 503 without leaking header
 test('direct handler also enforces the exact public authority and feature flag',async()=>{
   assert.equal((await handleWorkspaceProxy({request:new Request('https://evil.test/'),env})).status,404);
   assert.equal((await handleWorkspaceProxy({request:new Request('https://qentl.ai/'),env:{QENTL_ORIGIN_SECRET:secret}})).status,503);
+});
+
+test('qentl.ai root is the public landing and /workspace is the workspace application root',async()=>{
+  const html='<html><head><title>Qentl</title></head><body>landing</body></html>';let assetPaths=[];
+  const configuration={...env,ASSETS:{async fetch(request){assetPaths.push(new URL(request.url).pathname);assert.equal(request.headers.has('cookie'),false);return new Response(html,{headers:{'content-type':'text/html',etag:'"a"'}});}}};
+  for(const path of ['/','/index.html']){
+    const response=await proxy(new Request('https://qentl.ai'+path,{headers:{cookie:'__Host-qentl_session=synthetic'}}),()=>{throw new Error('Landing must not reach the origin');},configuration);
+    assert.equal(response.status,200);const body=await response.text();
+    assert.equal(body,html.replace('</head>','<script src="/qentl-invite.js"></script></head>'));
+    assert.match(response.headers.get('content-security-policy'),/script-src 'self'; connect-src 'none'/);assert.equal(response.headers.has('etag'),false);
+  }
+  for(const path of ['/blochai-public.css','/favicon.svg','/qentl-invite.js','/cli/qentl-0.6.1-py3-none-any.whl','/cli/qentl-0.6.1.post1-py3-none-any.whl','/cli/qentl-0.6.1.post2-py3-none-any.whl','/cli/qentl-1.2.3-py3-none-any.whl','/cli/SHA256SUMS.txt','/cli/install.sh']){
+    const response=await proxy(new Request('https://qentl.ai'+path),()=>{throw new Error('Public asset must not reach the origin');},configuration);
+    assert.equal(response.status,200);assert.match(response.headers.get('content-security-policy'),/script-src 'none'/);assert.equal(await response.text(),html);
+  }
+  assert.equal((await proxy(new Request('https://qentl.ai/',{method:'POST'}),()=>{throw new Error('No origin');},configuration)).status,405);
+  const seen=[];const fetcher=async(url,init)=>{seen.push(url);assert.equal(init.headers.get('x-qentl-origin'),secret);return new Response('workspace');};
+  for(const [path,target] of [['/workspace','/'],['/workspace?next=a','/?next=a'],['/app.js','/app.js'],['/api/session','/api/session'],['/workspace/other','/workspace/other'],['/cli/other.whl','/cli/other.whl'],['/cli/qentl-0.6.1-py3-none-any.whl.sig','/cli/qentl-0.6.1-py3-none-any.whl.sig'],['/cli/','/cli/']]){
+    const response=await proxy(new Request('https://qentl.ai'+path),fetcher,configuration);
+    assert.equal(await response.text(),'workspace');assert.equal(seen.at(-1),origin+target);assert.match(response.headers.get('cache-control'),/no-store/);
+  }
+  // Other product hosts keep a script-free landing and have no invitation script or workspace path.
+  for(const host of ['qentl.com','blochai.xyz']){
+    const response=await proxy(new Request('https://'+host+'/'),()=>{throw new Error('No origin');},configuration);
+    assert.equal(await response.text(),html);assert.match(response.headers.get('content-security-policy'),/script-src 'none'/);
+    for(const path of ['/workspace','/qentl-invite.js'])assert.equal((await proxy(new Request('https://'+host+path),()=>{throw new Error('No origin');},configuration)).status,404);
+    assert.equal((await proxy(new Request('https://'+host+'/cli/SHA256SUMS.txt'),null,configuration)).status,200);
+  }
+});
+test('invitation forwarder only moves a well-formed fragment to the same-origin workspace',()=>{
+  const source=readFileSync(new URL('../site/blochai-public/qentl-invite.js',import.meta.url),'utf8');
+  const run=(origin,hash)=>{let moved=null;new Function('location',source)({origin,hash,replace(value){moved=value;}});return moved;};
+  const token='ab'.repeat(32);
+  assert.equal(run('https://qentl.ai','#invite='+token),'/workspace#invite='+token);
+  for(const [o,h] of [['https://qentl.ai',''],['https://qentl.ai','#invite=short'],['https://qentl.ai','#invite='+token+'x'],['https://qentl.ai','#cli'],['https://qentl.com','#invite='+token]])assert.equal(run(o,h),null);
+  assert.doesNotMatch(source,/fetch|XMLHttpRequest|document\.cookie|localStorage|eval/);
 });

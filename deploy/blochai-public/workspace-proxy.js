@@ -33,7 +33,7 @@ function discard(response){
   response?.body?.cancel().catch(()=>{});
 }
 
-export async function handleWorkspaceProxy({request,env={},fetcher=fetch}){
+export async function handleWorkspaceProxy({request,env={},fetcher=fetch,entry=null}){
   const incoming=new URL(request.url);
   if(incoming.origin!==PUBLIC_ORIGIN||incoming.username||incoming.password)return failure(404,'Not found.');
   if(env.ENABLE_QENTL_WORKSPACE!=='true')return failure(503);
@@ -48,7 +48,8 @@ export async function handleWorkspaceProxy({request,env={},fetcher=fetch}){
   if(request.method!=='POST'&&(request.body||Number(length)>0))return failure(400,'A body is not supported for this method.');
 
   // Assign path and query separately so even //host/path cannot change origin.
-  const target=new URL(ORIGIN);target.pathname=incoming.pathname;target.search=incoming.search;
+  // The public entry path is the workspace application's own root document.
+  const target=new URL(ORIGIN);target.pathname=entry!==null&&incoming.pathname===entry?'/':incoming.pathname;target.search=incoming.search;
   const headers=new Headers(request.headers);stripTransportHeaders(headers);headers.delete('host');
   headers.set('x-qentl-origin',secret);headers.set('x-forwarded-proto','https');
   headers.set('cache-control','no-store');
