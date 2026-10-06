@@ -13,6 +13,24 @@ test('BlochAI is retired from rednblue.space: its page and APIs answer 404 witho
   assert.equal(called,false);
 });
 
+test('the rednblue portal is served without the BlochAI agents tab, stylesheet or API key scopes',async()=>{
+  const html='<head><link rel="stylesheet" href="/portal/portal.css"><link rel="stylesheet" href="/portal/blochai.css"></head><nav><button data-view="access">08 <span>Access & API</span></button><button data-view="blochai">09 <span>BlochAI agents</span></button></nav>'
+    +'<section id="view-blochai" class="view" hidden></section><label class="check"><input type="checkbox" name="scope" value="graph:read">Read graphs</label>'
+    +['agents:read','agents:write','reports:read','reports:write'].map(scope=>`<label class="check"><input type="checkbox" name="scope" value="${scope}">BlochAI ${scope}</label>`).join('');
+  const seen=[];const fetcher=async request=>{seen.push(request.url);return new Response(html,{headers:{'content-type':'text/html; charset=utf-8',etag:'origin','content-length':String(html.length)}});};
+  for(const path of ['/portal/','/portal','/portal/index.html']){
+    const response=await handleBlochAI({request:new Request('https://rednblue.space'+path),fetcher});const body=await response.text();
+    assert.equal(response.status,200);assert.doesNotMatch(body,/data-view="blochai"|blochai\.css|agents:|reports:|BlochAI agents/);
+    assert.match(body,/data-view="access"/);assert.match(body,/value="graph:read"/);assert.match(body,/<section id="view-blochai" class="view" hidden>/);  // the portal script still mounts here
+    assert.equal(response.headers.has('etag'),false);assert.equal(response.headers.has('content-length'),false);
+  }
+  assert.equal(seen.length,3);
+  const deepLink=await handleBlochAI({request:new Request('https://rednblue.space/portal/?view=blochai&org=1'),fetcher});
+  assert.equal(deepLink.status,302);assert.equal(deepLink.headers.get('location'),'/portal/?org=1');assert.equal(seen.length,3);
+  const script=await handleBlochAI({request:new Request('https://rednblue.space/portal/'),fetcher:async()=>new Response('x',{headers:{'content-type':'text/javascript'}})});
+  assert.equal(await script.text(),'x');  // only HTML is changed
+});
+
 test('date filters preserve undated evidence and never claim a full historical graph',async()=>{
   const research=normalizeResearch({network:'bitcoin',from:'2026-09-28',to:'2026-09-28',subject:{kind:'transaction',value:'a'.repeat(64)}});
   const prepared=await prepareResearch('Describe this transaction',research,async()=>Response.json({network:'bitcoin',transaction:{txid:'a'.repeat(64),vin:[],vout:[],status:{confirmed:true,block_time:1750000000}}}));

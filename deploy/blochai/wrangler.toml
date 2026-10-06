@@ -1,11 +1,15 @@
 name = "blochai-rednblue"
 main = "worker.js"
 compatibility_date = "2026-09-28"
-compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+# The portal page is fetched from its Pages origin on the same zone, not from this Worker again.
+compatibility_flags = ["nodejs_compat", "global_fetch_private_origin"]
 workers_dev = false
 preview_urls = false
 
 routes = [
+  { pattern = "rednblue.space/portal", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/portal/", zone_name = "rednblue.space" },
+  { pattern = "rednblue.space/portal/index.html", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/blochai", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/blochai/*", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/api/porb/v1/blochai/status", zone_name = "rednblue.space" },
