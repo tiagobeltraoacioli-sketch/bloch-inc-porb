@@ -4,3 +4,4 @@ be20169d9e607d809d5134891cecc2e00406c67690fd357ff1ddc96cbe7f2b41  qentl-0.6.1.po
 ddd74a1018c6370f56c38ef3cd777a11accddfb2e033cfe773d162b85d25565c  qentl-0.6.1.post3-py3-none-any.whl
 6461c5f1136cdc7685cbeb2de21f7de343a3c54e3062c39ef01e75475205cc27  qentl-0.6.1.post4-py3-none-any.whl
 57aaccdc15d65ddef6af11b79fcefa5b91aa2d5bff0ab9a40d87a641b46ffcab  qentl-0.6.1.post5-py3-none-any.whl
+e694f99f42adb29a7b5b8fc84db2a02189c669a63988b09fb1d88e61f2968baa  qentl-0.6.1.post6-py3-none-any.whl
