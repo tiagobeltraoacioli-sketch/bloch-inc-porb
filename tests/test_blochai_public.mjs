@@ -28,7 +28,9 @@ test('the ecosystem sites expose no AI routes: assistant, PDF and task paths ans
 });
 test('Qentl domains share the brand hub and preserve private data boundaries',async()=>{
   const html=readFileSync(new URL('../site/blochai-public/index.html',import.meta.url),'utf8');
-  for(const host of ['qentl.com','qentl.ai','blochai.xyz','bloch-graphus.xyz','bloch.space','blochl1.com'])assert.ok(html.includes(`https://${host}`));
+  for(const host of ['qentl.com','qentl.ai','blochai.xyz'])assert.ok(html.includes(`https://${host}`));
+  // The ecosystem sites no longer carry Qentl or other AI features, so the hub does not point to them.
+  assert.doesNotMatch(html,/bloch-graphus\.xyz|bloch\.space|blochl1\.com|#ecosystem|new identity of BlochAI/);
   assert.doesNotMatch(html,/rednblue\.space|Rednblue/);
   assert.match(html,/<title>Qentl — Quantum Entanglement, by Bloch Inc\.<\/title>/);
   assert.match(html,/<link rel="canonical" href="https:\/\/qentl.com\/">/);
@@ -39,7 +41,7 @@ test('Qentl domains share the brand hub and preserve private data boundaries',as
   const digest=createHash('sha256').update(wheel).digest('hex');assert.ok(sums.split('\n').includes(digest+'  qentl-0.6.1.post6-py3-none-any.whl'));
   const installer=readFileSync(new URL('../site/blochai-public/cli/install.sh',import.meta.url),'utf8');
   assert.ok(installer.includes('SHA256='+digest+'\n'));assert.ok(installer.includes('VERSION=0.6.1.post6\n'));assert.match(installer,/--only-binary=:all:/);assert.doesNotMatch(installer,/sudo |[^\x00-\x7f]/);
-  assert.match(html,/Qwen3.5/);assert.match(html,/14B/);assert.match(html,/PLANNED/);assert.match(html,/program is not active/);
+  assert.match(html,/Qwen3.5/);assert.match(html,/14B/);assert.doesNotMatch(html,/Earn BLCH|Connect your GPU|contributor program|PLANNED|payout/i);  // no GPU contributor or reward plan is announced
   assert.match(html,/not an online count/);assert.match(html,/out of shared training/);
   const env={ASSETS:{fetch:async()=>new Response(html)}};
   for(const host of ['qentl.com','qentl.ai','blochai.xyz']){
