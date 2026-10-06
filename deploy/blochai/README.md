@@ -1,3 +1,7 @@
+> **Retired 2026-10-06.** BlochAI is no longer offered on rednblue.space. This Worker keeps its
+> routes only to answer 404 on `/blochai`, `/blochai/*` and `/api/porb/v1/blochai/*`. The
+> description below records the former service.
+
 # BlochAI private inference and research gateway
 
 This Worker adds `/blochai/` and narrowly scoped inference/research routes to the existing `rednblue.space` deployment. It does not replace the portal, its existing BlochAI agents, memory, reports or runs. Keep the explicit route list in `wrangler.toml`; never broaden it to `/api/porb/v1/blochai/*`.

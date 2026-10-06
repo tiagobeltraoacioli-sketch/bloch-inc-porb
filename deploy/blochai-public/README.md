@@ -66,3 +66,11 @@ The GPU contributor program remains a roadmap item. This release has no external
 ## Validation
 
 Run `node --test tests/test_blochai_public.mjs tests/test_blochai_public_assistant.mjs tests/test_blochai_chain_data.mjs` plus `node scripts/test_blochai_rewriter.mjs` and `node scripts/check_blochai_assistant_fixture.mjs`. The browser fixture checks three portals at 1440, 390 and 360 pixels, local topic routing, scoped identifiers, follow-ups, source/graph literal rendering, clear/abort behavior, CSV/JSON downloads and a real PDF download. `PLAYWRIGHT_MODULE` and `MINIFLARE_MODULE` can select installed local runtimes. Production validation is separate; fixture success is not a live-data or GPU availability claim.
+
+## AI features retired from the ecosystem sites (2026-10-06)
+
+bloch.space, blochl1.com and bloch-graphus.xyz no longer carry AI features. The Worker passes
+their pages through unchanged (no Qentl link, assistant or HTML rewriting) and answers 404 on the
+former `/blochai-assistant.*`, `/blochai-pdf/*` and `/api/blochai/*` routes it still holds, so
+the origin never serves stale copies. `ENABLE_PUBLIC_LINK` and `ENABLE_PUBLIC_ASSISTANT` are kept
+`false` and no longer change this. qentl.ai, qentl.com and blochai.xyz are unchanged.

@@ -18,15 +18,13 @@ test('public hub has no inference, session or mutable endpoints and rejects the 
   for(const origin of ['https://rednblue.space','https://blochai.xyz.attacker.test','http://blochai.xyz'])assert.equal((await handlePublicBlochAI({request:new Request(origin+'/'),env})).status,404);
   assert.equal(reads,0);
 });
-test('assistant assets pair a release version with revalidation and reject unknown asset queries',async()=>{
-  let reads=0;const env={ASSETS:{async fetch(request){reads++;assert.equal(new URL(request.url).search,'');assert.equal(request.headers.has('cookie'),false);return new Response('asset');}}};
-  for(const host of ['bloch-graphus.xyz','bloch.space','blochl1.com'])for(const asset of ['/blochai-assistant.css','/blochai-assistant.js']){
-    for(const query of ['',`?v=${ASSISTANT_ASSET_VERSION}`]){const response=await handlePublicBlochAI({request:new Request(`https://${host}${asset}${query}`),env});assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/no-cache.*max-age=0.*must-revalidate/);}
-    const before=reads;for(const suffix of ['?v=old',`?v=${ASSISTANT_ASSET_VERSION}&extra=1`,`?v=${ASSISTANT_ASSET_VERSION}&v=${ASSISTANT_ASSET_VERSION}`,'?other=1','.unexpected'])assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}${asset}${suffix}`),env})).status,404);assert.equal(reads,before);
-  }
-  for(const host of ['blochl1.com','bloch-graphus.xyz','bloch.space']){const markup=assistantMarkup(host);assert.match(markup,/>Qentl\.ai <span/);assert.match(markup,/href="https:\/\/qentl\.ai\/"/);assert.doesNotMatch(markup,/>BlochAI|Close BlochAI|About BlochAI/);}
-  assert.match(assistantMarkup('blochl1.com'),new RegExp(`/blochai-assistant\\.js\\?v=${ASSISTANT_ASSET_VERSION}`));
-  assert.equal((await handlePublicBlochAI({request:new Request(`https://blochl1.com/blochai-pdf/blochai-pdf.js?v=${ASSISTANT_ASSET_VERSION}`),env})).status,404);
+test('the ecosystem sites expose no AI routes: assistant, PDF and task paths answer 404 without reaching assets or origin',async()=>{
+  let reads=0,fetched=0;const env={ENABLE_PUBLIC_LINK:'true',ENABLE_PUBLIC_ASSISTANT:'true',ASSETS:{async fetch(){reads++;return new Response('asset');}}};
+  const fetcher=async()=>{fetched++;return new Response('origin');};
+  for(const host of ['bloch-graphus.xyz','bloch.space','blochl1.com'])
+    for(const path of ['/blochai-assistant.js','/blochai-assistant.css',`/blochai-assistant.js?v=${ASSISTANT_ASSET_VERSION}`,'/blochai-pdf/blochai-pdf.js','/api/blochai/tasks','/api/blochai/tasks/abc'])
+      for(const method of ['GET','POST'])assert.equal((await handlePublicBlochAI({request:new Request(`https://${host}${path}`,{method}),env,fetcher})).status,404,host+path);
+  assert.equal(reads,0);assert.equal(fetched,0);
 });
 test('Qentl domains share the brand hub and preserve private data boundaries',async()=>{
   const html=readFileSync(new URL('../site/blochai-public/index.html',import.meta.url),'utf8');
@@ -71,25 +69,14 @@ test('public page passthrough explicitly avoids recursive front-door routing',()
   assert.match(config,/compatibility_flags\s*=\s*\["global_fetch_private_origin"\]/);
   assert.doesNotMatch(config,/"global_fetch_strictly_public"/);
 });
-test('enabled public root insertion is a fixed public link and preserves origin security headers',async()=>{
-  let insertions=[];
-  const createRewriter=()=>{
-    const handlers=new Map();return {on(selector,handler){handlers.set(selector,handler);return this;},onDocument(handler){handlers.set('document',handler);return this;},transform(response){let callback;handlers.get('head').element({append(){}});handlers.get('body').element({onEndTag(fn){callback=fn;}});callback({before(content,options){insertions.push({content,options});}});handlers.get('document').end({append(){throw new Error('document fallback must not duplicate navigation link');}});return response;}};
-  };
-  const upstream=new Response('<html>Public origin</html>',{headers:{'content-type':'text/html','content-security-policy':"script-src 'self'",etag:'stale','content-length':'33'}});
-  const response=await handlePublicBlochAI({request:new Request('https://bloch-graphus.xyz/'),env:{ENABLE_PUBLIC_LINK:'true'},fetcher:async()=>upstream,createRewriter});
-  assert.equal(insertions.length,1);assert.match(insertions[0].content,/href="https:\/\/qentl.ai\/"/);assert.doesNotMatch(insertions[0].content,/script|\/api\/|rednblue|cookie/i);assert.deepEqual(insertions[0].options,{html:true});assert.equal(response.headers.get('content-security-policy'),"script-src 'self'");assert.equal(response.headers.has('etag'),false);assert.equal(response.headers.has('content-length'),false);
-});
-test('Bloch Space app gets an exact-path integration while other app and API paths stay untouched',async()=>{
-  const html='<html><body><div id="root"></div></body></html>';let count=0;
-  const createRewriter=()=>{const handlers=new Map();return {on(selector,handler){handlers.set(selector,handler);return this;},onDocument(handler){handlers.set('document',handler);return this;},transform(response){let callback;handlers.get('body').element({onEndTag(fn){callback=fn;}});callback({before(content){assert.match(content,/https:\/\/qentl.ai\//);count++;}});handlers.get('document').end({append(){throw new Error('document fallback must not duplicate body link');}});return response;}};};
-  const request=origin=>new Request(origin),env={ENABLE_PUBLIC_LINK:'true'},fetcher=async()=>new Response(html,{headers:{'content-type':'text/html'}});
-  for(const path of ['/app/','/app/?network=bloch&view=overview']){
-    const response=await handlePublicBlochAI({request:request('https://bloch.space'+path),env,fetcher,createRewriter});assert.equal(response.headers.get('x-blochai-integration'),'rewritten-v4');
+test('ecosystem pages pass through unchanged: no Qentl link, assistant or rewriting, even with the old flags on',async()=>{
+  const html='<html><head></head><body><div id="root"></div></body></html>',seen=[];
+  const fetcher=async request=>{seen.push(request.url);return new Response(html,{headers:{'content-type':'text/html','content-security-policy':"script-src 'self'",etag:'origin'}});};
+  const env={ENABLE_PUBLIC_LINK:'true',ENABLE_PUBLIC_ASSISTANT:'true'};
+  for(const url of ['https://bloch-graphus.xyz/','https://bloch.space/','https://bloch.space/app/','https://blochl1.com/','https://bloch.space/api/overview']){
+    const response=await handlePublicBlochAI({request:new Request(url),env,fetcher});const body=await response.text();
+    assert.equal(body,html);assert.doesNotMatch(body,/qentl|blochai/i);assert.equal(response.headers.has('x-blochai-integration'),false);
+    assert.equal(response.headers.get('etag'),'origin');assert.equal(response.headers.get('content-security-policy'),"script-src 'self'");
   }
-  assert.equal(count,2);
-  for(const url of ['https://blochl1.com/app/','https://bloch-graphus.xyz/app/','https://bloch.space/app/other','https://bloch.space/api/overview']){
-    const response=await handlePublicBlochAI({request:request(url),env,fetcher,createRewriter});assert.equal(response.headers.get('x-blochai-integration'),'passthrough-path');assert.equal(await response.text(),html);
-  }
-  assert.equal(count,2);
+  assert.deepEqual(seen,['https://bloch-graphus.xyz/','https://bloch.space/','https://bloch.space/app/','https://blochl1.com/','https://bloch.space/api/overview']);
 });

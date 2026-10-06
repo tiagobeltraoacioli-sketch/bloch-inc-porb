@@ -227,18 +227,11 @@ test('upstream redirects, failures, invalid IDs and unknown metadata fail closed
   } finally {s.sql.close();}
 });
 
-test('assistant and PDF assets are same-origin on approved portals, never on the hub or private host', async () => {
+test('assistant and PDF assets are no longer served on any site', async () => {
   let calls = 0;
-  const env = {ASSETS: {async fetch(request) {calls++; assert.equal(request.headers.has('cookie'), false);
-    assert.equal(request.headers.has('authorization'), false);
-    return new Response('asset', {headers: {'set-cookie': 'no', 'access-control-allow-origin': '*'}});}}};
-  const paths = ['/blochai-assistant.js', '/blochai-assistant.css', '/blochai-pdf/blochai-pdf.js'];
-  for (const hostname of [host, 'bloch.space', 'blochl1.com']) for (const path of paths) {
-    const response = await handlePublicBlochAI({request: new Request(`https://${hostname}${path}`, {headers: {cookie: 'private=ignored', authorization: 'Bearer ignored'}}), env});
-    assert.equal(response.status, 200); assert.equal(response.headers.has('set-cookie'), false);
-    assert.equal(response.headers.has('access-control-allow-origin'), false);
-  }
-  for (const hostname of ['blochai.xyz', 'rednblue.space']) for (const path of [...paths, '/api/blochai/tasks'])
-    assert.equal((await handlePublicBlochAI({request: new Request(`https://${hostname}${path}`), env})).status, 404);
-  assert.equal(calls, 9);
+  const env = {ASSETS: {async fetch() {calls++; return new Response('asset');}}};
+  for (const hostname of [host, 'bloch.space', 'blochl1.com', 'blochai.xyz', 'rednblue.space'])
+    for (const path of ['/blochai-assistant.js', '/blochai-assistant.css', '/blochai-pdf/blochai-pdf.js', '/api/blochai/tasks'])
+      assert.equal((await handlePublicBlochAI({request: new Request(`https://${hostname}${path}`), env, fetcher: async () => new Response('origin')})).status, 404);
+  assert.equal(calls, 0);
 });

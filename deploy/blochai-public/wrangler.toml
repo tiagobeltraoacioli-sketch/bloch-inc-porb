@@ -33,8 +33,8 @@ routes = [
 
 [vars]
 ENABLE_QENTL_WORKSPACE = "true"
-ENABLE_PUBLIC_LINK = "true"
-ENABLE_PUBLIC_ASSISTANT = "true"
+ENABLE_PUBLIC_LINK = "false"
+ENABLE_PUBLIC_ASSISTANT = "false"
 PUBLIC_BLOCHAI_API_URL = "https://blochai-origin.posternlabs.com"
 PUBLIC_BLOCHAI_DAILY_LIMIT = "600"
 
