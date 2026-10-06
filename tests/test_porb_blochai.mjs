@@ -29,6 +29,10 @@ test('the rednblue portal is served without the BlochAI agents tab, stylesheet o
   assert.equal(deepLink.status,302);assert.equal(deepLink.headers.get('location'),'/portal/?org=1');assert.equal(seen.length,3);
   const script=await handleBlochAI({request:new Request('https://rednblue.space/portal/'),fetcher:async()=>new Response('x',{headers:{'content-type':'text/javascript'}})});
   assert.equal(await script.text(),'x');  // only HTML is changed
+  for(const path of ['/portal/portal.js','/portal/blochai.js','/portal/modules.css']){
+    const asset=await handleBlochAI({request:new Request('https://rednblue.space'+path),fetcher:async request=>new Response('asset '+new URL(request.url).pathname,{headers:{'content-type':'text/javascript'}})});
+    assert.equal(asset.status,200);assert.equal(await asset.text(),'asset '+path);  // the /portal/* route passes other files through
+  }
 });
 
 test('date filters preserve undated evidence and never claim a full historical graph',async()=>{

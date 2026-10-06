@@ -28,6 +28,8 @@ async function portal(request,url,fetcher){
 export async function handleBlochAI({request,fetcher=fetch}){
   const url=new URL(request.url);
   if(url.hostname==='rednblue.space'&&PORTAL_PAGES.has(url.pathname))return portal(request,url,fetcher);
+  // The /portal/* route also carries the portal's scripts, styles and data; they pass through untouched.
+  if(url.hostname==='rednblue.space'&&url.pathname.startsWith('/portal/'))return fetcher(request);
   if(url.pathname==='/blochai'||url.pathname.startsWith('/blochai/'))
     return new Response('Not found',{status:404,headers:{'content-type':'text/plain; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
   return json({error:'not_found'},404);

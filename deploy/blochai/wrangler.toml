@@ -8,8 +8,8 @@ preview_urls = false
 
 routes = [
   { pattern = "rednblue.space/portal", zone_name = "rednblue.space" },
-  { pattern = "rednblue.space/portal/", zone_name = "rednblue.space" },
-  { pattern = "rednblue.space/portal/index.html", zone_name = "rednblue.space" },
+  # Exact routes miss requests with a query string, so the whole portal path is routed here.
+  { pattern = "rednblue.space/portal/*", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/blochai", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/blochai/*", zone_name = "rednblue.space" },
   { pattern = "rednblue.space/api/porb/v1/blochai/status", zone_name = "rednblue.space" },
