@@ -2,9 +2,9 @@
 # Qentl CLI installer for macOS and Linux. Installs into a private environment
 # under ~/.qentl/cli and links the command at ~/.local/bin/qentl. No sudo.
 set -eu
-VERSION=0.6.1.post4
+VERSION=0.6.1.post5
 WHEEL="qentl-$VERSION-py3-none-any.whl"
-SHA256=6461c5f1136cdc7685cbeb2de21f7de343a3c54e3062c39ef01e75475205cc27
+SHA256=57aaccdc15d65ddef6af11b79fcefa5b91aa2d5bff0ab9a40d87a641b46ffcab
 URL="https://qentl.ai/cli/$WHEEL"
 HOME_DIR="$HOME/.qentl/cli"
 BIN_DIR="$HOME/.local/bin"
@@ -33,6 +33,13 @@ rm -rf "$HOME_DIR.new"; mkdir -p "$HOME/.qentl"
 "$HOME_DIR.new/bin/python" -m pip install --quiet --disable-pip-version-check --upgrade pip
 # Prebuilt dependencies only: never compile on the user's machine.
 "$HOME_DIR.new/bin/python" -m pip install --quiet --disable-pip-version-check --only-binary=:all: "$TMP/$WHEEL"
+# PDF/PPTX/Excel and code-graph support. Optional so a platform without
+# prebuilt wheels still gets a working CLI.
+for EXTRA in artifacts graphus; do
+  echo "Installing ${EXTRA} packages..."
+  "$HOME_DIR.new/bin/python" -m pip install --quiet --disable-pip-version-check --only-binary=:all: "$TMP/$WHEEL[$EXTRA]" ||
+    echo "Warning: ${EXTRA} packages are unavailable for this platform; related features will ask for them." >&2
+done
 "$HOME_DIR.new/bin/qentl" --help >/dev/null
 rm -rf "$HOME_DIR"; mv "$HOME_DIR.new" "$HOME_DIR"
 # A moved environment keeps its old path in script headers; recreate the launcher.
