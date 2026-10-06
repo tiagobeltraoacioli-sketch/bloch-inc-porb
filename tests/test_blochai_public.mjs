@@ -32,7 +32,8 @@ test('Qentl domains share the brand hub and preserve private data boundaries',as
   // The ecosystem sites no longer carry Qentl or other AI features, so the hub does not point to them.
   assert.doesNotMatch(html,/bloch-graphus\.xyz|bloch\.space|blochl1\.com|#ecosystem|new identity of BlochAI/);
   assert.doesNotMatch(html,/rednblue\.space|Rednblue/);
-  assert.match(html,/<title>Qentl — Quantum Entanglement, by Bloch Inc\.<\/title>/);
+  assert.match(html,/<title>Qentl — Quantum Entanglement<\/title>/);
+  assert.doesNotMatch(html,/Bloch|blochinc|bloch-inc|bloch-symbol/);  // the Qentl site does not present a parent company
   assert.match(html,/<link rel="canonical" href="https:\/\/qentl.com\/">/);
   assert.doesNotMatch(html,/<(?:script|form|input|textarea|iframe)\b/i);
   assert.match(html,/macOS and Windows builds are in validation/);
